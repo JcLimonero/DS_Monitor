@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Portal de pendientes</title>
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Pendientes, juntas, monitoreo de plataformas y CRM en una sola vista." />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <script>
+      // El tema se aplica antes de pintar para que no haya un parpadeo blanco
+      // al entrar en modo oscuro.
+      try {
+        const saved = localStorage.getItem("portal.tema");
+        const prefersDark = window.matchMedia(
+          "(prefers-color-scheme: dark)"
+        ).matches;
+        if (saved === "oscuro" || (!saved && prefersDark)) {
+          document.documentElement.classList.add("dark");
+        }
+      } catch (_) {
+        /* Sin almacenamiento se queda con el tema claro. */
+      }
+    </script>
+  </head>
+  <body>
+    <pt-root></pt-root>
+  </body>
+</html>

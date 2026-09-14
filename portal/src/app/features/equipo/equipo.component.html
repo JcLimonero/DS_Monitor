@@ -1,0 +1,106 @@
+<pt-page-header title="Equipo" [subtitle]="subtitle()" />
+
+@if (loads().length > 0) {
+  <div class="space-y-3">
+    @for (load of loads(); track load.person.id) {
+      <section class="card">
+        <button
+          type="button"
+          class="flex w-full items-center gap-4 px-4 py-3 text-left transition hover:bg-surface-muted sm:px-5"
+          [attr.aria-expanded]="expanded() === load.person.id"
+          (click)="toggle(load.person.id)">
+          <span
+            class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-soft text-sm font-semibold text-brand">
+            {{ initials(load.person.name) }}
+          </span>
+
+          <span class="min-w-0 flex-1">
+            <span class="block text-sm font-medium text-ink">{{
+              load.person.name
+            }}</span>
+            <span class="block text-xs text-ink-muted">{{
+              load.person.role ?? "Sin rol"
+            }}</span>
+            <span
+              class="mt-2 block h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-surface-muted">
+              <span
+                class="block h-full rounded-full"
+                [class]="load.overdue > 0 ? 'bg-danger' : 'bg-brand'"
+                [style.width.%]="barWidth(load.open)"></span>
+            </span>
+          </span>
+
+          <span class="hidden shrink-0 gap-4 text-center sm:flex">
+            <span class="w-14">
+              <span class="block text-lg font-semibold tabular-nums text-ink">{{
+                load.open
+              }}</span>
+              <span
+                class="block text-[11px] uppercase tracking-wide text-ink-subtle"
+                >Abiertos</span
+              >
+            </span>
+            <span class="w-14">
+              <span
+                class="block text-lg font-semibold tabular-nums"
+                [class]="load.overdue > 0 ? 'text-danger' : 'text-ink-subtle'">
+                {{ load.overdue }}
+              </span>
+              <span
+                class="block text-[11px] uppercase tracking-wide text-ink-subtle"
+                >Vencidos</span
+              >
+            </span>
+            <span class="w-14">
+              <span
+                class="block text-lg font-semibold tabular-nums"
+                [class]="load.blocked > 0 ? 'text-warn' : 'text-ink-subtle'">
+                {{ load.blocked }}
+              </span>
+              <span
+                class="block text-[11px] uppercase tracking-wide text-ink-subtle"
+                >Bloqueados</span
+              >
+            </span>
+          </span>
+        </button>
+
+        @if (expanded() === load.person.id) {
+          <div class="space-y-2 border-t border-line p-3 sm:p-4">
+            @for (task of openTasksOf(load.person.id); track task.id) {
+              <pt-task-card [task]="task" />
+            } @empty {
+              <p class="py-3 text-center text-sm text-ink-muted">
+                Sin pendientes abiertos.
+              </p>
+            }
+          </div>
+        }
+      </section>
+    }
+  </div>
+} @else {
+  <div class="card">
+    <pt-empty-state
+      icon="equipo"
+      title="Sin pendientes asignados"
+      hint="Ninguna fuente devolvió pendientes con responsable." />
+  </div>
+}
+
+@if (unassigned().length > 0) {
+  <section class="card mt-4">
+    <div class="border-b border-line px-4 py-3 sm:px-5">
+      <h2 class="text-sm font-semibold text-ink">Sin asignar</h2>
+      <p class="mt-0.5 text-xs text-ink-muted">
+        {{ unassigned().length }} pendientes abiertos que nadie tiene a su
+        nombre
+      </p>
+    </div>
+    <div class="space-y-2 p-3 sm:p-4">
+      @for (task of unassigned(); track task.id) {
+        <pt-task-card [task]="task" />
+      }
+    </div>
+  </section>
+}

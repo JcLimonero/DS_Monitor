@@ -1,0 +1,130 @@
+<pt-page-header title="Agenda" [subtitle]="subtitle()">
+  <div class="flex flex-wrap items-center gap-2">
+    <div class="inline-flex rounded-lg border border-line p-0.5">
+      @for (option of ranges; track option.id) {
+        <button
+          type="button"
+          class="rounded-md px-3 py-1.5 text-sm font-medium transition"
+          [class]="
+            range() === option.id
+              ? 'bg-brand text-white'
+              : 'text-ink-muted hover:bg-surface-muted'
+          "
+          (click)="range.set(option.id)">
+          {{ option.label }}
+        </button>
+      }
+    </div>
+    <select
+      class="field w-auto"
+      [ngModel]="accountId()"
+      (ngModelChange)="accountId.set($event)"
+      name="cuenta"
+      aria-label="Filtrar por cuenta">
+      <option value="todas">Todas las cuentas</option>
+      @for (account of calendarAccounts(); track account.id) {
+        <option [value]="account.id">{{ account.label }}</option>
+      }
+    </select>
+  </div>
+</pt-page-header>
+
+@if (days().length > 0) {
+  <div class="space-y-5">
+    @for (day of days(); track day.key) {
+      <section class="card">
+        <div
+          class="flex items-center gap-2 border-b border-line px-4 py-3 sm:px-5">
+          <h2 class="text-sm font-semibold text-ink first-letter:uppercase">
+            {{ day.label }}
+          </h2>
+          @if (day.isToday) {
+            <span class="chip bg-brand-soft text-brand">Hoy</span>
+          }
+          <span class="ml-auto text-xs text-ink-muted"
+            >{{ day.meetings.length }}
+            {{ day.meetings.length === 1 ? "junta" : "juntas" }}</span
+          >
+        </div>
+
+        <ul class="divide-y divide-line">
+          @for (meeting of day.meetings; track meeting.id) {
+            <li
+              class="flex items-start gap-4 px-4 py-3 sm:px-5"
+              [class.bg-amber-50]="hasConflict(meeting)"
+              [class.dark:bg-amber-500/5]="hasConflict(meeting)">
+              <div class="w-16 shrink-0 text-right">
+                <div class="text-sm font-medium tabular-nums text-ink">
+                  {{ meeting.start | hora }}
+                </div>
+                <div class="text-xs text-ink-subtle">
+                  {{ durationOf(meeting) }}
+                </div>
+              </div>
+
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3
+                    class="text-sm font-medium text-ink"
+                    [class.line-through]="meeting.status === 'cancelada'">
+                    {{ meeting.title }}
+                  </h3>
+                  <pt-account-chip [accountId]="meeting.accountId" />
+                  @if (meeting.status !== "confirmada") {
+                    <span class="chip bg-surface-muted text-ink-muted">
+                      {{ statusLabel[meeting.status] }}
+                    </span>
+                  }
+                  @if (hasConflict(meeting)) {
+                    <span
+                      class="chip bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+                      <pt-icon name="alerta" class="h-3.5 w-3.5" />
+                      Empalme
+                    </span>
+                  }
+                </div>
+
+                <div
+                  class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
+                  @if (meeting.organizer; as organizer) {
+                    <span>Organiza {{ organizer.name }}</span>
+                  }
+                  @if (meeting.location; as location) {
+                    <span class="inline-flex items-center gap-1">
+                      <pt-icon name="lugar" class="h-3.5 w-3.5" />{{ location }}
+                    </span>
+                  }
+                  @if (meeting.attendees.length > 0) {
+                    <span>{{ meeting.attendees.length }} asistentes</span>
+                  }
+                </div>
+
+                @if (meeting.notes; as notes) {
+                  <p class="mt-1 text-xs text-ink-muted">{{ notes }}</p>
+                }
+              </div>
+
+              @if (meeting.joinUrl; as join) {
+                <a
+                  class="btn shrink-0 px-2 py-1 text-xs"
+                  [href]="join"
+                  target="_blank"
+                  rel="noopener">
+                  <pt-icon name="video" class="h-3.5 w-3.5" />
+                  Entrar
+                </a>
+              }
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  </div>
+} @else {
+  <div class="card">
+    <pt-empty-state
+      icon="agenda"
+      title="Sin juntas en el rango"
+      hint="Cambia el rango o la cuenta para ver más." />
+  </div>
+}

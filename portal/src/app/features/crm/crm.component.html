@@ -1,0 +1,188 @@
+<pt-page-header
+  title="CRM Odoo"
+  [subtitle]="
+    openCount() +
+    ' oportunidades abiertas · ' +
+    (openTotal() | moneda) +
+    ' en el embudo · ' +
+    (weighted() | moneda) +
+    ' ponderado'
+  " />
+
+@if (openCount() > 0 || activities().length > 0) {
+  <section>
+    <h2 class="mb-2 text-sm font-semibold text-ink">Embudo</h2>
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      @for (stage of openStages(); track stage.stage) {
+        <div class="card flex min-w-0 flex-col">
+          <div
+            class="flex items-baseline justify-between border-b border-line px-4 py-3">
+            <h3 class="text-sm font-semibold text-ink">
+              {{ stageLabel[stage.stage] }}
+            </h3>
+            <span class="text-xs text-ink-muted">{{
+              stage.opportunities.length
+            }}</span>
+          </div>
+          <p class="px-4 py-2 text-lg font-semibold tabular-nums text-ink">
+            {{ stage.total | moneda }}
+          </p>
+          <ul class="flex-1 space-y-2 px-3 pb-3">
+            @for (opportunity of stage.opportunities; track opportunity.id) {
+              <li class="rounded-lg border border-line px-3 py-2">
+                <div class="flex items-start justify-between gap-2">
+                  <p class="text-sm font-medium leading-tight text-ink">
+                    {{ opportunity.name }}
+                  </p>
+                  @if (opportunity.url; as url) {
+                    <a
+                      class="shrink-0 text-ink-subtle hover:text-ink"
+                      [href]="url"
+                      target="_blank"
+                      rel="noopener"
+                      [attr.aria-label]="
+                        'Abrir ' + opportunity.name + ' en Odoo'
+                      ">
+                      <pt-icon name="externo" class="h-3.5 w-3.5" />
+                    </a>
+                  }
+                </div>
+                <p class="mt-0.5 text-xs text-ink-muted">
+                  {{ opportunity.partner }}
+                </p>
+                <div class="mt-2 flex items-center justify-between text-xs">
+                  <span class="font-semibold tabular-nums text-ink">
+                    {{ opportunity.amount | moneda: opportunity.currency }}
+                  </span>
+                  <span class="text-ink-muted"
+                    >{{ opportunity.probability }}%</span
+                  >
+                </div>
+                <div
+                  class="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-muted">
+                  <div
+                    class="h-full rounded-full bg-brand"
+                    [style.width.%]="opportunity.probability"></div>
+                </div>
+                @if (opportunity.expectedClose; as close) {
+                  <p class="mt-1.5 text-xs" [class]="closeTone(opportunity)">
+                    Cierre {{ close | dia }}
+                  </p>
+                }
+              </li>
+            } @empty {
+              <li class="px-1 py-3 text-center text-xs text-ink-subtle">
+                Sin oportunidades
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    </div>
+  </section>
+
+  <div class="mt-4 grid gap-4 lg:grid-cols-3">
+    <section class="card min-w-0 lg:col-span-2">
+      <div
+        class="flex items-center justify-between border-b border-line px-4 py-3 sm:px-5">
+        <h2 class="text-sm font-semibold text-ink">Actividades programadas</h2>
+        @if (lateActivities() > 0) {
+          <span
+            class="chip bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+            {{ lateLabel() }}
+          </span>
+        }
+      </div>
+      @if (activities().length > 0) {
+        <ul class="divide-y divide-line">
+          @for (activity of activities(); track activity.id) {
+            <li class="flex items-start gap-3 px-4 py-3 sm:px-5">
+              <span class="chip shrink-0 bg-surface-muted text-ink-muted">
+                {{ activityLabel[activity.type] }}
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm font-medium text-ink">{{
+                  activity.summary
+                }}</span>
+                <span class="block truncate text-xs text-ink-muted">
+                  {{ activity.opportunityName ?? "Sin oportunidad" }}
+                  @if (activity.responsible) {
+                    · {{ activity.responsible.name }}
+                  }
+                </span>
+              </span>
+              <span
+                class="shrink-0 text-xs"
+                [class]="
+                  isLate(activity.dueDate) ? 'text-danger' : 'text-ink-muted'
+                ">
+                {{ activity.dueDate | dia }} · {{ activity.dueDate | relativo }}
+              </span>
+            </li>
+          }
+        </ul>
+      } @else {
+        <pt-empty-state icon="crm" title="Sin actividades" />
+      }
+    </section>
+
+    <div class="space-y-4">
+      <section class="card card-pad">
+        <h2 class="text-sm font-semibold text-ink">Cerradas</h2>
+        <dl class="mt-3 space-y-2 text-sm">
+          <div class="flex items-baseline justify-between">
+            <dt class="text-ink-muted">Ganadas</dt>
+            <dd class="font-semibold tabular-nums text-ok">
+              {{ won()?.total | moneda }}
+              <span class="text-xs font-normal text-ink-muted">
+                ({{ won()?.opportunities?.length ?? 0 }})
+              </span>
+            </dd>
+          </div>
+          <div class="flex items-baseline justify-between">
+            <dt class="text-ink-muted">Perdidas</dt>
+            <dd class="font-semibold tabular-nums text-danger">
+              {{ lost()?.total | moneda }}
+              <span class="text-xs font-normal text-ink-muted">
+                ({{ lost()?.opportunities?.length ?? 0 }})
+              </span>
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="card">
+        <div class="border-b border-line px-4 py-3">
+          <h2 class="text-sm font-semibold text-ink">Sin movimiento</h2>
+          <p class="mt-0.5 text-xs text-ink-muted">
+            Más de dos semanas sin actualizarse
+          </p>
+        </div>
+        @if (stale().length > 0) {
+          <ul class="divide-y divide-line">
+            @for (opportunity of stale(); track opportunity.id) {
+              <li class="px-4 py-2.5">
+                <p class="truncate text-sm font-medium text-ink">
+                  {{ opportunity.name }}
+                </p>
+                <p class="text-xs text-ink-muted">
+                  {{ opportunity.partner }} ·
+                  {{ opportunity.updatedAt | relativo }}
+                </p>
+              </li>
+            }
+          </ul>
+        } @else {
+          <pt-empty-state icon="ok" title="Todo al día" />
+        }
+      </section>
+    </div>
+  </div>
+} @else {
+  <div class="card">
+    <pt-empty-state
+      icon="crm"
+      title="Sin datos del CRM"
+      hint="La fuente de Odoo no devolvió oportunidades. Revisa Ajustes." />
+  </div>
+}

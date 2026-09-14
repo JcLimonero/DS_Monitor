@@ -1,0 +1,101 @@
+<pt-page-header title="Ajustes" [subtitle]="subtitle()">
+  <button type="button" class="btn" (click)="refresh()">
+    <pt-icon name="refrescar" class="h-4 w-4" />
+    Volver a sincronizar
+  </button>
+</pt-page-header>
+
+<section class="card card-pad">
+  <h2 class="text-sm font-semibold text-ink">Backend puente</h2>
+  <p class="mt-1 max-w-3xl text-sm text-ink-muted">
+    El portal no habla directo con Odoo, Google ni Microsoft: ninguno abre CORS
+    para una aplicación de página única, y meter sus credenciales en el
+    navegador las dejaria a la vista de cualquiera. En medio va un servicio
+    propio, el puente, que guarda las credenciales y devuelve los datos ya
+    traducidos a los modelos del portal.
+  </p>
+  <p class="mt-2 text-sm">
+    <span class="text-ink-muted">Raíz configurada:</span>
+    <code
+      class="ml-1 rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs text-ink">
+      {{ gatewayLabel() }}
+    </code>
+  </p>
+  @if (demoCount() > 0) {
+    <p
+      class="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+      <pt-icon name="alerta" class="mt-0.5 h-4 w-4 shrink-0" />
+      Mientras una conexión siga en demostración, lo que ves en esa sección son
+      datos inventados.
+    </p>
+  }
+</section>
+
+<div class="mt-4 space-y-3">
+  @for (row of rows(); track row.connection.id) {
+    <section class="card card-pad">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h2 class="text-sm font-semibold text-ink">
+            {{ row.account?.label ?? row.connection.accountId }}
+            <span class="font-normal text-ink-muted"
+              >· {{ row.kindLabel }}</span
+            >
+          </h2>
+          <p class="mt-0.5 text-xs text-ink-muted">{{ row.account?.detail }}</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          @for (capability of row.capabilities; track capability) {
+            <span class="chip bg-surface-muted text-ink-muted">{{
+              capability
+            }}</span>
+          }
+          <span class="chip" [class]="statusClass(row.sync?.status)">
+            {{ statusLabel(row.sync?.status) }}
+          </span>
+          @if (row.sync?.demo) {
+            <span
+              class="chip bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+              Demostración
+            </span>
+          }
+        </div>
+      </div>
+
+      <dl class="mt-3 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
+        <div class="flex gap-2">
+          <dt class="text-ink-subtle">Modo</dt>
+          <dd class="font-medium text-ink">{{ row.modeLabel }}</dd>
+        </div>
+        <div class="flex gap-2">
+          <dt class="text-ink-subtle">Ruta en el puente</dt>
+          <dd class="font-mono text-ink">
+            {{ row.connection.path ?? "no aplica" }}
+          </dd>
+        </div>
+        <div class="flex gap-2">
+          <dt class="text-ink-subtle">Última sincronización</dt>
+          <dd class="text-ink">
+            {{ row.sync?.lastSync ? (row.sync?.lastSync | relativo) : "nunca" }}
+          </dd>
+        </div>
+        <div class="flex gap-2">
+          <dt class="text-ink-subtle">Identificador</dt>
+          <dd class="font-mono text-ink">{{ row.connection.id }}</dd>
+        </div>
+      </dl>
+
+      @if (row.sync?.error; as error) {
+        <p
+          class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200">
+          {{ error }}
+        </p>
+      }
+
+      <p class="mt-3 border-t border-line pt-3 text-xs text-ink-muted">
+        <span class="font-medium text-ink">Para conectarla de verdad:</span>
+        {{ row.requirement }}
+      </p>
+    </section>
+  }
+</div>

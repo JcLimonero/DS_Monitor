@@ -1,0 +1,223 @@
+<pt-page-header title="Panel" [subtitle]="todayLabel" />
+
+<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  <pt-stat-tile
+    icon="tareas"
+    label="Pendientes abiertos"
+    link="/pendientes"
+    [value]="openTotal()"
+    [tone]="overdue().length > 0 ? 'danger' : 'neutral'"
+    [hint]="tasksHint()" />
+  <pt-stat-tile
+    icon="agenda"
+    label="Juntas hoy"
+    link="/agenda"
+    [value]="todayMeetings().length"
+    [tone]="conflicts().length > 0 ? 'warn' : 'neutral'"
+    [hint]="meetingsHint()" />
+  <pt-stat-tile
+    icon="monitoreo"
+    label="Plataformas con problema"
+    link="/monitoreo"
+    [value]="troubled().length"
+    [tone]="troubled().length > 0 ? 'danger' : 'ok'"
+    [hint]="targetsHint()" />
+  <pt-stat-tile
+    icon="crm"
+    label="Embudo ponderado"
+    link="/crm"
+    [value]="weighted() | moneda"
+    tone="info"
+    [hint]="crmHint()" />
+</div>
+
+@if (conflicts().length > 0) {
+  <div
+    class="mt-4 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+    <pt-icon name="alerta" class="mt-0.5 h-5 w-5" />
+    <div>
+      <p class="font-medium">Tienes juntas empalmadas entre cuentas</p>
+      <ul class="mt-1 space-y-0.5">
+        @for (pair of conflicts(); track pair[0].id + pair[1].id) {
+          <li>
+            {{ pair[0].start | dia }} · {{ pair[0].start | hora }} “{{
+              pair[0].title
+            }}” choca con “{{ pair[1].title }}”
+          </li>
+        }
+      </ul>
+    </div>
+  </div>
+}
+
+<div class="mt-4 grid items-start gap-4 lg:grid-cols-2">
+  <section class="card min-w-0">
+    <div
+      class="flex items-center justify-between border-b border-line px-4 py-3 sm:px-5">
+      <h2 class="text-sm font-semibold text-ink">
+        Mis pendientes más urgentes
+      </h2>
+      <a
+        class="text-xs font-medium text-brand hover:underline"
+        routerLink="/pendientes"
+        >Ver todos</a
+      >
+    </div>
+    @if (myUrgent().length > 0) {
+      <div class="space-y-2 p-3 sm:p-4">
+        @for (task of myUrgent(); track task.id) {
+          <pt-task-card [task]="task" />
+        }
+      </div>
+    } @else {
+      <pt-empty-state
+        icon="ok"
+        title="Nada urgente"
+        hint="No hay pendientes tuyos abiertos en este momento." />
+    }
+  </section>
+
+  <section class="card min-w-0">
+    <div
+      class="flex items-center justify-between border-b border-line px-4 py-3 sm:px-5">
+      <h2 class="text-sm font-semibold text-ink">Agenda de hoy</h2>
+      <a
+        class="text-xs font-medium text-brand hover:underline"
+        routerLink="/agenda"
+        >Ver agenda</a
+      >
+    </div>
+    @if (todayMeetings().length > 0) {
+      <ul class="divide-y divide-line">
+        @for (meeting of todayMeetings(); track meeting.id) {
+          <li class="flex items-start gap-3 px-4 py-3 sm:px-5">
+            <span
+              class="w-14 shrink-0 text-sm font-medium tabular-nums text-ink">
+              {{ meeting.start | hora }}
+            </span>
+            <span class="min-w-0 flex-1">
+              <span
+                class="block truncate text-sm font-medium text-ink"
+                [class.line-through]="meeting.status === 'cancelada'">
+                {{ meeting.title }}
+              </span>
+              <span
+                class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-muted">
+                <span
+                  >{{ meeting.start | hora }} a {{ meeting.end | hora }}</span
+                >
+                @if (meeting.location) {
+                  <span class="inline-flex items-center gap-1">
+                    <pt-icon name="lugar" class="h-3.5 w-3.5" />{{
+                      meeting.location
+                    }}
+                  </span>
+                }
+                @if (meeting.attendees.length > 0) {
+                  <span>{{ meeting.attendees.length }} asistentes</span>
+                }
+              </span>
+            </span>
+            @if (meeting.joinUrl; as join) {
+              <a
+                class="btn px-2 py-1 text-xs"
+                [href]="join"
+                target="_blank"
+                rel="noopener">
+                <pt-icon name="video" class="h-3.5 w-3.5" />
+                Entrar
+              </a>
+            }
+          </li>
+        }
+      </ul>
+    } @else {
+      <pt-empty-state
+        icon="agenda"
+        title="Sin juntas hoy"
+        hint="El día está libre de reuniones." />
+    }
+
+    @if (nextMeetings().length > 0) {
+      <div
+        class="border-t border-line px-4 py-3 text-xs text-ink-muted sm:px-5">
+        Siguiente:
+        <span class="font-medium text-ink">{{ nextMeetings()[0].title }}</span>
+        {{ nextMeetings()[0].start | relativo }}
+      </div>
+    }
+  </section>
+
+  <section class="card min-w-0">
+    <div
+      class="flex items-center justify-between border-b border-line px-4 py-3 sm:px-5">
+      <h2 class="text-sm font-semibold text-ink">Estado de las plataformas</h2>
+      <a
+        class="text-xs font-medium text-brand hover:underline"
+        routerLink="/monitoreo"
+        >Ver detalle</a
+      >
+    </div>
+    @if (targetsPreview().length > 0) {
+      <ul class="divide-y divide-line">
+        @for (target of targetsPreview(); track target.id) {
+          <li class="flex items-center gap-3 px-4 py-3 sm:px-5">
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-medium text-ink">{{
+                target.name
+              }}</span>
+              <span class="block truncate text-xs text-ink-muted">
+                {{ target.incident ?? target.url }}
+              </span>
+            </span>
+            <pt-status-pill [status]="target.status" />
+          </li>
+        }
+      </ul>
+    } @else {
+      <pt-empty-state
+        icon="monitoreo"
+        title="Sin destinos configurados"
+        hint="Agrega sitios y servicios en la fuente de monitoreo." />
+    }
+  </section>
+
+  <section class="card min-w-0">
+    <div
+      class="flex items-center justify-between border-b border-line px-4 py-3 sm:px-5">
+      <h2 class="text-sm font-semibold text-ink">Qué sigue en el CRM</h2>
+      <a
+        class="text-xs font-medium text-brand hover:underline"
+        routerLink="/crm"
+        >Ver embudo</a
+      >
+    </div>
+    @if (nextActivities().length > 0) {
+      <ul class="divide-y divide-line">
+        @for (activity of nextActivities(); track activity.id) {
+          <li class="flex items-start gap-3 px-4 py-3 sm:px-5">
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-medium text-ink">{{
+                activity.summary
+              }}</span>
+              <span class="block truncate text-xs text-ink-muted">
+                {{ activity.opportunityName ?? "Sin oportunidad" }}
+                @if (activity.responsible) {
+                  · {{ activity.responsible.name }}
+                }
+              </span>
+            </span>
+            <span class="shrink-0 text-xs text-ink-muted">{{
+              activity.dueDate | relativo
+            }}</span>
+          </li>
+        }
+      </ul>
+    } @else {
+      <pt-empty-state
+        icon="crm"
+        title="Sin actividades"
+        hint="Odoo no devolvió actividades programadas." />
+    }
+  </section>
+</div>
