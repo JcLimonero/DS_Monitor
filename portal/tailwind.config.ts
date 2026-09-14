@@ -23,17 +23,20 @@ export default {
         'ink-subtle': token('ink-subtle'),
         brand: token('brand'),
         'brand-soft': token('brand-soft'),
+        accent: token('accent'),
+        'accent-soft': token('accent-soft'),
         ok: token('ok'),
         warn: token('warn'),
         danger: token('danger'),
         info: token('info')
       },
       fontFamily: {
-        sans: ['Inter', 'Segoe UI', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'SFMono-Regular', 'Consolas', 'monospace']
+        // Arial es la tipografia de marca de Dealer Solutions.
+        sans: ['Arial', 'Helvetica Neue', 'Helvetica', 'sans-serif'],
+        mono: ['SFMono-Regular', 'Consolas', 'Liberation Mono', 'monospace']
       },
       boxShadow: {
-        card: '0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px -12px rgb(15 23 42 / 0.18)'
+        card: '0 1px 2px rgb(10 37 64 / 0.05), 0 8px 24px -12px rgb(10 37 64 / 0.20)'
       },
       borderRadius: {
         xl: '0.875rem'

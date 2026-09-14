@@ -3,43 +3,51 @@
 @tailwind utilities;
 
 /**
- * Paleta del portal.
+ * Paleta de Dealer Solutions.
+ *
+ * Navy #0A2540 para texto y superficies, cyan #06B6D4 para las reglas y los
+ * acentos, y el azul del logo #4292D1 como color informativo. Son los mismos
+ * tres que usa la papeleria de la marca.
  *
  * Los valores van como canales RGB sueltos para que Tailwind pueda aplicarles
  * opacidad (`bg-surface/60`). El tema oscuro solo repinta estas variables.
  */
 :root {
-  --app: 248 250 252;
+  --app: 242 246 250;
   --surface: 255 255 255;
-  --surface-muted: 241 245 249;
-  --line: 226 232 240;
-  --ink: 15 23 42;
-  --ink-muted: 71 85 105;
-  --ink-subtle: 148 163 184;
-  --brand: 37 99 235;
-  --brand-soft: 219 234 254;
-  --ok: 22 163 74;
-  --warn: 217 119 6;
-  --danger: 220 38 38;
-  --info: 8 145 178;
+  --surface-muted: 234 241 247;
+  --line: 216 227 237;
+  --ink: 10 37 64;
+  --ink-muted: 78 101 128;
+  --ink-subtle: 138 157 178;
+  --brand: 10 37 64;
+  --brand-soft: 225 236 246;
+  --accent: 6 182 212;
+  --accent-soft: 213 243 249;
+  --ok: 21 128 61;
+  --warn: 180 83 9;
+  --danger: 190 24 40;
+  --info: 66 146 209;
 
   color-scheme: light;
 }
 
 .dark {
-  --app: 2 6 23;
-  --surface: 15 23 42;
-  --surface-muted: 30 41 59;
-  --line: 51 65 85;
-  --ink: 241 245 249;
-  --ink-muted: 148 163 184;
-  --ink-subtle: 100 116 139;
-  --brand: 96 165 250;
-  --brand-soft: 30 58 138;
+  --app: 4 18 31;
+  --surface: 10 37 64;
+  --surface-muted: 18 54 90;
+  --line: 29 74 114;
+  --ink: 232 241 248;
+  --ink-muted: 157 180 200;
+  --ink-subtle: 107 130 153;
+  --brand: 125 190 235;
+  --brand-soft: 18 58 92;
+  --accent: 34 211 238;
+  --accent-soft: 12 68 87;
   --ok: 74 222 128;
   --warn: 251 191 36;
   --danger: 248 113 113;
-  --info: 34 211 238;
+  --info: 125 190 235;
 
   color-scheme: dark;
 }
@@ -51,7 +59,6 @@ body {
 
 body {
   @apply bg-app text-ink antialiased;
-  font-feature-settings: "cv02", "cv03", "cv04";
 }
 
 @layer components {
@@ -64,28 +71,37 @@ body {
   }
 
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold;
   }
 
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line px-3 py-2
-      text-sm font-medium text-ink transition hover:bg-surface-muted
+      text-sm font-bold text-ink transition hover:bg-surface-muted
       focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
-      focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-50;
+      focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-primary {
     @apply border-transparent bg-brand text-white hover:bg-brand/90;
   }
 
+  .dark .btn-primary {
+    @apply text-[rgb(10_37_64)];
+  }
+
   .field {
     @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink
-      placeholder:text-ink-subtle focus:border-brand focus:outline-none
-      focus:ring-2 focus:ring-brand/30;
+      placeholder:text-ink-subtle focus:border-accent focus:outline-none
+      focus:ring-2 focus:ring-accent/30;
   }
 
   /* Barra lateral de color que marca a que cuenta pertenece cada tarjeta. */
   .account-bar {
     @apply absolute inset-y-0 left-0 w-1 rounded-l-xl;
+  }
+
+  /* La regla cyan bajo el encabezado es la firma visual de la marca. */
+  .regla-marca {
+    @apply h-0.5 w-full bg-accent;
   }
 }
