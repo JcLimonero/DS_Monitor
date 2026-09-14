@@ -23,7 +23,13 @@ export type IconName =
   | 'lugar'
   | 'bandeja'
   | 'menu'
-  | 'cerrar';
+  | 'cerrar'
+  | 'monitor'
+  | 'pausa'
+  | 'reproducir'
+  | 'anterior'
+  | 'siguiente'
+  | 'expandir';
 
 @Component({
   selector: 'pt-icon',

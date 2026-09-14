@@ -40,6 +40,12 @@ export const MONITOR_STATUS_LABEL: Record<MonitorStatus, string> = {
   desconocido: 'Sin datos'
 };
 
+export const MONITOR_ENVIRONMENT_LABEL: Record<MonitorEnvironment, string> = {
+  produccion: 'Producción',
+  pruebas: 'Pruebas',
+  desarrollo: 'Desarrollo'
+};
+
 export const MONITOR_KIND_LABEL: Record<MonitorKind, string> = {
   sitio: 'Sitio web',
   api: 'API',

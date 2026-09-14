@@ -1,18 +1,25 @@
-# Portal de pendientes
+# Portal Dealer Solutions
 
 Una sola pantalla para lo que hoy está repartido en cinco lugares: los
 pendientes propios, los del tablero de Ops y los del CRM, las juntas de las
 distintas cuentas de correo, el estado de los sitios y servicios desplegados, y
 el embudo de Odoo de Itech.
 
+Se usa de dos maneras:
+
+- **Como portal**, en la computadora, con barra lateral y filtros.
+- **Como carrusel**, en el monitor fijo de la oficina: a pantalla completa,
+  cambiando solo de categoría, sin que nadie lo opere.
+
 Es una aplicación aparte de `VGD_SF_Track`: vive en esta carpeta, se construye y
 se despliega por su cuenta, y no toca nada de lo que ya está en producción.
 
 ## Estado actual
 
-Las seis vistas están completas y navegables. **Todas las fuentes corren en modo
-demostración**: los datos son inventados y los nombres de personas, clientes y
-dominios también, porque este repositorio es público. Conectar una fuente real
+Las siete vistas de escritorio y el carrusel están completos y navegables.
+**Todas las fuentes corren en modo demostración**: los datos son inventados, y
+los nombres de personas, clientes y dominios también, porque este repositorio es
+público. Conectar una fuente real
 no requiere tocar las vistas — se cambia una línea de configuración y se levanta
 el backend puente. Ver *Conectar una fuente de verdad*.
 
@@ -48,6 +55,47 @@ Otros comandos:
 | `/crm` | Embudo de Odoo por etapa, actividades programadas y oportunidades sin movimiento |
 | `/equipo` | Carga de trabajo por persona y pendientes sin asignar |
 | `/ajustes` | Cada conexión, su estado de sincronización y qué hace falta para conectarla de verdad |
+| `/carrusel` | Modo monitor: seis pantallas que se turnan solas |
+
+## El monitor de la oficina
+
+`/carrusel` corre sin barra lateral y va rotando seis pantallas:
+
+1. **Resumen del día** — las cuatro cifras, lo que sigue en la agenda y lo que
+   requiere atención
+2. **Pendientes críticos** — lo vencido y lo de hoy, de cualquier fuente
+3. **Agenda** — hoy y mañana lado a lado, marcando los empalmes
+4. **Plataformas** — todos los destinos vigilados, lo roto primero
+5. **Embudo comercial** — etapas de Odoo y las siguientes actividades
+6. **Equipo** — carga por persona
+
+Detalles pensados para una pantalla que nadie atiende:
+
+- **Ritmo ajustable por la URL**: `/carrusel?segundos=30` (entre 5 y 300, por
+  omisión 20).
+- **Vuelve a pedir los datos al completar cada vuelta**, para que un monitor que
+  lleva horas prendido no siga mostrando la foto de la mañana.
+- **Mantiene la pantalla despierta** con la API de Wake Lock, para que el
+  protector de pantalla no tape el tablero.
+- **Los controles se esconden solos** a los tres segundos sin movimiento. Con
+  teclado: barra espaciadora pausa, flechas cambian de pantalla, `F` alterna
+  pantalla completa.
+- **Si una fuente se cae**, sale un aviso en el encabezado y en la columna de
+  atención, en vez de mostrar cifras viejas como si nada.
+
+### Dejarlo corriendo
+
+El navegador no permite entrar a pantalla completa sin que alguien lo pida, así
+que para una pantalla desatendida conviene arrancar el navegador ya en modo
+kiosco:
+
+```bash
+chromium --kiosk --incognito "https://portal.example.mx/carrusel?segundos=25"
+```
+
+Si el equipo es Windows, el mismo parámetro funciona con `chrome.exe`. Conviene
+además desactivar la suspensión del monitor en el sistema operativo: el Wake
+Lock ayuda, pero no manda sobre la configuración de energía del equipo.
 
 ## Cómo está armado
 
@@ -62,9 +110,16 @@ src/app/
       local/     Pendientes capturados aquí, guardados en localStorage
     state/       PortalStore (señales) y selectores puros
     util/        Fechas y plurales
+  layout/        El armazón con barra lateral
   features/      Una carpeta por vista, cargada por ruta
+    carrusel/    El modo monitor y sus seis diapositivas
   ui/            Componentes compartidos: tarjetas, etiquetas, iconos, gráficas
 ```
+
+Las dos maneras de usar el portal son dos ramas del ruteo: `ShellComponent`
+envuelve las vistas de escritorio, y el carrusel cuelga directo de la raíz
+porque no lleva nada alrededor. Ambas leen del mismo `PortalStore`, así que el
+monitor y la computadora siempre muestran lo mismo.
 
 La idea de fondo: **el portal no conoce a Odoo ni a Google**, conoce cuatro
 interfaces (`TaskSource`, `CalendarSource`, `MonitorSource`, `CrmSource`).
@@ -127,6 +182,17 @@ Lo que hace falta por fuente:
 Se pueden conectar de una en una: mientras Odoo ya sea real, los calendarios
 pueden seguir en demostración sin que nada más cambie.
 
+## Identidad visual
+
+Los colores y la tipografía son los de la papelería de Dealer Solutions: navy
+`#0A2540`, cyan `#06B6D4` para las reglas y acentos, el azul del logo `#4292D1`
+como color informativo, y Arial en todo.
+
+En `public/` hay tres imágenes derivadas del logo de la marca: la versión para
+fondo claro, una variante aclarada para el tema oscuro (el logo original viene
+sobre blanco y sus grises desaparecen sobre navy) y el toro recortado como
+favicon.
+
 ## Decisiones que conviene conocer
 
 - **Angular 20 sin zone.js.** Todo el estado vive en señales, así que no hace
@@ -134,7 +200,8 @@ pueden seguir en demostración sin que nada más cambie.
 - **Tailwind con variables CSS.** Los colores son variables (`--surface`,
   `--ink`), no clases fijas. El tema oscuro solo las repinta, y las plantillas
   usan nombres semánticos (`bg-surface`) en lugar de repetir `dark:` en cada
-  clase.
+  clase. El carrusel usa la misma paleta: se puede dejar en claro o en oscuro
+  según la luz de la oficina.
 - **Iconos propios.** Un catálogo de veintitantos `<symbol>` en lugar de una
   librería entera.
 - **Los adaptadores de demostración tardan a propósito** (450 ms) para que las

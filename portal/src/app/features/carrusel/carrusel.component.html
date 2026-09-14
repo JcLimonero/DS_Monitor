@@ -1,0 +1,137 @@
+<div class="flex h-full flex-col">
+  <header class="shrink-0">
+    <div class="flex items-center gap-6 px-8 pb-3 pt-5 2xl:px-12 2xl:pt-7">
+      <pt-brand-logo [heightRem]="3" />
+
+      <div class="min-w-0 flex-1">
+        <p class="tv-label">{{ fecha() }}</p>
+        <h1 class="truncate text-3xl font-bold text-ink 2xl:text-4xl">
+          {{ actual().titulo }}
+        </h1>
+      </div>
+
+      @if (store.failedSources().length > 0) {
+        <span
+          class="chip bg-rose-100 px-3 py-1.5 text-base text-rose-800 dark:bg-rose-500/15 dark:text-rose-200">
+          <pt-icon name="alerta" class="h-5 w-5" />
+          {{ store.failedSources().length }} sin conexión
+        </span>
+      }
+
+      <p
+        class="shrink-0 text-5xl font-bold tabular-nums leading-none text-ink 2xl:text-6xl">
+        {{ reloj() }}
+      </p>
+    </div>
+    <div class="regla-marca"></div>
+  </header>
+
+  <main class="min-h-0 flex-1 overflow-hidden px-8 py-5 2xl:px-12 2xl:py-7">
+    @switch (actual().id) {
+      @case ("resumen") {
+        <pt-slide-resumen />
+      }
+      @case ("pendientes") {
+        <pt-slide-pendientes />
+      }
+      @case ("agenda") {
+        <pt-slide-agenda />
+      }
+      @case ("plataformas") {
+        <pt-slide-plataformas />
+      }
+      @case ("embudo") {
+        <pt-slide-embudo />
+      }
+      @case ("equipo") {
+        <pt-slide-equipo />
+      }
+    }
+  </main>
+
+  <footer class="shrink-0 px-8 pb-5 2xl:px-12">
+    <!-- Un segmento por pantalla; el de la pantalla actual se va llenando. -->
+    <div class="flex items-center gap-2">
+      @for (diapositiva of diapositivas; track diapositiva.id; let i = $index) {
+        <button
+          type="button"
+          class="group flex-1"
+          [attr.aria-label]="'Ir a ' + diapositiva.titulo"
+          [attr.aria-current]="i === indice() ? 'true' : null"
+          (click)="irA(i)">
+          <span class="block h-1.5 overflow-hidden rounded-full bg-line">
+            <span
+              class="block h-full rounded-full bg-accent transition-[width] duration-100 ease-linear"
+              [style.width.%]="
+                i < indice() ? 100 : i === indice() ? avance() : 0
+              "></span>
+          </span>
+          <span
+            class="mt-1.5 block truncate text-left text-xs font-bold uppercase tracking-wider 2xl:text-sm"
+            [class]="i === indice() ? 'text-ink' : 'text-ink-subtle'">
+            {{ diapositiva.titulo }}
+          </span>
+        </button>
+      }
+    </div>
+  </footer>
+</div>
+
+<!-- Los controles solo salen si alguien se acerca al equipo. -->
+<div
+  class="fixed bottom-24 right-8 flex items-center gap-2 rounded-full border border-line bg-surface/95 p-1.5 shadow-card transition-opacity"
+  [class.opacity-0]="!controlesVisibles()"
+  [class.pointer-events-none]="!controlesVisibles()">
+  <button
+    type="button"
+    class="btn border-0 px-2.5 py-2"
+    aria-label="Pantalla anterior"
+    (click)="avanzar(-1)">
+    <pt-icon name="anterior" class="h-5 w-5" />
+  </button>
+  <button
+    type="button"
+    class="btn border-0 px-2.5 py-2"
+    [attr.aria-label]="
+      pausado() ? 'Continuar el carrusel' : 'Pausar el carrusel'
+    "
+    (click)="alternarPausa()">
+    <pt-icon [name]="pausado() ? 'reproducir' : 'pausa'" class="h-5 w-5" />
+  </button>
+  <button
+    type="button"
+    class="btn border-0 px-2.5 py-2"
+    aria-label="Pantalla siguiente"
+    (click)="avanzar(1)">
+    <pt-icon name="siguiente" class="h-5 w-5" />
+  </button>
+  <span class="h-6 w-px bg-line"></span>
+  <button
+    type="button"
+    class="btn border-0 px-2.5 py-2"
+    aria-label="Cambiar el tema"
+    (click)="alternarTema()">
+    <pt-icon [name]="themeIcon()" class="h-5 w-5" />
+  </button>
+  <button
+    type="button"
+    class="btn border-0 px-2.5 py-2"
+    aria-label="Pantalla completa"
+    (click)="pantallaCompleta()">
+    <pt-icon name="expandir" class="h-5 w-5" />
+  </button>
+  <a
+    class="btn border-0 px-2.5 py-2"
+    routerLink="/panel"
+    aria-label="Salir del carrusel">
+    <pt-icon name="cerrar" class="h-5 w-5" />
+  </a>
+</div>
+
+@if (pausado()) {
+  <p
+    class="fixed bottom-24 left-8 chip bg-accent-soft px-3 py-1.5 text-base text-ink">
+    <pt-icon name="pausa" class="h-4 w-4" />
+    En pausa · barra espaciadora para continuar
+  </p>
+}

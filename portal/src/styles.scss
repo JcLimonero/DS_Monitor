@@ -104,4 +104,29 @@ body {
   .regla-marca {
     @apply h-0.5 w-full bg-accent;
   }
+
+  /*
+   * Estilos del modo carrusel. Todo es mas grande y con mas aire porque se lee
+   * a varios metros, no a medio metro.
+   */
+  .tv-card {
+    @apply rounded-2xl border border-line bg-surface;
+  }
+
+  .tv-label {
+    @apply text-xs font-bold uppercase tracking-[0.2em] text-ink-subtle 2xl:text-sm;
+  }
+
+  .tv-title {
+    @apply text-2xl font-bold text-ink 2xl:text-3xl;
+  }
+
+  .tv-row {
+    @apply text-xl 2xl:text-2xl;
+  }
+
+  .tv-numero {
+    @apply font-bold tabular-nums leading-none;
+    font-size: clamp(2.5rem, 5vw, 5.5rem);
+  }
 }

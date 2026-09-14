@@ -129,6 +129,30 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
         <path d="m6 6 12 12" />
         <path d="m18 6-12 12" />
       </symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24">
+        <rect x="2.5" y="4" width="19" height="13" rx="2" />
+        <path d="M9 21h6" />
+        <path d="M12 17v4" />
+      </symbol>
+      <symbol id="i-pausa" viewBox="0 0 24 24">
+        <rect x="7" y="5" width="3.5" height="14" rx="1" />
+        <rect x="13.5" y="5" width="3.5" height="14" rx="1" />
+      </symbol>
+      <symbol id="i-reproducir" viewBox="0 0 24 24">
+        <path d="M8 5.5v13l11-6.5z" />
+      </symbol>
+      <symbol id="i-anterior" viewBox="0 0 24 24">
+        <path d="m14 6-6 6 6 6" />
+      </symbol>
+      <symbol id="i-siguiente" viewBox="0 0 24 24">
+        <path d="m10 6 6 6-6 6" />
+      </symbol>
+      <symbol id="i-expandir" viewBox="0 0 24 24">
+        <path d="M9 4H4v5" />
+        <path d="M15 4h5v5" />
+        <path d="M15 20h5v-5" />
+        <path d="M9 20H4v-5" />
+      </symbol>
     </svg>
   `,
   styles: `

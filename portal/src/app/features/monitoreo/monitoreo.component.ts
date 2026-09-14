@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
+  MONITOR_ENVIRONMENT_LABEL,
   MONITOR_KIND_LABEL,
   MONITOR_STATUS_LABEL,
   MonitorEnvironment,
@@ -21,12 +22,6 @@ import { PageHeaderComponent } from '../../ui/page-header.component';
 import { RelativePipe } from '../../ui/portal.pipes';
 import { SparklineComponent } from '../../ui/sparkline.component';
 import { StatusPillComponent } from '../../ui/status-pill.component';
-
-const ENVIRONMENT_LABEL: Record<MonitorEnvironment, string> = {
-  produccion: 'Producción',
-  pruebas: 'Pruebas',
-  desarrollo: 'Desarrollo'
-};
 
 @Component({
   selector: 'pt-monitoreo',
@@ -47,7 +42,7 @@ export class MonitoreoComponent {
 
   readonly kindLabel = MONITOR_KIND_LABEL;
   readonly statusLabel = MONITOR_STATUS_LABEL;
-  readonly environmentLabel = ENVIRONMENT_LABEL;
+  readonly environmentLabel = MONITOR_ENVIRONMENT_LABEL;
   readonly environments: MonitorEnvironment[] = [
     'produccion',
     'pruebas',
