@@ -46,7 +46,7 @@ export async function revisar(
       method: 'HEAD',
       redirect: 'follow',
       signal: control.signal,
-      headers: { 'user-agent': 'PortalDealerSolutions/0.1 (monitoreo)' }
+      headers: { 'user-agent': 'DSMonitor/0.1 (monitoreo)' }
     });
 
     if (respuesta.status === 405 || respuesta.status === 501) {
@@ -54,7 +54,7 @@ export async function revisar(
         method: 'GET',
         redirect: 'follow',
         signal: control.signal,
-        headers: { 'user-agent': 'PortalDealerSolutions/0.1 (monitoreo)' }
+        headers: { 'user-agent': 'DSMonitor/0.1 (monitoreo)' }
       });
       return {
         at: new Date().toISOString(),

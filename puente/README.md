@@ -1,4 +1,4 @@
-# Puente del portal
+# DS Monitor · puente
 
 El servicio que está en medio entre el portal y cada proveedor. Guarda las
 credenciales del lado del servidor y devuelve los datos ya traducidos a los

@@ -1,4 +1,4 @@
-# Cómo mandarle datos al puente
+# DS Monitor · cómo mandarle datos al puente
 
 Hay dos maneras de traer datos: **ir por ellos** (el puente consulta la API del
 proveedor) o **recibirlos** (el sistema de origen empuja cuando algo cambia).

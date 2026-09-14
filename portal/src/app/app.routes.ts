@@ -10,7 +10,7 @@ import { Routes } from '@angular/router';
 export const routes: Routes = [
   {
     path: 'carrusel',
-    title: 'Carrusel | Dealer Solutions',
+    title: 'Carrusel | DS Monitor',
     loadComponent: () =>
       import('./features/carrusel/carrusel.component').then(
         (m) => m.CarruselComponent
@@ -23,7 +23,7 @@ export const routes: Routes = [
     children: [
       {
         path: 'panel',
-        title: 'Panel | Dealer Solutions',
+        title: 'Panel | DS Monitor',
         loadComponent: () =>
           import('./features/panel/panel.component').then(
             (m) => m.PanelComponent
@@ -31,7 +31,7 @@ export const routes: Routes = [
       },
       {
         path: 'pendientes',
-        title: 'Pendientes | Dealer Solutions',
+        title: 'Pendientes | DS Monitor',
         loadComponent: () =>
           import('./features/pendientes/pendientes.component').then(
             (m) => m.PendientesComponent
@@ -39,7 +39,7 @@ export const routes: Routes = [
       },
       {
         path: 'agenda',
-        title: 'Agenda | Dealer Solutions',
+        title: 'Agenda | DS Monitor',
         loadComponent: () =>
           import('./features/agenda/agenda.component').then(
             (m) => m.AgendaComponent
@@ -47,7 +47,7 @@ export const routes: Routes = [
       },
       {
         path: 'monitoreo',
-        title: 'Monitoreo | Dealer Solutions',
+        title: 'Monitoreo | DS Monitor',
         loadComponent: () =>
           import('./features/monitoreo/monitoreo.component').then(
             (m) => m.MonitoreoComponent
@@ -55,13 +55,13 @@ export const routes: Routes = [
       },
       {
         path: 'crm',
-        title: 'CRM Odoo | Dealer Solutions',
+        title: 'CRM Odoo | DS Monitor',
         loadComponent: () =>
           import('./features/crm/crm.component').then((m) => m.CrmComponent)
       },
       {
         path: 'repos',
-        title: 'Repositorios | Dealer Solutions',
+        title: 'Repositorios | DS Monitor',
         loadComponent: () =>
           import('./features/repos/repos.component').then(
             (m) => m.ReposComponent
@@ -69,7 +69,7 @@ export const routes: Routes = [
       },
       {
         path: 'licencias',
-        title: 'Licencias | Dealer Solutions',
+        title: 'Licencias | DS Monitor',
         loadComponent: () =>
           import('./features/licencias/licencias.component').then(
             (m) => m.LicenciasComponent
@@ -77,7 +77,7 @@ export const routes: Routes = [
       },
       {
         path: 'despliegues',
-        title: 'Despliegues | Dealer Solutions',
+        title: 'Despliegues | DS Monitor',
         loadComponent: () =>
           import('./features/despliegues/despliegues.component').then(
             (m) => m.DesplieguesComponent
@@ -85,7 +85,7 @@ export const routes: Routes = [
       },
       {
         path: 'equipo',
-        title: 'Equipo | Dealer Solutions',
+        title: 'Equipo | DS Monitor',
         loadComponent: () =>
           import('./features/equipo/equipo.component').then(
             (m) => m.EquipoComponent
@@ -93,7 +93,7 @@ export const routes: Routes = [
       },
       {
         path: 'ajustes',
-        title: 'Ajustes | Dealer Solutions',
+        title: 'Ajustes | DS Monitor',
         loadComponent: () =>
           import('./features/ajustes/ajustes.component').then(
             (m) => m.AjustesComponent

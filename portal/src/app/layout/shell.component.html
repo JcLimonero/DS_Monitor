@@ -10,9 +10,20 @@
   <aside
     class="fixed inset-y-0 left-0 z-30 flex w-64 shrink-0 flex-col border-r border-line bg-surface transition-transform lg:static lg:translate-x-0"
     [class.-translate-x-full]="!menuOpen()">
-    <div class="flex h-16 items-center gap-2 px-5">
-      <a routerLink="/panel" aria-label="Ir al panel">
+    <div class="flex h-16 items-center gap-3 px-5">
+      <a
+        class="flex min-w-0 items-center gap-3"
+        routerLink="/panel"
+        aria-label="Ir al panel">
         <pt-brand-logo [heightRem]="1.75" />
+        <!--
+          El logo es la marca; "DS Monitor" es el producto. Separarlos evita que
+          se lea como si el portal fuera todo lo que hace Dealer Solutions.
+        -->
+        <span
+          class="border-l border-line pl-3 text-sm font-bold tracking-tight text-ink">
+          DS Monitor
+        </span>
       </a>
       <button
         type="button"

@@ -1,7 +1,7 @@
 {
-  "name": "portal-puente",
+  "name": "ds-monitor-puente",
   "version": "0.1.0",
-  "description": "Backend puente del portal: guarda las credenciales y traduce cada API al modelo del portal",
+  "description": "Puente de DS Monitor: guarda las credenciales, consulta o recibe los datos, y los traduce al modelo del portal",
   "private": true,
   "type": "module",
   "engines": {

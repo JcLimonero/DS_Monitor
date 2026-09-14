@@ -49,7 +49,7 @@ export async function pedirJson<T>(
           accept: 'application/json',
           // Anthropic pide identificarse en las integraciones; no estorba en
           // los demas y ayuda a rastrear de donde salio la peticion.
-          'user-agent': 'PortalDealerSolutions/0.1 (puente)',
+          'user-agent': 'DSMonitor/0.1 (puente)',
           ...(cuerpo !== undefined
             ? { 'content-type': 'application/json' }
             : {}),
