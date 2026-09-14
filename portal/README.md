@@ -18,15 +18,19 @@ se despliega por su cuenta, y no toca nada de lo que ya está en producción.
 ## Estado actual
 
 Las siete vistas de escritorio y el carrusel están completos y navegables.
-**Todas las fuentes corren en modo demostración**: los datos son inventados, y
+**Todas las fuentes siguen en modo demostración**: los datos son inventados, y
 los nombres de personas, clientes y dominios también, porque este repositorio es
-público. Conectar una fuente real
-no requiere tocar las vistas — se cambia una línea de configuración y se levanta
-el backend puente. Ver *Conectar una fuente de verdad*.
+público.
 
-Lo que todavía no hay: el backend puente, y pruebas automatizadas de los
-selectores (`portal.selectors.ts`), que es donde vive la lógica que más se puede
-romper en silencio.
+El backend puente ya existe (carpeta `puente/`) con seis conexiones listas:
+Claude, Cursor, Figma, Vercel, monitoreo y Odoo. Falta desplegarlo, darle las
+credenciales y cambiar el `mode` de esas conexiones de `demo` a `gateway` — lo
+que no hace falta es tocar una sola vista. Ver *Conectar una fuente de verdad*.
+
+Lo que todavía no hay: los calendarios de Google y Microsoft y el tablero de Ops
+del lado del puente, y pruebas automatizadas de los selectores del portal
+(`portal.selectors.ts`), que es donde vive la lógica que más se puede romper en
+silencio. Los traductores del puente sí están probados.
 
 ## Arrancar
 
@@ -141,6 +145,9 @@ CORS para una aplicación de página única, y meter esas credenciales en el
 navegador las dejaría a la vista de cualquiera. En medio va un servicio propio
 —el puente— que guarda las credenciales del lado del servidor y devuelve los
 datos ya traducidos a los modelos del portal.
+
+**Vive en `puente/` de este mismo repositorio.** Ver `puente/README.md` para
+levantarlo y `puente/.env.example` para la lista completa de credenciales.
 
 El puente se sirve en el mismo origen que el portal (`/api/portal` en
 producción) para que la cookie de sesión viaje sola y no haya que abrir CORS.
