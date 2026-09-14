@@ -8,7 +8,16 @@
 
 /** Cada integración que puede alimentar al portal. */
 export type SourceKind =
-  'odoo' | 'google' | 'microsoft' | 'ops' | 'local' | 'monitor';
+  | 'odoo'
+  | 'google'
+  | 'microsoft'
+  | 'ops'
+  | 'local'
+  | 'monitor'
+  | 'anthropic'
+  | 'cursor'
+  | 'figma'
+  | 'vercel';
 
 /** Una cuenta concreta dentro de una integración, por ejemplo un correo. */
 export interface Account {
@@ -24,7 +33,16 @@ export interface Account {
 }
 
 export type AccountColor =
-  'sky' | 'violet' | 'emerald' | 'amber' | 'rose' | 'slate';
+  | 'sky'
+  | 'violet'
+  | 'emerald'
+  | 'amber'
+  | 'rose'
+  | 'slate'
+  | 'indigo'
+  | 'teal'
+  | 'orange'
+  | 'fuchsia';
 
 /** Persona involucrada en un pendiente, una junta o una oportunidad. */
 export interface Person {

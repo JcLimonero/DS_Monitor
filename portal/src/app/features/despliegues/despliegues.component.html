@@ -1,0 +1,131 @@
+<pt-page-header title="Despliegues" [subtitle]="subtitle()">
+  <div class="flex flex-wrap items-center gap-2">
+    <select
+      class="field w-auto"
+      [ngModel]="proyecto()"
+      (ngModelChange)="proyecto.set($event)"
+      name="proyecto"
+      aria-label="Filtrar por proyecto">
+      <option value="todos">Todos los proyectos</option>
+      @for (nombre of proyectos(); track nombre) {
+        <option [value]="nombre">{{ nombre }}</option>
+      }
+    </select>
+    <label class="flex items-center gap-2 text-sm text-ink-muted">
+      <input
+        type="checkbox"
+        class="h-4 w-4 rounded border-line text-brand focus:ring-brand"
+        [ngModel]="soloProblemas()"
+        (ngModelChange)="soloProblemas.set($event)"
+        name="solo-problemas" />
+      Solo con problemas
+    </label>
+    <button type="button" class="btn" (click)="limpiarFiltros()">
+      Limpiar
+    </button>
+  </div>
+</pt-page-header>
+
+<!--
+  El estado de la plataforma va arriba a propósito: si Vercel está caído, ese
+  dato cambia por completo cómo se leen los errores de abajo.
+-->
+@if (store.platformStatus().length > 0) {
+  <section class="card card-pad mb-4">
+    <h2 class="text-sm font-bold text-ink">Estado de la plataforma</h2>
+    <ul class="mt-2 space-y-1.5">
+      @for (estado of store.platformStatus(); track estado.id) {
+        <li class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+          <span class="font-bold" [class]="clasePlataforma(estado)">
+            {{ estado.label }} · {{ plataformaLabel[estado.indicator] }}
+          </span>
+          <span class="text-ink-muted">{{ estado.description }}</span>
+          <span class="ml-auto text-xs text-ink-subtle">
+            revisado {{ estado.checkedAt | relativo }}
+          </span>
+        </li>
+      }
+    </ul>
+  </section>
+}
+
+@if (despliegues().length > 0) {
+  <ul class="space-y-2">
+    @for (despliegue of despliegues(); track despliegue.id) {
+      <li class="card px-4 py-3">
+        <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
+          <span class="chip shrink-0" [class]="claseEstado(despliegue)">
+            {{ estadoLabel[despliegue.state] }}
+          </span>
+
+          <div class="min-w-0 flex-1">
+            <p class="flex flex-wrap items-baseline gap-x-2">
+              <span class="text-sm font-bold text-ink">{{
+                despliegue.project
+              }}</span>
+              <span class="text-xs text-ink-muted">
+                {{ entornoLabel[despliegue.environment] }}
+              </span>
+            </p>
+            @if (despliegue.commitMessage; as mensaje) {
+              <p class="mt-0.5 truncate text-sm text-ink-muted">
+                {{ mensaje }}
+              </p>
+            }
+            <p
+              class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
+              @if (despliegue.branch; as rama) {
+                <span class="inline-flex items-center gap-1">
+                  <pt-icon name="rama" class="h-3.5 w-3.5" />
+                  {{ rama }}
+                </span>
+              }
+              @if (despliegue.commitSha; as sha) {
+                <span class="font-mono">{{ sha }}</span>
+              }
+              @if (despliegue.author; as autor) {
+                <span>{{ autor.name }}</span>
+              }
+              <span>
+                {{ despliegue.createdAt | dia }}
+                {{ despliegue.createdAt | hora }} ·
+                {{ despliegue.createdAt | relativo }}
+              </span>
+              @if (duracion(despliegue); as tiempo) {
+                <span>en {{ tiempo }}</span>
+              }
+            </p>
+          </div>
+
+          <div class="flex shrink-0 items-center gap-1">
+            <a
+              class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
+              [href]="despliegue.url"
+              target="_blank"
+              rel="noopener"
+              [attr.aria-label]="'Abrir ' + despliegue.project">
+              <pt-icon name="externo" class="h-4 w-4" />
+            </a>
+            @if (despliegue.inspectorUrl; as inspector) {
+              <a
+                class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
+                [href]="inspector"
+                target="_blank"
+                rel="noopener"
+                [attr.aria-label]="'Ver el detalle de ' + despliegue.project">
+                <pt-icon name="despliegue" class="h-4 w-4" />
+              </a>
+            }
+          </div>
+        </div>
+      </li>
+    }
+  </ul>
+} @else {
+  <div class="card">
+    <pt-empty-state
+      icon="despliegue"
+      title="Sin despliegues que mostrar"
+      hint="Quita los filtros o revisa la conexión con Vercel en Ajustes." />
+  </div>
+}

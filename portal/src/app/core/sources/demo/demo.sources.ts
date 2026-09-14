@@ -2,8 +2,11 @@ import { Observable, delay, of } from 'rxjs';
 import {
   CrmActivity,
   CrmOpportunity,
+  Deployment,
+  LicenseUsage,
   Meeting,
   MonitorTarget,
+  PlatformStatus,
   SourceKind,
   TaskItem
 } from '../../models';
@@ -11,10 +14,14 @@ import {
   CalendarSource,
   CrmSource,
   DateRange,
+  DeploymentSource,
+  LicenseSource,
   MonitorSource,
   TaskSource
 } from '../source.contracts';
 import { demoActivities, demoOpportunities } from './demo-crm';
+import { demoDeployments, demoPlatformStatus } from './demo-despliegues';
+import { demoLicenses } from './demo-licencias';
 import { demoPersonalMeetings, demoWorkMeetings } from './demo-meetings';
 import { demoMonitorTargets } from './demo-monitors';
 import { demoOdooTasks, demoOpsTasks } from './demo-tasks';
@@ -109,5 +116,43 @@ export class DemoCrmSource implements CrmSource {
 
   fetchActivities(): Observable<CrmActivity[]> {
     return emit(demoActivities(this.accountId));
+  }
+}
+
+export class DemoLicenseSource implements LicenseSource {
+  readonly demo = true;
+
+  constructor(
+    readonly id: string,
+    readonly label: string,
+    readonly kind: SourceKind,
+    private readonly accountId: string
+  ) {}
+
+  fetchLicenses(): Observable<LicenseUsage[]> {
+    // Cada proveedor entrega solo lo suyo, como pasaría con las APIs reales.
+    const propias = demoLicenses(this.accountId).filter(
+      (licencia) => licencia.provider === this.kind
+    );
+    return emit(propias);
+  }
+}
+
+export class DemoDeploymentSource implements DeploymentSource {
+  readonly demo = true;
+  readonly kind: SourceKind = 'vercel';
+
+  constructor(
+    readonly id: string,
+    readonly label: string,
+    private readonly accountId: string
+  ) {}
+
+  fetchDeployments(): Observable<Deployment[]> {
+    return emit(demoDeployments(this.accountId));
+  }
+
+  fetchPlatformStatus(): Observable<PlatformStatus[]> {
+    return emit(demoPlatformStatus(this.accountId));
   }
 }

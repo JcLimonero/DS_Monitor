@@ -22,14 +22,20 @@ const KIND_LABEL: Record<SourceKind, string> = {
   microsoft: 'Microsoft 365',
   ops: 'Ops',
   local: 'Portal',
-  monitor: 'Monitoreo'
+  monitor: 'Monitoreo',
+  anthropic: 'Claude',
+  cursor: 'Cursor',
+  figma: 'Figma',
+  vercel: 'Vercel'
 };
 
 const CAPABILITY_LABEL: Record<SourceConnection['provides'][number], string> = {
   tasks: 'Pendientes',
   meetings: 'Juntas',
   monitors: 'Monitoreo',
-  crm: 'CRM'
+  crm: 'CRM',
+  licenses: 'Licencias',
+  deployments: 'Despliegues'
 };
 
 /** Qué hace falta del lado del puente para que la conexión deje de ser demo. */
@@ -47,7 +53,24 @@ const REQUIREMENTS: Record<SourceKind, string> = {
   monitor:
     'La lista de destinos a vigilar. El puente hace las revisiones: desde el navegador no se ' +
     'puede por CORS, y además cada quien mediría su propia red.',
-  local: 'Nada: estos pendientes se capturan y se guardan en el navegador.'
+  local: 'Nada: estos pendientes se capturan y se guardan en el navegador.',
+  anthropic:
+    'Una Admin API key de la organización (sk-ant-admin...). El puente consulta ' +
+    '/v1/organizations/usage_report/messages para los tokens y /v1/organizations/cost_report ' +
+    'para el gasto; esos dos no están en los SDK, van por HTTP crudo. Los datos tardan hasta ' +
+    'cinco minutos en aparecer y no conviene sondear más de una vez por minuto.',
+  cursor:
+    'Una Team API key con permiso admin o usage. El puente consulta /teams/members, ' +
+    '/teams/daily-usage-data y /teams/spend en api.cursor.com. El límite es de veinte ' +
+    'peticiones por minuto por equipo.',
+  figma:
+    'Un token con acceso a la organización. Ojo: Figma NO publica facturación ni asientos ' +
+    'contratados por API. Se puede contar quién ocupa asiento con /v1/teams/{id}/members y, ' +
+    'en Enterprise, quién estuvo activo con /v1/activity_logs; el tope contratado y el costo ' +
+    'hay que capturarlos a mano.',
+  vercel:
+    'Un access token con acceso al equipo. El puente consulta /v6/deployments para los ' +
+    'despliegues y la página pública de estado de Vercel para los incidentes de la plataforma.'
 };
 
 const MODE_LABEL: Record<ConnectionMode, string> = {

@@ -53,6 +53,38 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       enabled: true
     },
     {
+      id: 'claude',
+      label: 'Claude',
+      detail: 'Consumo de la API y asientos de Claude Code',
+      kind: 'anthropic',
+      color: 'orange',
+      enabled: true
+    },
+    {
+      id: 'cursor',
+      label: 'Cursor',
+      detail: 'Asientos y solicitudes del equipo',
+      kind: 'cursor',
+      color: 'indigo',
+      enabled: true
+    },
+    {
+      id: 'figma',
+      label: 'Figma',
+      detail: 'Asientos de edición de la organización',
+      kind: 'figma',
+      color: 'fuchsia',
+      enabled: true
+    },
+    {
+      id: 'vercel',
+      label: 'Vercel',
+      detail: 'Despliegues y consumo de la plataforma',
+      kind: 'vercel',
+      color: 'teal',
+      enabled: true
+    },
+    {
       id: 'mios',
       label: 'Míos',
       detail: 'Pendientes que capturo aquí mismo',
@@ -101,6 +133,38 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       mode: 'demo',
       provides: ['monitors'],
       path: '/monitoreo/estado'
+    },
+    {
+      id: 'claude-consumo',
+      accountId: 'claude',
+      kind: 'anthropic',
+      mode: 'demo',
+      provides: ['licenses'],
+      path: '/licencias/anthropic'
+    },
+    {
+      id: 'cursor-consumo',
+      accountId: 'cursor',
+      kind: 'cursor',
+      mode: 'demo',
+      provides: ['licenses'],
+      path: '/licencias/cursor'
+    },
+    {
+      id: 'figma-consumo',
+      accountId: 'figma',
+      kind: 'figma',
+      mode: 'demo',
+      provides: ['licenses'],
+      path: '/licencias/figma'
+    },
+    {
+      id: 'vercel-despliegues',
+      accountId: 'vercel',
+      kind: 'vercel',
+      mode: 'demo',
+      provides: ['deployments', 'licenses'],
+      path: '/vercel'
     },
     {
       id: 'pendientes-locales',

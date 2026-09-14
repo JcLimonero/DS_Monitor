@@ -40,8 +40,14 @@
       @case ("plataformas") {
         <pt-slide-plataformas />
       }
+      @case ("despliegues") {
+        <pt-slide-despliegues />
+      }
       @case ("embudo") {
         <pt-slide-embudo />
+      }
+      @case ("licencias") {
+        <pt-slide-licencias />
       }
       @case ("equipo") {
         <pt-slide-equipo />
@@ -69,7 +75,7 @@
           <span
             class="mt-1.5 block truncate text-left text-xs font-bold uppercase tracking-wider 2xl:text-sm"
             [class]="i === indice() ? 'text-ink' : 'text-ink-subtle'">
-            {{ diapositiva.titulo }}
+            {{ diapositiva.corto }}
           </span>
         </button>
       }

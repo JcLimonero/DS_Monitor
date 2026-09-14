@@ -1,9 +1,10 @@
 # Portal Dealer Solutions
 
-Una sola pantalla para lo que hoy está repartido en cinco lugares: los
+Una sola pantalla para lo que hoy está repartido en muchos lugares: los
 pendientes propios, los del tablero de Ops y los del CRM, las juntas de las
-distintas cuentas de correo, el estado de los sitios y servicios desplegados, y
-el embudo de Odoo de Itech.
+distintas cuentas de correo, el estado de los sitios y servicios desplegados, el
+embudo de Odoo de Itech, los despliegues de Vercel y el consumo de las
+suscripciones (Claude, Cursor, Figma, Vercel).
 
 Se usa de dos maneras:
 
@@ -54,20 +55,24 @@ Otros comandos:
 | `/monitoreo` | Sitios, APIs, servicios y procesos con latencia, disponibilidad e incidentes |
 | `/crm` | Embudo de Odoo por etapa, actividades programadas y oportunidades sin movimiento |
 | `/equipo` | Carga de trabajo por persona y pendientes sin asignar |
+| `/despliegues` | Despliegues de Vercel con rama, commit y estado, más el estado de la plataforma |
+| `/licencias` | Consumo de las suscripciones: asientos, tokens, gasto y renovaciones |
 | `/ajustes` | Cada conexión, su estado de sincronización y qué hace falta para conectarla de verdad |
-| `/carrusel` | Modo monitor: seis pantallas que se turnan solas |
+| `/carrusel` | Modo monitor: ocho pantallas que se turnan solas |
 
 ## El monitor de la oficina
 
-`/carrusel` corre sin barra lateral y va rotando seis pantallas:
+`/carrusel` corre sin barra lateral y va rotando ocho pantallas:
 
-1. **Resumen del día** — las cuatro cifras, lo que sigue en la agenda y lo que
-   requiere atención
+1. **Resumen del día** — las cifras, lo que sigue en la agenda y lo que requiere
+   atención (incluidos despliegues fallidos y licencias por vencer)
 2. **Pendientes críticos** — lo vencido y lo de hoy, de cualquier fuente
 3. **Agenda** — hoy y mañana lado a lado, marcando los empalmes
 4. **Plataformas** — todos los destinos vigilados, lo roto primero
-5. **Embudo comercial** — etapas de Odoo y las siguientes actividades
-6. **Equipo** — carga por persona
+5. **Despliegues** — los últimos de Vercel y el estado de la plataforma
+6. **Embudo comercial** — etapas de Odoo y las siguientes actividades
+7. **Licencias y consumo** — cuánto se lleva usado de cada suscripción
+8. **Equipo** — carga por persona
 
 Detalles pensados para una pantalla que nadie atiende:
 
@@ -148,6 +153,9 @@ GET {base}{path}/meetings?from=&to=    -> Meeting[]    (fechas en ISO)
 GET {base}{path}/targets               -> MonitorTarget[]
 GET {base}{path}/opportunities         -> CrmOpportunity[]
 GET {base}{path}/activities            -> CrmActivity[]
+GET {base}{path}/licenses              -> LicenseUsage[]
+GET {base}{path}/deployments           -> Deployment[]
+GET {base}{path}/platform-status       -> PlatformStatus[]
 ```
 
 Las formas exactas están en `src/app/core/models/`. El puente traduce; el portal
@@ -178,6 +186,39 @@ Lo que hace falta por fuente:
 | Microsoft 365 | Registro de aplicación en Entra ID con `Calendars.Read` y el consentimiento de la cuenta |
 | Ops | Credencial de lectura del tablero y el identificador del equipo de desarrollo |
 | Monitoreo | La lista de destinos a vigilar. Las revisiones las hace el puente: desde el navegador no se puede por CORS, y además cada quien mediría su propia red |
+| Claude | Una **Admin API key** de la organización (`sk-ant-admin...`) |
+| Cursor | Una **Team API key** con permiso `admin:*` o `usage:*` |
+| Figma | Un token con acceso a la organización — con una salvedad grande, ver abajo |
+| Vercel | Un **access token** con acceso al equipo |
+
+### Qué expone de verdad cada proveedor de licencias
+
+Esto se verificó contra la documentación de cada uno antes de escribir los
+adaptadores, porque de aquí depende qué se puede mostrar y qué no:
+
+| Proveedor | Endpoint | Qué devuelve |
+| --- | --- | --- |
+| Claude | `GET /v1/organizations/usage_report/messages` | Tokens por periodo, en cubetas de `1m`, `1h` o `1d`, agrupables por modelo, espacio de trabajo, llave o nivel de servicio |
+| Claude | `GET /v1/organizations/cost_report` | Gasto en USD, solo granularidad diaria, agrupable por espacio de trabajo o concepto |
+| Cursor | `POST https://api.cursor.com/teams/daily-usage-data` | Uso diario por persona (autenticación Basic con la llave) |
+| Cursor | `/teams/spend`, `/teams/members` | Gasto y miembros del equipo |
+| Vercel | `GET https://api.vercel.com/v6/deployments` | Despliegues con estado, rama, commit y entorno (`Authorization: Bearer`) |
+| Vercel | Página pública de estado | Incidentes de la plataforma misma |
+
+Tres cosas que conviene tener presentes:
+
+- **Los reportes de uso y costo de Claude no están en los SDK.** Van por HTTP
+  crudo, con los encabezados `x-api-key` y `anthropic-version: 2023-06-01`. Los
+  datos tardan hasta cinco minutos en aparecer y no conviene sondear más de una
+  vez por minuto; el puente debe guardar el resultado en caché.
+- **Cursor limita a veinte peticiones por minuto por equipo.** Una sola consulta
+  por ciclo de refresco basta y sobra.
+- **Figma no publica facturación ni asientos contratados por API.** Se puede
+  contar quién ocupa asiento con `/v1/teams/{id}/members` y, en Enterprise,
+  quién estuvo activo con `/v1/activity_logs` (permiso `org:activity_log_read`),
+  pero el tope contratado, el costo y la fecha de renovación hay que capturarlos
+  a mano. Por eso el modelo trae la bandera `manual`, y la interfaz marca esas
+  licencias con **Capturado a mano** en vez de hacerlas pasar por dato vivo.
 
 Se pueden conectar de una en una: mientras Odoo ya sea real, los calendarios
 pueden seguir en demostración sin que nada más cambie.

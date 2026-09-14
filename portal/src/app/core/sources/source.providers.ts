@@ -8,12 +8,16 @@ import { PortalConfig, SourceConnection } from '../config/portal-config.model';
 import {
   DemoCalendarSource,
   DemoCrmSource,
+  DemoDeploymentSource,
+  DemoLicenseSource,
   DemoMonitorSource,
   DemoTaskSource
 } from './demo/demo.sources';
 import {
   GatewayCalendarSource,
   GatewayCrmSource,
+  GatewayDeploymentSource,
+  GatewayLicenseSource,
   GatewayMonitorSource,
   GatewayTaskSource
 } from './gateway/gateway.sources';
@@ -23,6 +27,10 @@ import {
   CRM_SOURCES,
   CalendarSource,
   CrmSource,
+  DEPLOYMENT_SOURCES,
+  DeploymentSource,
+  LICENSE_SOURCES,
+  LicenseSource,
   MONITOR_SOURCES,
   MonitorSource,
   TASK_SOURCES,
@@ -157,6 +165,48 @@ function buildCrmSources(config: PortalConfig, http: HttpClient): CrmSource[] {
   });
 }
 
+function buildLicenseSources(
+  config: PortalConfig,
+  http: HttpClient
+): LicenseSource[] {
+  return connectionsFor(config, 'licenses').map((connection) => {
+    const label = labelOf(config, connection);
+    return useGateway(config, connection)
+      ? new GatewayLicenseSource(
+          connection.id,
+          label,
+          connection.kind,
+          http,
+          config.gatewayUrl,
+          connection.path!
+        )
+      : new DemoLicenseSource(
+          connection.id,
+          label,
+          connection.kind,
+          connection.accountId
+        );
+  });
+}
+
+function buildDeploymentSources(
+  config: PortalConfig,
+  http: HttpClient
+): DeploymentSource[] {
+  return connectionsFor(config, 'deployments').map((connection) => {
+    const label = labelOf(config, connection);
+    return useGateway(config, connection)
+      ? new GatewayDeploymentSource(
+          connection.id,
+          label,
+          http,
+          config.gatewayUrl,
+          connection.path!
+        )
+      : new DemoDeploymentSource(connection.id, label, connection.accountId);
+  });
+}
+
 export function providePortalSources(
   config: PortalConfig
 ): EnvironmentProviders {
@@ -177,6 +227,14 @@ export function providePortalSources(
     {
       provide: CRM_SOURCES,
       useFactory: () => buildCrmSources(config, inject(HttpClient))
+    },
+    {
+      provide: LICENSE_SOURCES,
+      useFactory: () => buildLicenseSources(config, inject(HttpClient))
+    },
+    {
+      provide: DEPLOYMENT_SOURCES,
+      useFactory: () => buildDeploymentSources(config, inject(HttpClient))
     }
   ]);
 }

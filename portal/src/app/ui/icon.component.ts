@@ -29,7 +29,10 @@ export type IconName =
   | 'reproducir'
   | 'anterior'
   | 'siguiente'
-  | 'expandir';
+  | 'expandir'
+  | 'licencia'
+  | 'despliegue'
+  | 'rama';
 
 @Component({
   selector: 'pt-icon',

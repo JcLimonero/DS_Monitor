@@ -1,5 +1,12 @@
 import {
   CRM_STAGE_ORDER,
+  Deployment,
+  LicenseUsage,
+  PlatformStatus,
+  daysToRenewal,
+  deploymentFailed,
+  deploymentRunning,
+  isNearLimit,
   CrmOpportunity,
   CrmStage,
   Meeting,
@@ -219,4 +226,73 @@ export function teamWorkload(
       tasks: load.tasks.sort((a, b) => byUrgency(a, b, now))
     }))
     .sort((a, b) => b.overdue - a.overdue || b.open - a.open);
+}
+
+// --- Licencias y despliegues ---
+
+/** Licencias que ya pasaron el umbral de aviso o que renuevan pronto. */
+export const RENEWAL_WARN_DAYS = 14;
+
+export function licensesNeedingAttention(
+  licenses: readonly LicenseUsage[],
+  now = new Date()
+): LicenseUsage[] {
+  return licenses.filter((license) => {
+    const dias = daysToRenewal(license, now);
+    return (
+      isNearLimit(license) || (dias !== undefined && dias <= RENEWAL_WARN_DAYS)
+    );
+  });
+}
+
+/** Gasto total del periodo, sumando solo lo que viene con costo. */
+export function totalSpend(licenses: readonly LicenseUsage[]): number {
+  return licenses.reduce((suma, license) => suma + (license.cost ?? 0), 0);
+}
+
+/**
+ * Moneda del gasto agregado.
+ *
+ * Sumar monedas distintas daria un número sin significado, asi que si las
+ * licencias no coinciden se devuelve `undefined` y la vista lo dice en vez de
+ * inventar un tipo de cambio.
+ */
+export function spendCurrency(
+  licenses: readonly LicenseUsage[]
+): string | undefined {
+  const monedas = new Set(
+    licenses
+      .filter((license) => license.cost !== undefined)
+      .map((license) => license.currency)
+  );
+  return monedas.size === 1 ? [...monedas][0] : undefined;
+}
+
+export function failedDeployments(
+  deployments: readonly Deployment[]
+): Deployment[] {
+  return deployments.filter(deploymentFailed);
+}
+
+export function runningDeployments(
+  deployments: readonly Deployment[]
+): Deployment[] {
+  return deployments.filter(deploymentRunning);
+}
+
+/** Despliegues arrancados hoy, del más reciente al más viejo. */
+export function deploymentsToday(
+  deployments: readonly Deployment[],
+  now = new Date()
+): Deployment[] {
+  return deployments
+    .filter((deployment) => isSameDay(new Date(deployment.createdAt), now))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/** Plataformas que no están operativas. */
+export function platformIncidents(
+  estados: readonly PlatformStatus[]
+): PlatformStatus[] {
+  return estados.filter((estado) => estado.indicator !== 'operativo');
 }

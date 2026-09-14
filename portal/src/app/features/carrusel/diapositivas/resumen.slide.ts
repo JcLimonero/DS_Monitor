@@ -4,8 +4,17 @@ import {
   computed,
   inject
 } from '@angular/core';
-import { Meeting } from '../../../core/models';
 import {
+  LicenseUsage,
+  Meeting,
+  daysToRenewal,
+  isNearLimit,
+  usagePercent
+} from '../../../core/models';
+import {
+  RENEWAL_WARN_DAYS,
+  failedDeployments,
+  licensesNeedingAttention,
   meetingConflicts,
   meetingsOn,
   openTasks,
@@ -221,6 +230,25 @@ export class ResumenSlideComponent {
       });
     }
 
+    for (const despliegue of failedDeployments(this.store.deployments())) {
+      avisos.push({
+        id: `despliegue-${despliegue.id}`,
+        texto: `Falló el despliegue de ${despliegue.project}`,
+        detalle: `${despliegue.branch} · ${despliegue.commitMessage}`,
+        grave: despliegue.environment === 'produccion'
+      });
+    }
+
+    for (const licencia of licensesNeedingAttention(this.store.licenses())) {
+      avisos.push({
+        id: `licencia-${licencia.id}`,
+        texto: licencia.product,
+        detalle: this.motivoLicencia(licencia),
+        // Quedarse sin cupo tumba el trabajo; una renovación cercana solo avisa.
+        grave: isNearLimit(licencia)
+      });
+    }
+
     for (const fuente of this.store.failedSources()) {
       avisos.push({
         id: `fuente-${fuente.sourceId}`,
@@ -232,6 +260,21 @@ export class ResumenSlideComponent {
 
     return avisos;
   });
+
+  /** Por qué la licencia entró a la lista: el tope, la renovación, o ambos. */
+  private motivoLicencia(licencia: LicenseUsage): string {
+    const motivos: string[] = [];
+    if (isNearLimit(licencia)) {
+      motivos.push(`${usagePercent(licencia)}% del tope consumido`);
+    }
+    const dias = daysToRenewal(licencia);
+    if (dias !== undefined && dias <= RENEWAL_WARN_DAYS) {
+      motivos.push(
+        dias <= 0 ? 'renovación vencida' : `renueva en ${plural(dias, 'día')}`
+      );
+    }
+    return motivos.join(' · ');
+  }
 
   cuenta(junta: Meeting): string {
     return this.store.accountOf(junta.accountId)?.label ?? junta.accountId;

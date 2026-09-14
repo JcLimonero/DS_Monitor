@@ -9,6 +9,12 @@ import { CURRENT_USER } from '../../core/sources/demo/demo-people';
 import { PortalStore } from '../../core/state/portal.store';
 import {
   byUrgency,
+  deploymentsToday,
+  failedDeployments,
+  licensesNeedingAttention,
+  runningDeployments,
+  spendCurrency,
+  totalSpend,
   meetingConflicts,
   meetingsOn,
   openTasks,
@@ -36,6 +42,9 @@ import { TaskCardComponent } from '../../ui/task-card.component';
 
 /** Cuántos renglones caben en cada tarjeta del panel sin volverla una lista. */
 const PREVIEW_LIMIT = 5;
+
+/** El gasto se lee de un vistazo: sin centavos y con separador de miles. */
+const MONTO = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 });
 
 @Component({
   selector: 'pt-panel',
@@ -121,6 +130,41 @@ export class PanelComponent {
   readonly crmHint = computed(
     () =>
       `${plural(this.openOpportunities(), 'oportunidad', 'oportunidades')} abiertas`
+  );
+
+  readonly gasto = computed(() => totalSpend(this.store.licenses()));
+  readonly gastoMoneda = computed(() => spendCurrency(this.store.licenses()));
+  readonly gastoTexto = computed(() => {
+    const moneda = this.gastoMoneda();
+    // Sin una moneda común el total no significa nada, y decirlo es mejor que
+    // sumar dólares con pesos.
+    return moneda
+      ? `${MONTO.format(this.gasto())} ${moneda}`
+      : 'varias monedas';
+  });
+  readonly licenciasConAviso = computed(() =>
+    licensesNeedingAttention(this.store.licenses())
+  );
+  readonly gastoHint = computed(() =>
+    this.licenciasConAviso().length === 0
+      ? `${plural(this.store.licenses().length, 'licencia')} al corriente`
+      : `${plural(this.licenciasConAviso().length, 'licencia')} con aviso`
+  );
+
+  readonly despliegesHoy = computed(() =>
+    deploymentsToday(this.store.deployments())
+  );
+  readonly desplieguesFallidos = computed(() =>
+    failedDeployments(this.store.deployments())
+  );
+  readonly desplieguesEnCurso = computed(() =>
+    runningDeployments(this.store.deployments())
+  );
+  readonly desplieguesHint = computed(() =>
+    [
+      `${this.desplieguesFallidos().length} con error`,
+      `${this.desplieguesEnCurso().length} en curso`
+    ].join(' · ')
   );
 
   readonly nextActivities = computed(() =>

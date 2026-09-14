@@ -3,8 +3,11 @@ import { Observable } from 'rxjs';
 import {
   CrmActivity,
   CrmOpportunity,
+  Deployment,
+  LicenseUsage,
   Meeting,
   MonitorTarget,
+  PlatformStatus,
   SourceKind,
   TaskItem
 } from '../../models';
@@ -12,6 +15,8 @@ import {
   CalendarSource,
   CrmSource,
   DateRange,
+  DeploymentSource,
+  LicenseSource,
   MonitorSource,
   TaskSource
 } from '../source.contracts';
@@ -31,6 +36,9 @@ import {
  *   GET {base}{path}/targets                -> MonitorTarget[]
  *   GET {base}{path}/opportunities          -> CrmOpportunity[]
  *   GET {base}{path}/activities             -> CrmActivity[]
+ *   GET {base}{path}/licenses               -> LicenseUsage[]
+ *   GET {base}{path}/deployments            -> Deployment[]
+ *   GET {base}{path}/platform-status        -> PlatformStatus[]
  *
  * La autenticación va por cookie de sesión del mismo origen, así que aquí no
  * se arma ningún encabezado con llaves.
@@ -127,5 +135,48 @@ export class GatewayCrmSource extends GatewaySource implements CrmSource {
 
   fetchActivities(): Observable<CrmActivity[]> {
     return this.http.get<CrmActivity[]>(this.endpoint('/activities'));
+  }
+}
+
+export class GatewayLicenseSource
+  extends GatewaySource
+  implements LicenseSource
+{
+  constructor(
+    id: string,
+    label: string,
+    kind: SourceKind,
+    http: HttpClient,
+    baseUrl: string,
+    path: string
+  ) {
+    super(id, label, kind, http, baseUrl, path);
+  }
+
+  fetchLicenses(): Observable<LicenseUsage[]> {
+    return this.http.get<LicenseUsage[]>(this.endpoint('/licenses'));
+  }
+}
+
+export class GatewayDeploymentSource
+  extends GatewaySource
+  implements DeploymentSource
+{
+  constructor(
+    id: string,
+    label: string,
+    http: HttpClient,
+    baseUrl: string,
+    path: string
+  ) {
+    super(id, label, 'vercel', http, baseUrl, path);
+  }
+
+  fetchDeployments(): Observable<Deployment[]> {
+    return this.http.get<Deployment[]>(this.endpoint('/deployments'));
+  }
+
+  fetchPlatformStatus(): Observable<PlatformStatus[]> {
+    return this.http.get<PlatformStatus[]>(this.endpoint('/platform-status'));
   }
 }

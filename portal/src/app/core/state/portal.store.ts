@@ -5,14 +5,19 @@ import {
   Account,
   CrmActivity,
   CrmOpportunity,
+  Deployment,
+  LicenseUsage,
   Meeting,
   MonitorTarget,
+  PlatformStatus,
   SyncState,
   TaskItem
 } from '../models';
 import {
   CALENDAR_SOURCES,
   CRM_SOURCES,
+  DEPLOYMENT_SOURCES,
+  LICENSE_SOURCES,
   MONITOR_SOURCES,
   PortalSource,
   TASK_SOURCES
@@ -38,12 +43,17 @@ export class PortalStore {
   private readonly calendarSources = inject(CALENDAR_SOURCES);
   private readonly monitorSources = inject(MONITOR_SOURCES);
   private readonly crmSources = inject(CRM_SOURCES);
+  private readonly licenseSources = inject(LICENSE_SOURCES);
+  private readonly deploymentSources = inject(DEPLOYMENT_SOURCES);
 
   private readonly tasksSignal = signal<TaskItem[]>([]);
   private readonly meetingsSignal = signal<Meeting[]>([]);
   private readonly targetsSignal = signal<MonitorTarget[]>([]);
   private readonly opportunitiesSignal = signal<CrmOpportunity[]>([]);
   private readonly activitiesSignal = signal<CrmActivity[]>([]);
+  private readonly licensesSignal = signal<LicenseUsage[]>([]);
+  private readonly deploymentsSignal = signal<Deployment[]>([]);
+  private readonly platformStatusSignal = signal<PlatformStatus[]>([]);
   private readonly syncSignal = signal<Record<string, SyncState>>({});
   private readonly lastRefreshSignal = signal<string | undefined>(undefined);
 
@@ -52,6 +62,9 @@ export class PortalStore {
   readonly targets = this.targetsSignal.asReadonly();
   readonly opportunities = this.opportunitiesSignal.asReadonly();
   readonly activities = this.activitiesSignal.asReadonly();
+  readonly licenses = this.licensesSignal.asReadonly();
+  readonly deployments = this.deploymentsSignal.asReadonly();
+  readonly platformStatus = this.platformStatusSignal.asReadonly();
   readonly lastRefresh = this.lastRefreshSignal.asReadonly();
 
   readonly accounts: readonly Account[] = this.config.accounts;
@@ -87,6 +100,8 @@ export class PortalStore {
     this.refreshMeetings();
     this.refreshTargets();
     this.refreshCrm();
+    this.refreshLicenses();
+    this.refreshDeployments();
   }
 
   refreshTasks(): void {
@@ -123,6 +138,26 @@ export class PortalStore {
         .fetchActivities()
         .pipe(catchError(() => of([] as CrmActivity[])))
         .subscribe((items) => this.activitiesSignal.set(items));
+    });
+  }
+
+  refreshLicenses(): void {
+    this.collect(this.licenseSources, (source) =>
+      source.fetchLicenses()
+    ).subscribe((licencias) => this.licensesSignal.set(licencias));
+  }
+
+  refreshDeployments(): void {
+    this.collect(this.deploymentSources, (source) =>
+      source.fetchDeployments()
+    ).subscribe((despliegues) => this.deploymentsSignal.set(despliegues));
+    // El estado de la plataforma comparte fuente con los despliegues, asi que
+    // su sincronización ya quedó marcada arriba; aqui solo se piden los datos.
+    this.deploymentSources.forEach((source) => {
+      source
+        .fetchPlatformStatus()
+        .pipe(catchError(() => of([] as PlatformStatus[])))
+        .subscribe((estados) => this.platformStatusSignal.set(estados));
     });
   }
 

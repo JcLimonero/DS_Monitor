@@ -15,7 +15,14 @@ export const ACCOUNT_CHIP_CLASS: Record<AccountColor, string> = {
     'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
   amber: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
   rose: 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
-  slate: 'bg-slate-200 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300'
+  slate: 'bg-slate-200 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300',
+  indigo:
+    'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
+  teal: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
+  orange:
+    'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
+  fuchsia:
+    'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-500/15 dark:text-fuchsia-300'
 };
 
 export const ACCOUNT_BAR_CLASS: Record<AccountColor, string> = {
@@ -24,5 +31,9 @@ export const ACCOUNT_BAR_CLASS: Record<AccountColor, string> = {
   emerald: 'bg-emerald-400',
   amber: 'bg-amber-400',
   rose: 'bg-rose-400',
-  slate: 'bg-slate-400'
+  slate: 'bg-slate-400',
+  indigo: 'bg-indigo-400',
+  teal: 'bg-teal-400',
+  orange: 'bg-orange-400',
+  fuchsia: 'bg-fuchsia-400'
 };

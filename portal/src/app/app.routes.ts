@@ -60,6 +60,22 @@ export const routes: Routes = [
           import('./features/crm/crm.component').then((m) => m.CrmComponent)
       },
       {
+        path: 'licencias',
+        title: 'Licencias | Dealer Solutions',
+        loadComponent: () =>
+          import('./features/licencias/licencias.component').then(
+            (m) => m.LicenciasComponent
+          )
+      },
+      {
+        path: 'despliegues',
+        title: 'Despliegues | Dealer Solutions',
+        loadComponent: () =>
+          import('./features/despliegues/despliegues.component').then(
+            (m) => m.DesplieguesComponent
+          )
+      },
+      {
         path: 'equipo',
         title: 'Equipo | Dealer Solutions',
         loadComponent: () =>

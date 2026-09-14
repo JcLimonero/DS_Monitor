@@ -24,7 +24,8 @@ export interface SourceConnection {
   path?: string;
 }
 
-export type ConnectionCapability = 'tasks' | 'meetings' | 'monitors' | 'crm';
+export type ConnectionCapability =
+  'tasks' | 'meetings' | 'monitors' | 'crm' | 'licenses' | 'deployments';
 
 export interface PortalConfig {
   /** Raíz del backend puente. Vacío mientras no exista: todo corre en demo. */

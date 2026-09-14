@@ -3,8 +3,11 @@ import { Observable } from 'rxjs';
 import {
   CrmActivity,
   CrmOpportunity,
+  Deployment,
+  LicenseUsage,
   Meeting,
   MonitorTarget,
+  PlatformStatus,
   SourceKind,
   TaskItem
 } from '../models';
@@ -47,6 +50,16 @@ export interface CrmSource extends PortalSource {
   fetchActivities(): Observable<CrmActivity[]>;
 }
 
+export interface LicenseSource extends PortalSource {
+  fetchLicenses(): Observable<LicenseUsage[]>;
+}
+
+export interface DeploymentSource extends PortalSource {
+  fetchDeployments(): Observable<Deployment[]>;
+  /** Estado del proveedor mismo, para separar "falló mi build" de "está caído". */
+  fetchPlatformStatus(): Observable<PlatformStatus[]>;
+}
+
 export const TASK_SOURCES = new InjectionToken<readonly TaskSource[]>(
   'TASK_SOURCES'
 );
@@ -59,3 +72,9 @@ export const MONITOR_SOURCES = new InjectionToken<readonly MonitorSource[]>(
 export const CRM_SOURCES = new InjectionToken<readonly CrmSource[]>(
   'CRM_SOURCES'
 );
+export const LICENSE_SOURCES = new InjectionToken<readonly LicenseSource[]>(
+  'LICENSE_SOURCES'
+);
+export const DEPLOYMENT_SOURCES = new InjectionToken<
+  readonly DeploymentSource[]
+>('DEPLOYMENT_SOURCES');
