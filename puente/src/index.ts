@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { leerConfiguracion } from './config/entorno.js';
+import { AlmacenIngesta } from './ingesta/almacen.js';
 import { Cache } from './nucleo/cache.js';
 import { construirRutas, estadoDeConexiones } from './servidor/rutas.js';
 import { manejar } from './servidor/router.js';
@@ -15,10 +16,17 @@ import { manejar } from './servidor/router.js';
 
 const config = leerConfiguracion();
 const prefijo = process.env['PUENTE_PREFIJO'] ?? '';
+
+// Lo recibido se lee del disco antes de escuchar: si no, el portal vería el
+// buzón vacío entre el reinicio y el siguiente envío, que puede ser horas.
+const almacen = new AlmacenIngesta(config.directorioIngesta);
+const recuperados = await almacen.cargar();
+
 const servidor = createServer(
-  manejar(construirRutas(config, new Cache()), {
+  manejar(construirRutas(config, new Cache(), almacen), {
     origenesPermitidos: config.origenesPermitidos,
-    prefijo
+    prefijo,
+    maximoCuerpoBytes: config.maximoCuerpoBytes
   })
 );
 
@@ -26,6 +34,13 @@ servidor.listen(config.puerto, () => {
   const conexiones = estadoDeConexiones(config);
   const listas = conexiones.filter((estado) => estado.configurada);
   console.log(`[puente] escuchando en :${config.puerto}${prefijo || ''}`);
+  if (config.clientesIngesta.length > 0) {
+    console.log(
+      `[puente] ${config.clientesIngesta.length} emisores autorizados: ` +
+        config.clientesIngesta.map((cliente) => cliente.nombre).join(', ') +
+        ` · ${recuperados} envíos recuperados del disco`
+    );
+  }
   console.log(
     `[puente] ${listas.length} de ${conexiones.length} conexiones configuradas` +
       (listas.length > 0

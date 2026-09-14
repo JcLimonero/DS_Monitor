@@ -2,11 +2,16 @@ import {
   CRM_STAGE_ORDER,
   Deployment,
   LicenseUsage,
+  PULL_REQUEST_STALE_DAYS,
   PlatformStatus,
+  RepoPullRequest,
+  RepoStatus,
   daysToRenewal,
   deploymentFailed,
   deploymentRunning,
   isNearLimit,
+  pullRequestAge,
+  repoNeedsAttention,
   CrmOpportunity,
   CrmStage,
   Meeting,
@@ -295,4 +300,34 @@ export function platformIncidents(
   estados: readonly PlatformStatus[]
 ): PlatformStatus[] {
   return estados.filter((estado) => estado.indicator !== 'operativo');
+}
+
+// --- Repositorios ---
+
+/** Repositorios con la rama principal en rojo. */
+export function reposInTrouble(repos: readonly RepoStatus[]): RepoStatus[] {
+  return repos.filter(repoNeedsAttention);
+}
+
+/** Todos los pull requests abiertos, del más viejo al más nuevo. */
+export function allPullRequests(
+  repos: readonly RepoStatus[]
+): { repo: RepoStatus; pr: RepoPullRequest }[] {
+  return repos
+    .flatMap((repo) => repo.openPullRequests.map((pr) => ({ repo, pr })))
+    .sort((a, b) => a.pr.createdAt.localeCompare(b.pr.createdAt));
+}
+
+/**
+ * Pull requests que llevan demasiado abiertos.
+ *
+ * Un borrador no cuenta: está abierto a propósito y nadie espera que avance.
+ */
+export function stalePullRequests(
+  repos: readonly RepoStatus[],
+  now = new Date()
+): { repo: RepoStatus; pr: RepoPullRequest }[] {
+  return allPullRequests(repos).filter(
+    ({ pr }) => !pr.draft && pullRequestAge(pr, now) >= PULL_REQUEST_STALE_DAYS
+  );
 }

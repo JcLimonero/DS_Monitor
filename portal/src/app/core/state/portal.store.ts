@@ -10,6 +10,7 @@ import {
   Meeting,
   MonitorTarget,
   PlatformStatus,
+  RepoStatus,
   SyncState,
   TaskItem
 } from '../models';
@@ -20,6 +21,7 @@ import {
   LICENSE_SOURCES,
   MONITOR_SOURCES,
   PortalSource,
+  REPO_SOURCES,
   TASK_SOURCES
 } from '../sources/source.contracts';
 import { addDays, startOfDay } from '../util/date.util';
@@ -45,6 +47,7 @@ export class PortalStore {
   private readonly crmSources = inject(CRM_SOURCES);
   private readonly licenseSources = inject(LICENSE_SOURCES);
   private readonly deploymentSources = inject(DEPLOYMENT_SOURCES);
+  private readonly repoSources = inject(REPO_SOURCES);
 
   private readonly tasksSignal = signal<TaskItem[]>([]);
   private readonly meetingsSignal = signal<Meeting[]>([]);
@@ -54,6 +57,7 @@ export class PortalStore {
   private readonly licensesSignal = signal<LicenseUsage[]>([]);
   private readonly deploymentsSignal = signal<Deployment[]>([]);
   private readonly platformStatusSignal = signal<PlatformStatus[]>([]);
+  private readonly reposSignal = signal<RepoStatus[]>([]);
   private readonly syncSignal = signal<Record<string, SyncState>>({});
   private readonly lastRefreshSignal = signal<string | undefined>(undefined);
 
@@ -65,6 +69,7 @@ export class PortalStore {
   readonly licenses = this.licensesSignal.asReadonly();
   readonly deployments = this.deploymentsSignal.asReadonly();
   readonly platformStatus = this.platformStatusSignal.asReadonly();
+  readonly repos = this.reposSignal.asReadonly();
   readonly lastRefresh = this.lastRefreshSignal.asReadonly();
 
   readonly accounts: readonly Account[] = this.config.accounts;
@@ -102,6 +107,7 @@ export class PortalStore {
     this.refreshCrm();
     this.refreshLicenses();
     this.refreshDeployments();
+    this.refreshRepos();
   }
 
   refreshTasks(): void {
@@ -159,6 +165,12 @@ export class PortalStore {
         .pipe(catchError(() => of([] as PlatformStatus[])))
         .subscribe((estados) => this.platformStatusSignal.set(estados));
     });
+  }
+
+  refreshRepos(): void {
+    this.collect(this.repoSources, (source) => source.fetchRepos()).subscribe(
+      (repos) => this.reposSignal.set(repos)
+    );
   }
 
   /**

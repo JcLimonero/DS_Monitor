@@ -1,9 +1,12 @@
 import type { Configuracion } from '../config/entorno.js';
+import { AlmacenIngesta } from '../ingesta/almacen.js';
+import { registrarRutasIngesta } from '../ingesta/rutas-ingesta.js';
 import { Cache } from '../nucleo/cache.js';
 import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
 import { licenciasAnthropic } from '../proveedores/anthropic.js';
 import { licenciasCursor } from '../proveedores/cursor.js';
 import { licenciasFigma } from '../proveedores/figma.js';
+import { reposGithub } from '../proveedores/github.js';
 import { actividadesComoPendientes, crmOdoo } from '../proveedores/odoo.js';
 import { destinosMonitoreados } from '../proveedores/monitoreo.js';
 import {
@@ -29,6 +32,7 @@ const CREDENCIAL_DE: Record<string, string> = {
   figma: 'FIGMA_TOKEN y FIGMA_TEAM_ID',
   vercel: 'VERCEL_TOKEN',
   monitoreo: 'MONITOREO_DESTINOS',
+  github: 'GITHUB_TOKEN y GITHUB_REPOS',
   odoo: 'ODOO_URL, ODOO_DB, ODOO_USUARIO y ODOO_API_KEY'
 };
 
@@ -59,7 +63,8 @@ export function estadoDeConexiones(config: Configuracion): Estado[] {
     ['figma', config.figma !== undefined, ['licenses']],
     ['vercel', config.vercel !== undefined, ['deployments', 'licenses']],
     ['monitoreo', config.monitoreo !== undefined, ['monitors']],
-    ['odoo', config.odoo !== undefined, ['crm']]
+    ['odoo', config.odoo !== undefined, ['crm']],
+    ['github', config.github !== undefined, ['repos']]
   ];
 
   return filas.map(([conexion, configurada, provee]) => ({
@@ -79,7 +84,8 @@ const PENDIENTES_DE_CONSTRUIR: [string, string][] = [
 
 export function construirRutas(
   config: Configuracion,
-  cache = new Cache()
+  cache = new Cache(),
+  almacen = new AlmacenIngesta(config.directorioIngesta)
 ): Router {
   const router = new Router();
   const ttl = config.cacheSegundos;
@@ -171,6 +177,18 @@ export function construirRutas(
       );
     });
   }
+
+  // --- Repositorios de GitHub ---
+
+  router.get('/github/repos', () =>
+    cache.obtener('github:repos', ttl.repos, () =>
+      reposGithub(exigir(config.github, 'github'))
+    )
+  );
+
+  // --- Lo que se recibe en lugar de ir a buscarlo ---
+
+  registrarRutasIngesta(router, config, almacen);
 
   return router;
 }

@@ -26,6 +26,9 @@ type _LicenseUsage = Igual<Portal.LicenseUsage, Puente.LicenseUsage>;
 type _LicenseMember = Igual<Portal.LicenseMember, Puente.LicenseMember>;
 type _Deployment = Igual<Portal.Deployment, Puente.Deployment>;
 type _PlatformStatus = Igual<Portal.PlatformStatus, Puente.PlatformStatus>;
+type _RepoStatus = Igual<Portal.RepoStatus, Puente.RepoStatus>;
+type _RepoPullRequest = Igual<Portal.RepoPullRequest, Puente.RepoPullRequest>;
+type _RepoCommit = Igual<Portal.RepoCommit, Puente.RepoCommit>;
 
 /**
  * Las marcas de abajo solo existen para que el compilador evalue los alias de
@@ -42,7 +45,25 @@ const comprobado: [
   _LicenseUsage,
   _LicenseMember,
   _Deployment,
-  _PlatformStatus
-] = [true, true, true, true, true, true, true, true, true, true, true];
+  _PlatformStatus,
+  _RepoStatus,
+  _RepoPullRequest,
+  _RepoCommit
+] = [
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true
+];
 
 export default comprobado;

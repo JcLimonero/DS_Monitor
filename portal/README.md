@@ -22,15 +22,20 @@ Las siete vistas de escritorio y el carrusel están completos y navegables.
 los nombres de personas, clientes y dominios también, porque este repositorio es
 público.
 
-El backend puente ya existe (carpeta `puente/`) con seis conexiones listas:
-Claude, Cursor, Figma, Vercel, monitoreo y Odoo. Falta desplegarlo, darle las
-credenciales y cambiar el `mode` de esas conexiones de `demo` a `gateway` — lo
-que no hace falta es tocar una sola vista. Ver *Conectar una fuente de verdad*.
+El backend puente ya existe (carpeta `puente/`) con siete conexiones listas:
+Claude, Cursor, Figma, Vercel, monitoreo, Odoo y GitHub. Falta desplegarlo,
+darle las credenciales y cambiar el `mode` de esas conexiones de `demo` a
+`gateway` — lo que no hace falta es tocar una sola vista.
 
-Lo que todavía no hay: los calendarios de Google y Microsoft y el tablero de Ops
-del lado del puente, y pruebas automatizadas de los selectores del portal
-(`portal.selectors.ts`), que es donde vive la lógica que más se puede romper en
-silencio. Los traductores del puente sí están probados.
+Además el puente **recibe** datos, que va a ser la manera común: cualquier
+sistema nuestro puede empujar sus pendientes, juntas, despliegues o repos con un
+token, sin que el puente necesite credenciales de ese sistema. El cuerpo exacto
+de cada envío está en [`puente/INGESTA.md`](../puente/INGESTA.md).
+
+Lo que todavía no hay: los calendarios de Google y Microsoft del lado del puente
+(el tablero de Ops ya se puede resolver por envío), y pruebas automatizadas de
+los selectores del portal (`portal.selectors.ts`), que es donde vive la lógica
+que más se puede romper en silencio. Lo del puente sí está probado.
 
 ## Arrancar
 
@@ -60,6 +65,7 @@ Otros comandos:
 | `/crm` | Embudo de Odoo por etapa, actividades programadas y oportunidades sin movimiento |
 | `/equipo` | Carga de trabajo por persona y pendientes sin asignar |
 | `/despliegues` | Despliegues de Vercel con rama, commit y estado, más el estado de la plataforma |
+| `/repos` | Repositorios de GitHub: rama principal, integración continua y pull requests abiertos |
 | `/licencias` | Consumo de las suscripciones: asientos, tokens, gasto y renovaciones |
 | `/ajustes` | Cada conexión, su estado de sincronización y qué hace falta para conectarla de verdad |
 | `/carrusel` | Modo monitor: ocho pantallas que se turnan solas |
@@ -163,7 +169,12 @@ GET {base}{path}/activities            -> CrmActivity[]
 GET {base}{path}/licenses              -> LicenseUsage[]
 GET {base}{path}/deployments           -> Deployment[]
 GET {base}{path}/platform-status       -> PlatformStatus[]
+GET {base}{path}/repos                 -> RepoStatus[]
 ```
+
+Y el puente también **recibe**: `POST /ingesta/{tipo}` con un token de emisor, y
+lo recibido se lee en `GET /recibido/{emisor}/{recurso}`. Ver
+[`puente/INGESTA.md`](../puente/INGESTA.md).
 
 Las formas exactas están en `src/app/core/models/`. El puente traduce; el portal
 solo consume.

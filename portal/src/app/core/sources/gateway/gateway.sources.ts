@@ -8,6 +8,7 @@ import {
   Meeting,
   MonitorTarget,
   PlatformStatus,
+  RepoStatus,
   SourceKind,
   TaskItem
 } from '../../models';
@@ -18,6 +19,7 @@ import {
   DeploymentSource,
   LicenseSource,
   MonitorSource,
+  RepoSource,
   TaskSource
 } from '../source.contracts';
 
@@ -39,6 +41,7 @@ import {
  *   GET {base}{path}/licenses               -> LicenseUsage[]
  *   GET {base}{path}/deployments            -> Deployment[]
  *   GET {base}{path}/platform-status        -> PlatformStatus[]
+ *   GET {base}{path}/repos                  -> RepoStatus[]
  *
  * La autenticación va por cookie de sesión del mismo origen, así que aquí no
  * se arma ningún encabezado con llaves.
@@ -178,5 +181,21 @@ export class GatewayDeploymentSource
 
   fetchPlatformStatus(): Observable<PlatformStatus[]> {
     return this.http.get<PlatformStatus[]>(this.endpoint('/platform-status'));
+  }
+}
+
+export class GatewayRepoSource extends GatewaySource implements RepoSource {
+  constructor(
+    id: string,
+    label: string,
+    http: HttpClient,
+    baseUrl: string,
+    path: string
+  ) {
+    super(id, label, 'github', http, baseUrl, path);
+  }
+
+  fetchRepos(): Observable<RepoStatus[]> {
+    return this.http.get<RepoStatus[]>(this.endpoint('/repos'));
   }
 }

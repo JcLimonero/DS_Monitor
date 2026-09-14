@@ -7,6 +7,7 @@ import {
   Meeting,
   MonitorTarget,
   PlatformStatus,
+  RepoStatus,
   SourceKind,
   TaskItem
 } from '../../models';
@@ -17,11 +18,13 @@ import {
   DeploymentSource,
   LicenseSource,
   MonitorSource,
+  RepoSource,
   TaskSource
 } from '../source.contracts';
 import { demoActivities, demoOpportunities } from './demo-crm';
 import { demoDeployments, demoPlatformStatus } from './demo-despliegues';
 import { demoLicenses } from './demo-licencias';
+import { demoRepos } from './demo-repos';
 import { demoPersonalMeetings, demoWorkMeetings } from './demo-meetings';
 import { demoMonitorTargets } from './demo-monitors';
 import { demoOdooTasks, demoOpsTasks } from './demo-tasks';
@@ -154,5 +157,20 @@ export class DemoDeploymentSource implements DeploymentSource {
 
   fetchPlatformStatus(): Observable<PlatformStatus[]> {
     return emit(demoPlatformStatus(this.accountId));
+  }
+}
+
+export class DemoRepoSource implements RepoSource {
+  readonly demo = true;
+  readonly kind: SourceKind = 'github';
+
+  constructor(
+    readonly id: string,
+    readonly label: string,
+    private readonly accountId: string
+  ) {}
+
+  fetchRepos(): Observable<RepoStatus[]> {
+    return emit(demoRepos(this.accountId));
   }
 }

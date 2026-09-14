@@ -17,7 +17,8 @@ export type SourceKind =
   | 'anthropic'
   | 'cursor'
   | 'figma'
-  | 'vercel';
+  | 'vercel'
+  | 'github';
 
 /** Una cuenta concreta dentro de una integración, por ejemplo un correo. */
 export interface Account {

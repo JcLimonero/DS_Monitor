@@ -1,0 +1,128 @@
+<pt-page-header title="Repositorios" [subtitle]="subtitle()" />
+
+@if (repos().length > 0) {
+  <div class="space-y-4">
+    @for (repo of repos(); track repo.id) {
+      <section class="card">
+        <div
+          class="flex flex-wrap items-start gap-x-4 gap-y-2 border-b border-line px-4 py-3 sm:px-5">
+          <div class="min-w-0 flex-1">
+            <h2 class="flex flex-wrap items-center gap-2">
+              <a
+                class="truncate text-sm font-bold text-ink hover:text-brand hover:underline"
+                [href]="repo.url"
+                target="_blank"
+                rel="noopener">
+                {{ repo.name }}
+              </a>
+              <span class="chip" [class]="claseRevision(repo.checkState)">
+                {{ revisionLabel[repo.checkState] }}
+              </span>
+              @if (!repo.private) {
+                <span class="chip bg-surface-muted text-ink-muted"
+                  >Público</span
+                >
+              }
+            </h2>
+            @if (repo.lastCommit; as commit) {
+              <p
+                class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-muted">
+                <span class="font-mono">{{ commit.sha }}</span>
+                <span class="truncate">{{ commit.message }}</span>
+                @if (commit.author) {
+                  <span>· {{ commit.author.name }}</span>
+                }
+                <span>· {{ commit.at | relativo }}</span>
+              </p>
+            }
+          </div>
+
+          <dl class="flex shrink-0 gap-5 text-center">
+            <div>
+              <dd class="text-lg font-bold tabular-nums text-ink">
+                {{ repo.openPullRequests.length }}
+              </dd>
+              <dt class="text-[11px] uppercase tracking-wide text-ink-subtle">
+                Pull requests
+              </dt>
+            </div>
+            <div>
+              <dd class="text-lg font-bold tabular-nums text-ink">
+                {{ repo.openIssues }}
+              </dd>
+              <dt class="text-[11px] uppercase tracking-wide text-ink-subtle">
+                Issues
+              </dt>
+            </div>
+            <div>
+              <dd class="text-xs text-ink-muted">{{ repo.defaultBranch }}</dd>
+              <dt class="text-[11px] uppercase tracking-wide text-ink-subtle">
+                Rama
+              </dt>
+            </div>
+          </dl>
+        </div>
+
+        @if (repo.openPullRequests.length > 0) {
+          <ul class="divide-y divide-line">
+            @for (pr of repo.openPullRequests; track pr.number) {
+              <li
+                class="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 py-2.5 sm:px-5">
+                <span class="shrink-0 font-mono text-xs text-ink-subtle"
+                  >#{{ pr.number }}</span
+                >
+                <span class="min-w-0 flex-1">
+                  <a
+                    class="block truncate text-sm text-ink hover:text-brand hover:underline"
+                    [href]="pr.url"
+                    target="_blank"
+                    rel="noopener">
+                    {{ pr.title }}
+                  </a>
+                  <span
+                    class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs">
+                    @if (pr.author) {
+                      <span class="text-ink-muted">{{ pr.author.name }}</span>
+                    }
+                    <span class="text-ink-muted"
+                      >abierto {{ pr.createdAt | relativo }}</span
+                    >
+                    <span [class]="claseAprobacion(pr)">{{
+                      aprobacionLabel[pr.reviewState]
+                    }}</span>
+                    @if (pr.draft) {
+                      <span class="text-ink-subtle">Borrador</span>
+                    }
+                    @if (estancado(pr)) {
+                      <span
+                        class="inline-flex items-center gap-1 font-bold text-warn">
+                        <pt-icon name="alerta" class="h-3.5 w-3.5" />
+                        {{ edad(pr) }} días abierto
+                      </span>
+                    }
+                  </span>
+                </span>
+                <span
+                  class="chip shrink-0"
+                  [class]="claseRevision(pr.checkState)">
+                  {{ revisionLabel[pr.checkState] }}
+                </span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="px-4 py-3 text-sm text-ink-subtle sm:px-5">
+            Sin pull requests abiertos
+          </p>
+        }
+      </section>
+    }
+  </div>
+} @else {
+  <div class="card">
+    <pt-empty-state
+      icon="rama"
+      title="Sin repositorios"
+      hint="Configura GitHub en el puente, o mándale el estado desde tu CI." />
+  </div>
+}

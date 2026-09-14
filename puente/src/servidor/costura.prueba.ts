@@ -27,7 +27,8 @@ const SUFIJOS: Record<string, string[]> = {
   monitors: ['/targets'],
   crm: ['/opportunities', '/activities'],
   licenses: ['/licenses'],
-  deployments: ['/deployments', '/platform-status']
+  deployments: ['/deployments', '/platform-status'],
+  repos: ['/repos']
 };
 
 const CONFIG_DEL_PORTAL = fileURLToPath(

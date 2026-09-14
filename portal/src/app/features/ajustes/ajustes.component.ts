@@ -26,7 +26,8 @@ const KIND_LABEL: Record<SourceKind, string> = {
   anthropic: 'Claude',
   cursor: 'Cursor',
   figma: 'Figma',
-  vercel: 'Vercel'
+  vercel: 'Vercel',
+  github: 'GitHub'
 };
 
 const CAPABILITY_LABEL: Record<SourceConnection['provides'][number], string> = {
@@ -35,7 +36,8 @@ const CAPABILITY_LABEL: Record<SourceConnection['provides'][number], string> = {
   monitors: 'Monitoreo',
   crm: 'CRM',
   licenses: 'Licencias',
-  deployments: 'Despliegues'
+  deployments: 'Despliegues',
+  repos: 'Repositorios'
 };
 
 /** Qué hace falta del lado del puente para que la conexión deje de ser demo. */
@@ -70,7 +72,12 @@ const REQUIREMENTS: Record<SourceKind, string> = {
     'hay que capturarlos a mano.',
   vercel:
     'Un access token con acceso al equipo. El puente consulta /v6/deployments para los ' +
-    'despliegues y la página pública de estado de Vercel para los incidentes de la plataforma.'
+    'despliegues y la página pública de estado de Vercel para los incidentes de la plataforma.',
+  github:
+    'Un token con lectura sobre los repositorios: permiso "repo" en uno clásico, o ' +
+    'contents:read, pull_requests:read y checks:read en uno de grano fino. También se puede ' +
+    'mandar el estado desde tu propio CI con POST /ingesta/repos, y así el puente no necesita ' +
+    'token de GitHub. Ver puente/INGESTA.md.'
 };
 
 const MODE_LABEL: Record<ConnectionMode, string> = {

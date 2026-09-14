@@ -1,3 +1,8 @@
 /node_modules
 /dist
 .env
+
+# Lo que se recibe por ingesta se guarda aquí. Nunca al repositorio: puede
+# traer nombres, correos, importes del CRM y demás datos reales, y este
+# repositorio es público.
+/datos

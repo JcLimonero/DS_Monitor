@@ -8,6 +8,7 @@ import {
   Meeting,
   MonitorTarget,
   PlatformStatus,
+  RepoStatus,
   SourceKind,
   TaskItem
 } from '../models';
@@ -54,6 +55,10 @@ export interface LicenseSource extends PortalSource {
   fetchLicenses(): Observable<LicenseUsage[]>;
 }
 
+export interface RepoSource extends PortalSource {
+  fetchRepos(): Observable<RepoStatus[]>;
+}
+
 export interface DeploymentSource extends PortalSource {
   fetchDeployments(): Observable<Deployment[]>;
   /** Estado del proveedor mismo, para separar "falló mi build" de "está caído". */
@@ -78,3 +83,6 @@ export const LICENSE_SOURCES = new InjectionToken<readonly LicenseSource[]>(
 export const DEPLOYMENT_SOURCES = new InjectionToken<
   readonly DeploymentSource[]
 >('DEPLOYMENT_SOURCES');
+export const REPO_SOURCES = new InjectionToken<readonly RepoSource[]>(
+  'REPO_SOURCES'
+);

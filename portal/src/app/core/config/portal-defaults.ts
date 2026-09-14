@@ -85,6 +85,14 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       enabled: true
     },
     {
+      id: 'github',
+      label: 'GitHub',
+      detail: 'Estado de los repositorios y sus pull requests',
+      kind: 'github',
+      color: 'slate',
+      enabled: true
+    },
+    {
       id: 'mios',
       label: 'Míos',
       detail: 'Pendientes que capturo aquí mismo',
@@ -165,6 +173,14 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       mode: 'demo',
       provides: ['deployments', 'licenses'],
       path: '/vercel'
+    },
+    {
+      id: 'github-repos',
+      accountId: 'github',
+      kind: 'github',
+      mode: 'demo',
+      provides: ['repos'],
+      path: '/github'
     },
     {
       id: 'pendientes-locales',

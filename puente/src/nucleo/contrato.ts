@@ -190,3 +190,45 @@ export interface PlatformStatus {
   checkedAt: string;
   accountId: string;
 }
+
+// --- Repositorios ---
+
+export type RepoCheckState =
+  'exitoso' | 'fallido' | 'en_curso' | 'sin_revision';
+export type RepoReviewState =
+  'aprobado' | 'cambios_solicitados' | 'sin_revisar';
+
+export interface RepoCommit {
+  sha: string;
+  message?: string;
+  author?: Person;
+  at: string;
+  url?: string;
+}
+
+export interface RepoPullRequest {
+  number: number;
+  title: string;
+  url: string;
+  author?: Person;
+  createdAt: string;
+  updatedAt?: string;
+  draft: boolean;
+  reviewState: RepoReviewState;
+  checkState: RepoCheckState;
+}
+
+export interface RepoStatus {
+  id: string;
+  name: string;
+  url: string;
+  private: boolean;
+  defaultBranch: string;
+  lastCommit?: RepoCommit;
+  checkState: RepoCheckState;
+  openPullRequests: RepoPullRequest[];
+  openIssues: number;
+  pushedAt?: string;
+  accountId: string;
+  updatedAt: string;
+}

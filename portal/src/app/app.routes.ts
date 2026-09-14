@@ -60,6 +60,14 @@ export const routes: Routes = [
           import('./features/crm/crm.component').then((m) => m.CrmComponent)
       },
       {
+        path: 'repos',
+        title: 'Repositorios | Dealer Solutions',
+        loadComponent: () =>
+          import('./features/repos/repos.component').then(
+            (m) => m.ReposComponent
+          )
+      },
+      {
         path: 'licencias',
         title: 'Licencias | Dealer Solutions',
         loadComponent: () =>

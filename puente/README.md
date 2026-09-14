@@ -20,11 +20,31 @@ Conectadas y probadas:
 | Vercel | Despliegues y estado | `/v6/deployments` y la página pública de estado |
 | Monitoreo | Plataformas | Revisión propia de cada URL |
 | Odoo | CRM y pendientes | JSON-RPC contra `crm.lead` y `mail.activity` |
+| GitHub | Repositorios | `/repos`, `/commits`, `/check-runs` y `/pulls` |
 
 Todavía sin conectar: los calendarios de Google y Microsoft, y el tablero de
 Ops. Sus rutas ya están registradas y responden 501 con un mensaje claro, para
 que si alguien cambia esa conexión a modo gateway antes de tiempo, Ajustes le
 diga que falta construirla en vez de un 404 que parece un error de escritura.
+
+## Dos maneras de traer datos
+
+**Ir por ellos**: el puente consulta la API del proveedor cada tanto. Es lo que
+hacen los adaptadores de `src/proveedores/`, y es lo natural cuando el proveedor
+tiene API y nosotros no controlamos el sistema.
+
+**Recibirlos**: el sistema de origen empuja cuando algo cambia. Es lo natural
+para lo nuestro — Ops, el CI, un script de vigilancia — y no requiere darle al
+puente credenciales de esos sistemas.
+
+La segunda va a ser la común, y tiene su propio documento con el cuerpo exacto
+de cada envío: **[INGESTA.md](INGESTA.md)**.
+
+Recibir trae tres problemas que ir por ellos no tiene, y los tres están
+resueltos: los envíos llegan fuera de orden (se descartan los viejos por
+`generadoEn`), un reinicio borraría lo recibido (se escribe a disco), y un
+emisor que deja de mandar no se nota (cada uno tiene ventana de frescura y su
+ruta responde 503 al vencerse).
 
 ## Arrancar
 
@@ -84,6 +104,11 @@ GET /monitoreo/estado/targets          -> MonitorTarget[]
 GET /odoo/itech/opportunities          -> CrmOpportunity[]
 GET /odoo/itech/activities             -> CrmActivity[]
 GET /odoo/itech/tasks                  -> TaskItem[]
+GET /github/repos                      -> RepoStatus[]
+
+POST /ingesta/{tipo}                   <- recibir datos (ver INGESTA.md)
+GET  /recibido/{emisor}/{recurso}      -> lo recibido, ya traducido
+GET  /ingesta/estado                   -> emisores, rutas y frescura
 ```
 
 Lo de `/odoo/itech/tasks` merece una nota: el portal le pide a la conexión de
@@ -133,10 +158,10 @@ puede cometer un tablero.
 
 ## Pruebas
 
-`npm test` corre 47 pruebas sobre lo que de verdad se puede romper en silencio:
+`npm test` corre 67 pruebas sobre lo que de verdad se puede romper en silencio:
 los traductores de cada proveedor (sumas de tokens, centavos a dólares, estados
-de despliegue, fechas de Odoo, prioridades), el caché y el router. No tocan la
-red.
+de despliegue, fechas de Odoo, prioridades), la normalización de todo lo que se
+recibe, el almacén (orden, persistencia, frescura) y el router. No tocan la red.
 
 **La prueba de costura** es la que más gana el sueldo: lee la configuración real
 del portal, arma las URLs que va a pedir y comprueba que el puente publique cada

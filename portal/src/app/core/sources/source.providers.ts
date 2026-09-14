@@ -11,6 +11,7 @@ import {
   DemoDeploymentSource,
   DemoLicenseSource,
   DemoMonitorSource,
+  DemoRepoSource,
   DemoTaskSource
 } from './demo/demo.sources';
 import {
@@ -19,6 +20,7 @@ import {
   GatewayDeploymentSource,
   GatewayLicenseSource,
   GatewayMonitorSource,
+  GatewayRepoSource,
   GatewayTaskSource
 } from './gateway/gateway.sources';
 import { LocalTaskStore } from './local/local-task.store';
@@ -33,6 +35,8 @@ import {
   LicenseSource,
   MONITOR_SOURCES,
   MonitorSource,
+  REPO_SOURCES,
+  RepoSource,
   TASK_SOURCES,
   TaskSource
 } from './source.contracts';
@@ -207,6 +211,24 @@ function buildDeploymentSources(
   });
 }
 
+function buildRepoSources(
+  config: PortalConfig,
+  http: HttpClient
+): RepoSource[] {
+  return connectionsFor(config, 'repos').map((connection) => {
+    const label = labelOf(config, connection);
+    return useGateway(config, connection)
+      ? new GatewayRepoSource(
+          connection.id,
+          label,
+          http,
+          config.gatewayUrl,
+          connection.path!
+        )
+      : new DemoRepoSource(connection.id, label, connection.accountId);
+  });
+}
+
 export function providePortalSources(
   config: PortalConfig
 ): EnvironmentProviders {
@@ -235,6 +257,10 @@ export function providePortalSources(
     {
       provide: DEPLOYMENT_SOURCES,
       useFactory: () => buildDeploymentSources(config, inject(HttpClient))
+    },
+    {
+      provide: REPO_SOURCES,
+      useFactory: () => buildRepoSources(config, inject(HttpClient))
     }
   ]);
 }
