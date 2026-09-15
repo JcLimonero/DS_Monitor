@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Si se empuja varias veces al mismo PR, solo corre la ejecución más reciente.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Los dos proyectos son paquetes npm distintos y corren en paralelo, para que
+  # un fallo de uno no se confunda con el del otro.
+  portal:
+    name: "Portal: formato, tipos y build"
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: portal
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Verificar formato
+        run: npm run format:check
+
+      - name: Verificar tipos
+        run: npm run typecheck
+
+      # El build hace la revisión de tipos de las plantillas, que tsc no ve.
+      - name: Build de producción
+        run: npm run build
+
+  puente:
+    name: "Puente: formato, tipos, contrato y pruebas"
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: puente
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: puente/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Verificar formato
+        run: npm run format:check
+
+      - name: Verificar tipos
+        run: npm run typecheck
+
+      # Comprueba que los tipos del puente sigan siendo los mismos que los del
+      # portal. Si alguien cambia un campo de un solo lado, esto deja de compilar.
+      - name: Verificar el contrato con el portal
+        run: npm run check:contrato
+
+      - name: Pruebas
+        run: npm test

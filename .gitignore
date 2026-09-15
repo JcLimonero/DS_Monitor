@@ -1,0 +1,19 @@
+# Dependencias y salidas de construcción de los dos proyectos.
+node_modules/
+dist/
+out-tsc/
+.angular/cache/
+
+# Credenciales. Nunca al repositorio.
+.env
+
+# Lo que el puente recibe por ingesta: puede traer nombres, correos e importes
+# reales de clientes.
+puente/datos/
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
