@@ -852,7 +852,7 @@ export function construirRutas(
   router.post('/correo/:id/borrar', async (contexto) => {
     exigirAdmin(contexto, cfg(), acceso);
     const id = contexto.segmentos[1] as string;
-    buzon(id);
+    // Borrar dos veces no es error: el resultado es el mismo.
     await almacenCorreo.borrar(id);
     cache.olvidar(`correo:${id}`);
     olvidarAcceso(id);

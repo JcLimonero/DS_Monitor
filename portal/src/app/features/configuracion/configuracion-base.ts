@@ -146,30 +146,38 @@ export class ConfiguracionBase {
 
   // --- Conexiones ---
 
+  /** Cuentas quitadas en esta visita, para esconderlas sin recargar. */
+  readonly quitadas = signal<ReadonlySet<string>>(new Set());
+
   readonly rows = computed<ConnectionRow[]>(() => {
     const syncById = new Map(
       this.store.syncStates().map((state) => [state.sourceId, state])
     );
-    return this.config.connections.map((connection) => {
-      const account = this.store.accountOf(connection.accountId);
-      const added = this.local.isAdded(connection.accountId);
-      return {
-        connection,
-        account,
-        sync: syncById.get(connection.id),
-        kindLabel: KIND_LABEL[connection.kind],
-        modeLabel: MODE_LABEL[connection.mode],
-        capabilities: connection.provides.map(
-          (capability) => CAPABILITY_LABEL[capability]
-        ),
-        enabled: account?.enabled ?? true,
-        added,
-        puenteLine:
-          added && account && isMailKind(account.kind)
-            ? correoCuentasLine(account)
-            : undefined
-      };
-    });
+    // Lo que se quitó desaparece de inmediato, aunque el resto se aplique al
+    // recargar.
+    const quitadas = this.quitadas();
+    return this.config.connections
+      .filter((c) => !quitadas.has(c.accountId))
+      .map((connection) => {
+        const account = this.store.accountOf(connection.accountId);
+        const added = this.local.isAdded(connection.accountId);
+        return {
+          connection,
+          account,
+          sync: syncById.get(connection.id),
+          kindLabel: KIND_LABEL[connection.kind],
+          modeLabel: MODE_LABEL[connection.mode],
+          capabilities: connection.provides.map(
+            (capability) => CAPABILITY_LABEL[capability]
+          ),
+          enabled: account?.enabled ?? true,
+          added,
+          puenteLine:
+            added && account && isMailKind(account.kind)
+              ? correoCuentasLine(account)
+              : undefined
+        };
+      });
   });
 
   /** Los buzones, con los que faltan por conectar al principio. */
@@ -239,8 +247,20 @@ export class ConfiguracionBase {
   }
 
   removeAccount(accountId: string): void {
+    const cuenta = this.store.accountOf(accountId);
+    const nombre = cuenta
+      ? `${cuenta.label} (${cuenta.detail.split(' ')[0]})`
+      : accountId;
+    if (
+      !confirm(
+        `¿Quitar el buzón ${nombre}?\n\nSe borran su conexión y sus credenciales; sus juntas, pendientes y licencias dejan de aparecer.`
+      )
+    ) {
+      return;
+    }
     const terminar = () => {
       this.local.removeAccount(accountId);
+      this.quitadas.update((q) => new Set([...q, accountId]));
       this.needsReload.set(true);
     };
     if (this.admin.disponible) {
