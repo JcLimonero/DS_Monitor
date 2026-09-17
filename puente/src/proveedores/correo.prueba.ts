@@ -185,7 +185,7 @@ describe('pendientes deducidos del correo', () => {
     assert.equal(pendiente?.dueDate, '2026-09-12T15:00:00.000Z');
     assert.equal(pendiente?.origin, 'correo');
     assert.deepEqual(pendiente?.tags, ['correo', 'pago']);
-    assert.equal(pendiente?.description, 'De SendGrid');
+    assert.match(pendiente?.description ?? '', /^De: SendGrid <billing@sendgrid\.com>\nAsunto: Action needed/);
   });
 
   it('un dominio por renovar es de prioridad media con una semana', () => {

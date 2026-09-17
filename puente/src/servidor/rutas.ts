@@ -14,6 +14,9 @@ import {
   type Dominio
 } from '../datos/dominios.js';
 import type { Person, TaskItem } from '../nucleo/contrato.js';
+import { anotar, type Anotaciones } from '../pendientes/anotaciones.js';
+import { registrar, type Registro } from '../pendientes/registro.js';
+import { enviarPorEmailJs } from '../acceso/acceso.js';
 import type { ClienteIngesta } from '../config/entorno.js';
 import {
   AlmacenIntegraciones,
@@ -44,7 +47,13 @@ import type { TipoIngesta } from '../ingesta/modelos.js';
 import { Cache } from '../nucleo/cache.js';
 import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
 import { licenciasAnthropic } from '../proveedores/anthropic.js';
-import { leerCorreo } from '../proveedores/correo.js';
+import { leerCorreo, type DatosCorreo } from '../proveedores/correo.js';
+import {
+  clasificarCorreos,
+  empresaDeCuenta,
+  pendienteDeClasificacion,
+  type Clasificacion
+} from '../proveedores/ia.js';
 import { licenciasCursor } from '../proveedores/cursor.js';
 import { licenciasFigma } from '../proveedores/figma.js';
 import { reposGithub } from '../proveedores/github.js';
@@ -170,6 +179,12 @@ export interface Datos {
   personales: AlmacenJson<TaskItem[]>;
   /** Emisores de la API de ingesta creados desde la aplicacion. */
   emisores: AlmacenJson<ClienteIngesta[]>;
+  /** Comentarios, hecho y asignacion por pendiente, venga de donde venga. */
+  anotaciones: AlmacenJson<Anotaciones>;
+  /** Pendientes detectados en el correo, registrados por cuenta. */
+  registroCorreo: AlmacenJson<Registro>;
+  /** Lo que la IA ya dijo de cada correo, para no preguntarle dos veces. */
+  iaCorreo: AlmacenJson<Record<string, Clasificacion>>;
 }
 
 export function abrirDatos(directorio: string): Datos {
@@ -184,6 +199,18 @@ export function abrirDatos(directorio: string): Datos {
     emisores: new AlmacenJson<ClienteIngesta[]>(
       join(directorio, 'emisores.json'),
       []
+    ),
+    anotaciones: new AlmacenJson<Anotaciones>(
+      join(directorio, 'anotaciones.json'),
+      {}
+    ),
+    registroCorreo: new AlmacenJson<Registro>(
+      join(directorio, 'pendientes-correo.json'),
+      {}
+    ),
+    iaCorreo: new AlmacenJson<Record<string, Clasificacion>>(
+      join(directorio, 'ia-correo.json'),
+      {}
     )
   };
 }
@@ -228,6 +255,13 @@ function faltanteDe(correo: ConfiguracionCorreo): string {
 }
 
 /** El token de administracion, para las rutas que editan buzones. */
+function escapar(texto: string): string {
+  return texto
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 function texto(valor: unknown): string | undefined {
   return typeof valor === 'string' && valor.trim() !== ''
     ? valor.trim()
@@ -386,7 +420,7 @@ export function construirRutas(
 
   // El equipo es lo guardado en la aplicacion mas lo que manden por la API
   // los emisores con tipo `equipo` (por correo o identificador, sin repetir).
-  router.get('/equipo', async () => {
+  const equipoCompleto = async (): Promise<Person[]> => {
     const vistos = new Map<string, Person>();
     const agregar = (p: Person) => {
       const llave = (p.email ?? p.id).toLowerCase();
@@ -403,7 +437,9 @@ export function construirRutas(
       }
     }
     return [...vistos.values()];
-  });
+  };
+
+  router.get('/equipo', async () => equipoCompleto());
 
   // --- Emisores: quien puede alimentar la API desde afuera ---
   //
@@ -528,7 +564,9 @@ export function construirRutas(
 
   // --- Pendientes personales: se guardan completos en cada cambio ---
 
-  router.get('/personales/tasks', async () => datos.personales.leer());
+  router.get('/personales/tasks', async () =>
+    conNotas(datos.personales.leer())
+  );
 
   router.post('/personales/guardar', async (contexto) => {
     exigirAdmin(contexto, cfg(), acceso);
@@ -725,12 +763,104 @@ export function construirRutas(
     return cuenta;
   };
 
-  const leido = (cuenta: ConfiguracionCorreo) =>
-    cache.obtener(`correo:${cuenta.id}`, ttl.correo, () =>
-      cuenta.proveedor === 'microsoft'
-        ? leerCorreoMicrosoft(cuenta)
-        : leerCorreo(cuenta)
+  const hechos = () =>
+    new Set(
+      Object.entries(datos.anotaciones.leer())
+        .filter(([, nota]) => nota.hecho)
+        .map(([id]) => id)
     );
+
+  /**
+   * Lo que la IA ya vio se guarda por clave de correo. Se limpia lo mas
+   * viejo que la ventana de analisis mas un mes, para que el archivo no
+   * crezca sin fin.
+   */
+  const opcionesIa = () => {
+    const ia = cfg().ia;
+    if (!ia) {
+      return undefined;
+    }
+    const vistos = datos.iaCorreo.leer();
+    return {
+      dias: ia.dias,
+      maximo: ia.maximo,
+      yaAnalizado: (clave: string) => clave in vistos
+    };
+  };
+
+  const clasificar = async (
+    cuenta: ConfiguracionCorreo,
+    lectura: DatosCorreo
+  ): Promise<TaskItem[]> => {
+    const ia = cfg().ia;
+    if (!ia || lectura.paraIa.length === 0) {
+      return [];
+    }
+    const ahora = new Date();
+    let resultados: Clasificacion[];
+    try {
+      resultados = await clasificarCorreos(ia, lectura.paraIa, ahora);
+    } catch (error) {
+      // La IA es un extra: si falla, el buzon se sigue leyendo sin ella.
+      console.warn(
+        `[puente] la IA no pudo clasificar el correo de "${cuenta.id}": ${(error as Error).message}`
+      );
+      return [];
+    }
+    const limite = ahora.getTime() - (ia.dias + 30) * 86_400_000;
+    const vistos = Object.fromEntries(
+      Object.entries(datos.iaCorreo.leer()).filter(
+        ([, c]) => Date.parse(c.analizadoEn) >= limite
+      )
+    );
+    for (const r of resultados) {
+      vistos[r.id] = r;
+    }
+    await datos.iaCorreo.escribir(vistos);
+    const porClave = new Map(lectura.paraIa.map((c) => [c.clave, c]));
+    return resultados
+      .filter((r) => r.esPendiente)
+      .map((r) =>
+        pendienteDeClasificacion(
+          r,
+          porClave.get(r.id) as (typeof lectura.paraIa)[number],
+          cuenta.accountId
+        )
+      );
+  };
+
+  const leido = (cuenta: ConfiguracionCorreo) =>
+    cache.obtener(`correo:${cuenta.id}`, ttl.correo, async () => {
+      const ia = opcionesIa();
+      const lectura =
+        cuenta.proveedor === 'microsoft'
+          ? await leerCorreoMicrosoft(cuenta, new Date(), ia)
+          : await leerCorreo(cuenta, new Date(), ia);
+      const empresa = empresaDeCuenta(cuenta.id);
+      const detectados = [
+        ...lectura.pendientes.map((t) => ({
+          ...t,
+          company: t.company ?? empresa
+        })),
+        ...(await clasificar(cuenta, lectura)).map((t) => ({
+          ...t,
+          company: t.company ?? empresa
+        }))
+      ];
+      // Lo detectado se registra: un pendiente no desaparece porque el
+      // correo que lo origino ya sea viejo.
+      const registro = datos.registroCorreo.leer();
+      const actual = registrar(
+        registro[cuenta.id] ?? [],
+        detectados,
+        hechos()
+      );
+      await datos.registroCorreo.escribir({ ...registro, [cuenta.id]: actual });
+      return { ...lectura, pendientes: actual };
+    });
+
+  const conNotas = (tareas: TaskItem[]) =>
+    anotar(tareas, datos.anotaciones.leer());
 
   const recibidoDe = (cuenta: ConfiguracionCorreo, tipo: TipoIngesta) => {
     const emisor = cfg().clientesIngesta.find((c) => c.nombre === cuenta.id);
@@ -752,9 +882,11 @@ export function construirRutas(
   ): Promise<unknown[]> => {
     const cuenta = buzon(id);
     const metodo = metodoDe(cuenta, cfg());
-    return metodo === 'graph' || metodo === 'imap'
-      ? (await leido(cuenta))[parte]
-      : recibidoDe(cuenta, tipo);
+    const lista =
+      metodo === 'graph' || metodo === 'imap'
+        ? (await leido(cuenta))[parte]
+        : recibidoDe(cuenta, tipo);
+    return parte === 'pendientes' ? conNotas(lista as TaskItem[]) : lista;
   };
 
   router.get('/correo/:id/licenses', ({ segmentos }) =>
@@ -1165,11 +1297,98 @@ export function construirRutas(
 
   router.get('/ops/pendientes/tasks', async () => {
     const buzones = new Set(buzones_(cfg(), almacenCorreo).map((c) => c.id));
-    return todosLosEmisores()
-      .filter((e) => e.tipos.includes('pendientes') && !buzones.has(e.nombre))
-      .flatMap(
-        (e) => almacen.leer<TaskItem>('pendientes', e.nombre)?.elementos ?? []
-      );
+    return conNotas(
+      todosLosEmisores()
+        .filter((e) => e.tipos.includes('pendientes') && !buzones.has(e.nombre))
+        .flatMap(
+          (e) => almacen.leer<TaskItem>('pendientes', e.nombre)?.elementos ?? []
+        )
+    );
+  });
+
+  // --- Anotar un pendiente: comentario, hecho, asignacion ---
+  //
+  // Vale para cualquier pendiente, venga del correo, de Ops, de Odoo o de los
+  // personales. Al asignar, la persona recibe un correo con el detalle por
+  // EmailJS (el mismo servicio del acceso).
+
+  router.post('/pendientes/anotar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const cuerpo = (contexto.cuerpo ?? {}) as {
+      id?: string;
+      comentario?: string;
+      hecho?: boolean;
+      asignarA?: string;
+      tarea?: Partial<TaskItem>;
+    };
+    const id = (cuerpo.id ?? '').trim();
+    if (!id) {
+      throw new ErrorPuente('Falta el identificador del pendiente.', 400);
+    }
+    const sesion = acceso.sesionDe(tokenDe(contexto));
+    const todas = datos.anotaciones.leer();
+    const nota = todas[id] ?? { comentarios: [], actualizadoEn: '' };
+    const ahora = new Date().toISOString();
+    if (typeof cuerpo.comentario === 'string' && cuerpo.comentario.trim()) {
+      nota.comentarios = [
+        ...nota.comentarios,
+        { text: cuerpo.comentario.trim(), at: ahora, by: sesion?.correo }
+      ];
+    }
+    if (typeof cuerpo.hecho === 'boolean') {
+      nota.hecho = cuerpo.hecho;
+    }
+    let aviso: string | undefined;
+    if (cuerpo.asignarA !== undefined) {
+      const quien = (cuerpo.asignarA ?? '').trim().toLowerCase();
+      if (!quien) {
+        nota.asignado = undefined;
+      } else {
+        const persona = (await equipoCompleto()).find(
+          (p) => p.id.toLowerCase() === quien || p.email?.toLowerCase() === quien
+        );
+        if (!persona) {
+          throw new ErrorPuente(`No hay nadie en el equipo con "${quien}".`, 400);
+        }
+        nota.asignado = persona;
+        const config = cfg();
+        if (persona.email && config.acceso) {
+          const t = cuerpo.tarea ?? {};
+          const html =
+            `<p>Te asignaron un pendiente en <strong>DS Monitor</strong>${sesion ? ` (${sesion.correo})` : ''}:</p>` +
+            `<p style="font-size:20px"><strong>${escapar(t.title ?? id)}</strong></p>` +
+            (t.description ? `<p>${escapar(t.description)}</p>` : '') +
+            `<p>Prioridad: ${escapar(t.priority ?? 'media')}` +
+            (t.dueDate ? ` · Vence: ${new Date(t.dueDate).toLocaleDateString('es-MX', { dateStyle: 'long', timeZone: 'America/Mexico_City' })}` : '') +
+            (t.project ? ` · Proyecto: ${escapar(t.project)}` : '') +
+            `</p>` +
+            (nota.comentarios.length > 0
+              ? `<p>Comentarios:</p><ul>${nota.comentarios.map((c) => `<li>${escapar(c.text)}</li>`).join('')}</ul>`
+              : '') +
+            `<p><a href="${config.urlPublica.replace(/\/api\/portal$/, '')}/pendientes">Abrir en DS Monitor</a></p>`;
+          try {
+            await enviarPorEmailJs(
+              config.acceso,
+              persona.email,
+              '',
+              false,
+              { titulo: `Pendiente asignado: ${t.title ?? id}`, html }
+            );
+            aviso = `Se avisó por correo a ${persona.email}.`;
+          } catch (error) {
+            aviso = `Asignado, pero no se pudo mandar el correo: ${error instanceof Error ? error.message : String(error)}`;
+          }
+        } else if (!persona.email) {
+          aviso = 'Asignado; esa persona no tiene correo en el equipo, no se le avisó.';
+        } else {
+          aviso = 'Asignado; para avisar por correo configura el acceso (EmailJS) en Equipo.';
+        }
+      }
+    }
+    nota.actualizadoEn = ahora;
+    await datos.anotaciones.escribir({ ...todas, [id]: nota });
+    cache.olvidar();
+    return { ok: true, anotacion: nota, aviso };
   });
 
   // --- Lo que se recibe en lugar de ir a buscarlo ---

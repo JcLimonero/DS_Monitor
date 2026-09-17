@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
+  descripcionDeCorreo,
   detectarLicenciasConEvidencia,
-  detectarPendientes,
+  detectarPendientesConEvidencia,
   montoDelRecibo
 } from '../proveedores/correo.js';
 import type { EncabezadoCorreo } from '../proveedores/imap.js';
@@ -141,7 +142,15 @@ on run argv
       set m to first message of mb whose id is idMensaje
       set cuerpo to content of m
       if (length of cuerpo) > 20000 then set cuerpo to text 1 thru 20000 of cuerpo
-      return cuerpo
+      set paraQuien to ""
+      repeat with r in to recipients of m
+        set paraQuien to paraQuien & (address of r) & ", "
+      end repeat
+      set conCopia to ""
+      repeat with r in cc recipients of m
+        set conCopia to conCopia & (address of r) & ", "
+      end repeat
+      return paraQuien & linefeed & conCopia & linefeed & cuerpo
     end tell
   end timeout
 end run
@@ -184,21 +193,34 @@ async function encabezadosDeMail(
     });
 }
 
-async function cuerpoDeMail(
+/** Destinatarios y texto de un mensaje concreto, por su id de Mail. */
+async function mensajeDeMail(
   cuenta: CuentaBarrido,
   idMensaje: number
-): Promise<string> {
+): Promise<{ para: string; cc: string; cuerpo: string }> {
   try {
     const { stdout } = await ejecutar(
       'osascript',
       ['-e', SCRIPT_CUERPO, cuenta.cuentaMail, cuenta.buzon, String(idMensaje)],
       { maxBuffer: 4 * 1024 * 1024 }
     );
-    return stdout;
+    const [para = '', cc = '', ...resto] = stdout.split('\n');
+    return {
+      para: para.replace(/, $/, ''),
+      cc: cc.replace(/, $/, ''),
+      cuerpo: resto.join('\n')
+    };
   } catch {
-    // Sin cuerpo no hay importe; el portal deja capturarlo a mano.
-    return '';
+    // Sin cuerpo no hay importe ni detalle; el portal deja capturarlos.
+    return { para: '', cc: '', cuerpo: '' };
   }
+}
+
+async function cuerpoDeMail(
+  cuenta: CuentaBarrido,
+  idMensaje: number
+): Promise<string> {
+  return (await mensajeDeMail(cuenta, idMensaje)).cuerpo;
 }
 
 /** El modelo del portal, de vuelta al cuerpo que acepta la ingesta. */
@@ -315,7 +337,21 @@ async function principal(): Promise<void> {
       }
     }
     const licencias = evidencias.map((e) => e.licencia);
-    const pendientes = detectarPendientes(encabezados, cuenta.accountId, ahora);
+    // Los pendientes llevan el correo completo: quien lo mando, a quien y
+    // el texto.
+    const detectados = detectarPendientesConEvidencia(
+      encabezados,
+      cuenta.accountId,
+      ahora
+    );
+    for (const p of detectados) {
+      const mensaje = await mensajeDeMail(cuenta, p.encabezado.uid);
+      p.tarea.description = descripcionDeCorreo(
+        { ...p.encabezado, para: mensaje.para || undefined, cc: mensaje.cc || undefined },
+        mensaje.cuerpo
+      );
+    }
+    const pendientes = detectados.map((p) => p.tarea);
     resultado[cuenta.accountId] = {
       leidos: encabezados.length,
       licencias,

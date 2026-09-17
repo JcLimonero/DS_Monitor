@@ -25,10 +25,21 @@ export type TaskStatus = 'pendiente' | 'en_progreso' | 'bloqueado' | 'hecho';
 export type TaskPriority = 'baja' | 'media' | 'alta' | 'urgente';
 export type TaskOrigin = 'odoo' | 'ops' | 'local' | 'correo';
 
+/** Un comentario puesto desde el portal sobre un pendiente. */
+export interface TaskComment {
+  text: string;
+  at: string;
+  by?: string;
+}
+
 export interface TaskItem {
   id: string;
   title: string;
   description?: string;
+  /** Comentarios capturados en el portal, el más reciente al final. */
+  comments?: TaskComment[];
+  /** Empresa a la que pertenece: Itech Dev, Dealer Solutions, NexusQTech, OperativAI. */
+  company?: string;
   status: TaskStatus;
   priority: TaskPriority;
   dueDate?: string;

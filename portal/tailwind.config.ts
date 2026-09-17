@@ -31,15 +31,23 @@ export default {
         info: token('info')
       },
       fontFamily: {
-        // Arial es la tipografia de marca de Dealer Solutions.
-        sans: ['Arial', 'Helvetica Neue', 'Helvetica', 'sans-serif'],
-        mono: ['SFMono-Regular', 'Consolas', 'Liberation Mono', 'monospace']
+        // Las de dealersolutions.com.mx: IBM Plex Sans para el texto, Archivo
+        // para los titulos y IBM Plex Mono para lo tecnico.
+        sans: ['IBM Plex Sans', 'Arial', 'Helvetica Neue', 'sans-serif'],
+        display: ['Archivo', 'IBM Plex Sans', 'Arial', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'SFMono-Regular', 'Consolas', 'monospace']
       },
       boxShadow: {
         card: '0 1px 2px rgb(10 37 64 / 0.05), 0 8px 24px -12px rgb(10 37 64 / 0.20)'
       },
+      // El sitio de la marca usa esquinas casi rectas (2 px); aqui apenas un
+      // poco mas, para que las tarjetas no se vean cortantes en pantalla.
       borderRadius: {
-        xl: '0.875rem'
+        DEFAULT: '0.125rem',
+        md: '0.125rem',
+        lg: '0.25rem',
+        xl: '0.375rem',
+        '2xl': '0.5rem'
       }
     }
   },

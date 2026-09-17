@@ -74,25 +74,37 @@ body {
     @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold;
   }
 
+  /*
+   * Botones y campos miden lo mismo (2.5rem) para que un formulario en linea
+   * quede alineado aunque mezcle inputs, selects, fechas y botones.
+   */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line px-3 py-2
-      text-sm font-bold text-ink transition hover:bg-surface-muted
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-line px-4
+      text-sm font-semibold text-ink transition hover:bg-surface-muted
       focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
       focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  /* El primario de la marca: cyan con texto oscuro, como en el sitio. */
   .btn-primary {
-    @apply border-transparent bg-brand text-white hover:bg-brand/90;
-  }
-
-  .dark .btn-primary {
-    @apply text-[rgb(10_37_64)];
+    @apply border-transparent bg-accent text-[#04202B] hover:bg-[#3DCBE3];
   }
 
   .field {
-    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink
+    @apply h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm leading-none text-ink
       placeholder:text-ink-subtle focus:border-accent focus:outline-none
       focus:ring-2 focus:ring-accent/30;
+  }
+
+  textarea.field {
+    @apply h-auto min-h-[5rem] py-2 leading-normal;
+  }
+
+  h1,
+  h2,
+  h3,
+  .tv-title {
+    @apply font-display;
   }
 
   /* Barra lateral de color que marca a que cuenta pertenece cada tarjeta. */

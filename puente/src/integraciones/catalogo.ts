@@ -360,6 +360,56 @@ INTEGRACIONES.push({
 });
 
 INTEGRACIONES.push({
+  id: 'openrouter',
+  etiqueta: 'IA del correo (OpenRouter)',
+  kind: 'openrouter',
+  campos: [
+    {
+      variable: 'OPENROUTER_API_KEY',
+      etiqueta: 'API key',
+      tipo: 'secreto',
+      obligatoria: true,
+      ayuda:
+        'sk-or-…, de openrouter.ai → Keys. Con ella el puente lee los correos que las reglas no reconocen y decide cuáles son pendientes, de qué empresa y con qué prioridad.'
+    },
+    {
+      variable: 'OPENROUTER_MODEL',
+      etiqueta: 'Modelo',
+      tipo: 'texto',
+      ayuda:
+        'Por omisión anthropic/claude-haiku-4.5 (rápido y barato: centavos por lectura). anthropic/claude-sonnet-5 afina mejor los casos ambiguos.'
+    },
+    {
+      variable: 'OPENROUTER_DIAS',
+      etiqueta: 'Días hacia atrás',
+      tipo: 'numero',
+      ayuda: 'Cuántos días de correo se analizan (7 por omisión).'
+    },
+    {
+      variable: 'OPENROUTER_MAXIMO',
+      etiqueta: 'Correos por lectura',
+      tipo: 'numero',
+      ayuda: 'Tope de correos nuevos que se mandan al modelo cada vez (40 por omisión).'
+    }
+  ],
+  probar: async (config) => {
+    const ia = exigir(config.ia, 'la API key de OpenRouter');
+    const respuesta = await fetch('https://openrouter.ai/api/v1/models/user', {
+      headers: { authorization: `Bearer ${ia.apiKey}` }
+    });
+    if (!respuesta.ok) {
+      throw new Error(`OpenRouter respondió ${respuesta.status}: revisa la API key.`);
+    }
+    const datos = (await respuesta.json()) as { data?: { id: string }[] };
+    const modelos = datos.data ?? [];
+    const hay = modelos.some((m) => m.id === ia.modelo);
+    return hay || modelos.length === 0
+      ? `Llave válida. Modelo: ${ia.modelo}; ${ia.maximo} correos por lectura, ${ia.dias} días atrás.`
+      : `Llave válida, pero el modelo "${ia.modelo}" no aparece entre los ${modelos.length} disponibles: revisa el id en openrouter.ai/models.`;
+  }
+});
+
+INTEGRACIONES.push({
   id: 'acceso',
   etiqueta: 'Acceso al portal',
   kind: 'acceso',

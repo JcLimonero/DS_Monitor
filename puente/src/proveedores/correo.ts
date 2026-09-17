@@ -338,12 +338,71 @@ export interface DatosCorreo {
   juntas: Meeting[];
   /** Cuantos encabezados se leyeron, para la bitacora. */
   leidos: number;
+  /** Correos recientes que las reglas no reconocen, listos para la IA. */
+  paraIa: CandidatoIa[];
 }
+
+/** Un correo que las reglas no reconocieron y que la IA todavia no vio. */
+export interface CandidatoIa {
+  clave: string;
+  encabezado: EncabezadoCorreo;
+  /** Texto del cuerpo, ya sin HTML y recortado. */
+  texto: string;
+}
+
+/** Que correos mandar a la IA: cuantos dias atras, cuantos y cuales no. */
+export interface OpcionesIa {
+  dias: number;
+  maximo: number;
+  yaAnalizado: (clave: string) => boolean;
+}
+
+/** Un identificador estable para no analizar dos veces el mismo correo. */
+export function claveDeCorreo(accountId: string, e: EncabezadoCorreo): string {
+  return `${accountId}:${e.fecha}:${e.remitente}:${e.asunto}`.slice(0, 300);
+}
+
+/**
+ * Los correos recientes que las reglas no reconocieron ni como recibo ni como
+ * aviso: publicidad fuera, mas nuevos primero, y solo los que la IA no ha
+ * visto. El cuerpo lo baja quien llama, porque cada proveedor lo saca
+ * distinto.
+ */
+export function candidatosParaIa(
+  encabezados: EncabezadoCorreo[],
+  reconocidos: ReadonlySet<number>,
+  accountId: string,
+  opciones: OpcionesIa,
+  ahora = new Date()
+): { clave: string; encabezado: EncabezadoCorreo }[] {
+  const desde = ahora.getTime() - opciones.dias * DIA_MS;
+  return encabezados
+    .filter(
+      (e) =>
+        e.fecha &&
+        new Date(e.fecha).getTime() >= desde &&
+        !reconocidos.has(e.uid) &&
+        !PUBLICIDAD.test(e.asunto) &&
+        !SIN_RESPUESTA.test(e.remitente)
+    )
+    .sort((a, b) => b.fecha.localeCompare(a.fecha))
+    .map((encabezado) => ({
+      clave: claveDeCorreo(accountId, encabezado),
+      encabezado
+    }))
+    .filter((c) => !opciones.yaAnalizado(c.clave))
+    .slice(0, opciones.maximo);
+}
+
+/** Remitentes automaticos que nunca piden nada. */
+const SIN_RESPUESTA =
+  /no-?reply|noreply|donotreply|mailer-daemon|postmaster|notifications?@|newsletter|marketing@/i;
 
 /** Lee el buzon completo y deduce las tres cosas. */
 export async function leerCorreo(
   config: ConfiguracionCorreo,
-  ahora = new Date()
+  ahora = new Date(),
+  ia?: OpcionesIa
 ): Promise<DatosCorreo> {
   if (config.proveedor === 'microsoft') {
     throw new ErrorPuente(
@@ -428,6 +487,52 @@ export async function leerCorreo(
       }
     }
 
+    // Los pendientes llevan el correo completo: remitente, destinatarios y
+    // texto. Son pocos, asi que se bajan uno por uno.
+    const pendientes = detectarPendientesConEvidencia(
+      encabezados,
+      config.accountId,
+      ahora
+    );
+    for (const pendiente of pendientes) {
+      const { buzon, uid } = pendiente.encabezado;
+      if (buzon && buzon !== buzonAbierto) {
+        await cliente.seleccionar(buzon);
+        buzonAbierto = buzon;
+      }
+      pendiente.tarea.description = descripcionDeCorreo(
+        pendiente.encabezado,
+        textoDe(await cliente.mensajeCrudo(uid, 131_072))
+      );
+    }
+
+    // Lo que las reglas no reconocieron se le deja a la IA, con un trozo
+    // del cuerpo para que tenga con que decidir.
+    const paraIa: CandidatoIa[] = [];
+    if (ia) {
+      const reconocidos = new Set([
+        ...evidencias.map((e) => e.ultimo.uid),
+        ...pendientes.map((p) => p.encabezado.uid)
+      ]);
+      for (const candidato of candidatosParaIa(
+        encabezados,
+        reconocidos,
+        config.accountId,
+        ia,
+        ahora
+      )) {
+        const { buzon, uid } = candidato.encabezado;
+        if (buzon && buzon !== buzonAbierto) {
+          await cliente.seleccionar(buzon);
+          buzonAbierto = buzon;
+        }
+        paraIa.push({
+          ...candidato,
+          texto: textoDe(await cliente.mensajeCrudo(uid, 32_768)).slice(0, 2000)
+        });
+      }
+    }
+
     // Con Google conectado se lee el calendario completo, que es mejor que
     // las invitaciones sueltas del buzon.
     const juntas = accessToken
@@ -436,9 +541,10 @@ export async function leerCorreo(
 
     return {
       licencias: evidencias.map((e) => e.licencia),
-      pendientes: detectarPendientes(encabezados, config.accountId, ahora),
+      pendientes: pendientes.map((p) => p.tarea),
       juntas,
-      leidos: encabezados.length
+      leidos: encabezados.length,
+      paraIa
     };
   } finally {
     await cliente.cerrar();
@@ -664,13 +770,53 @@ export function nombreDelRemitente(remitente: string): string {
 
 // --- Pendientes ---
 
+export interface PendienteConEvidencia {
+  tarea: TaskItem;
+  /** El correo del que salio, para copiar su contenido. */
+  encabezado: EncabezadoCorreo;
+}
+
 export function detectarPendientes(
   encabezados: EncabezadoCorreo[],
   accountId: string,
   ahora = new Date()
 ): TaskItem[] {
+  return detectarPendientesConEvidencia(encabezados, accountId, ahora).map(
+    (p) => p.tarea
+  );
+}
+
+/**
+ * La descripcion de un pendiente que salio de un correo: quien lo mando, a
+ * quien, con copia a quien, y el texto del correo recortado. Asi el pendiente
+ * se entiende sin ir a buscar el correo.
+ */
+export function descripcionDeCorreo(
+  encabezado: EncabezadoCorreo,
+  texto: string
+): string {
+  const lineas = [
+    `De: ${encabezado.remitente}`,
+    encabezado.para ? `Para: ${encabezado.para}` : undefined,
+    encabezado.cc ? `CC: ${encabezado.cc}` : undefined,
+    `Asunto: ${encabezado.asunto}`
+  ].filter((l): l is string => !!l);
+  const cuerpo = texto
+    .replace(/\r/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, 1500);
+  return cuerpo ? `${lineas.join('\n')}\n\n${cuerpo}` : lineas.join('\n');
+}
+
+export function detectarPendientesConEvidencia(
+  encabezados: EncabezadoCorreo[],
+  accountId: string,
+  ahora = new Date()
+): PendienteConEvidencia[] {
   const desde = ahora.getTime() - DIAS_DE_PENDIENTES * DIA_MS;
-  const porAsunto = new Map<string, TaskItem>();
+  const porAsunto = new Map<string, PendienteConEvidencia>();
 
   for (const encabezado of encabezados) {
     if (!encabezado.fecha || PUBLICIDAD.test(encabezado.asunto)) {
@@ -693,26 +839,29 @@ export function detectarPendientes(
     }
     const llave = encabezado.asunto.toLowerCase().replace(/\d+/g, '#');
     const anterior = porAsunto.get(llave);
-    if (anterior && new Date(anterior.updatedAt).getTime() >= recibido) {
+    if (anterior && new Date(anterior.tarea.updatedAt).getTime() >= recibido) {
       continue;
     }
     const vence = new Date(recibido + regla.diasDeMargen * DIA_MS);
     porAsunto.set(llave, {
-      id: `${accountId}-${encabezado.uid}`,
-      title: encabezado.asunto,
-      description: `De ${nombreDelRemitente(encabezado.remitente)}`,
-      status: 'pendiente',
-      priority: regla.prioridad,
-      dueDate: vence.toISOString(),
-      accountId,
-      origin: 'correo',
-      project: 'Correo',
-      tags: ['correo', regla.etiqueta],
-      updatedAt: new Date(recibido).toISOString()
+      encabezado,
+      tarea: {
+        id: `${accountId}-${encabezado.uid}`,
+        title: encabezado.asunto,
+        description: descripcionDeCorreo(encabezado, ''),
+        status: 'pendiente',
+        priority: regla.prioridad,
+        dueDate: vence.toISOString(),
+        accountId,
+        origin: 'correo',
+        project: 'Correo',
+        tags: ['correo', regla.etiqueta],
+        updatedAt: new Date(recibido).toISOString()
+      }
     });
   }
 
   return [...porAsunto.values()].sort((a, b) =>
-    (a.dueDate ?? '').localeCompare(b.dueDate ?? '')
+    (a.tarea.dueDate ?? '').localeCompare(b.tarea.dueDate ?? '')
   );
 }

@@ -159,6 +159,20 @@ export interface ConfiguracionAcceso {
   correos: string[];
 }
 
+/**
+ * La IA que lee los correos nuevos y decide cuales son pendientes, de que
+ * empresa y con que prioridad. Va por OpenRouter, que da acceso a cualquier
+ * modelo con la misma API.
+ */
+export interface ConfiguracionIa {
+  apiKey: string;
+  modelo: string;
+  /** Cuantos dias hacia atras se analizan los correos. */
+  dias: number;
+  /** Cuantos correos como maximo por lectura de buzon. */
+  maximo: number;
+}
+
 export interface ConfiguracionGithub {
   token: string;
   accountId: string;
@@ -209,6 +223,7 @@ export interface Configuracion {
    * traigan la suya. Es lo normal: una sola aplicacion para toda la empresa.
    */
   microsoftApp?: Omit<ConfiguracionMicrosoft, 'refreshToken' | 'conectadaComo'>;
+  ia?: ConfiguracionIa;
   /** La aplicacion OAuth de Google que usan todos los buzones de Gmail. */
   googleApp?: Omit<ConfiguracionGoogle, 'refreshToken' | 'conectadaComo'>;
   /** Donde viven el equipo, los dominios y las sesiones. */
@@ -514,6 +529,14 @@ function leer(): Configuracion {
             correos: lista('ACCESO_CORREOS').map((c) => c.toLowerCase())
           }
         : undefined,
+    ia: texto('OPENROUTER_API_KEY')
+      ? {
+          apiKey: texto('OPENROUTER_API_KEY') as string,
+          modelo: texto('OPENROUTER_MODEL') ?? 'anthropic/claude-haiku-4.5',
+          dias: numeroCon('OPENROUTER_DIAS', 7),
+          maximo: numeroCon('OPENROUTER_MAXIMO', 40)
+        }
+      : undefined,
     googleApp:
       texto('GOOGLE_CLIENT_ID') && texto('GOOGLE_CLIENT_SECRET')
         ? {

@@ -45,6 +45,9 @@ export interface EncabezadoCorreo {
   tipoContenido: string;
   /** Buzon del que salio, cuando se leen varios; los UID son por buzon. */
   buzon?: string;
+  /** Destinatarios, tal cual vienen en To y Cc. */
+  para?: string;
+  cc?: string;
 }
 
 interface Respuesta {
@@ -190,7 +193,7 @@ export class ClienteImap {
     for (let i = 0; i < uids.length; i += LOTE) {
       const lote = uids.slice(i, i + LOTE);
       const respuesta = await this.comando(
-        `UID FETCH ${lote.join(',')} (UID BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE CONTENT-TYPE)])`
+        `UID FETCH ${lote.join(',')} (UID BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE CONTENT-TYPE)])`
       );
       if (respuesta.estado !== 'OK') {
         throw this.error(`fallo al traer encabezados (${respuesta.texto})`);
@@ -379,7 +382,9 @@ function interpretarEncabezado(linea: string): EncabezadoCorreo | undefined {
     fecha: Number.isNaN(fecha.getTime()) ? '' : fecha.toISOString(),
     remitente: decodificarTexto(campos['from'] ?? ''),
     asunto: decodificarTexto(campos['subject'] ?? ''),
-    tipoContenido: (campos['content-type'] ?? '').toLowerCase()
+    tipoContenido: (campos['content-type'] ?? '').toLowerCase(),
+    para: campos['to'] ? decodificarTexto(campos['to']) : undefined,
+    cc: campos['cc'] ? decodificarTexto(campos['cc']) : undefined
   };
 }
 

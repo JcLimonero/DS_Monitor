@@ -147,12 +147,16 @@ export async function enviarPorEmailJs(
   correo: string,
   codigo: string,
   /** True para el correo de prueba de Ajustes: no lleva codigo. */
-  prueba = false
+  prueba = false,
+  /** Otro correo por la misma via: titulo y cuerpo propios. */
+  propio?: { titulo: string; html: string }
 ): Promise<void> {
   const mensaje = prueba
     ? 'Correo de prueba: el envío de códigos de acceso a DS Monitor funciona. Los códigos reales son seis dígitos al azar y llegan al pedir acceso.'
     : `Tu código de acceso a DS Monitor es ${codigo}. Vence en ${CODIGO_MINUTOS} minutos.`;
-  const cuerpo = prueba
+  const cuerpo = propio
+    ? propio.html
+    : prueba
     ? `<p>${mensaje}</p>`
     : `<p>Tu código de acceso a <strong>DS Monitor</strong> es</p>` +
       `<p style="font-size:28px;letter-spacing:6px;font-family:monospace"><strong>${codigo}</strong></p>` +
@@ -181,8 +185,8 @@ export async function enviarPorEmailJs(
         from_name: 'DS Monitor',
         origen: 'Access Monitor',
         area_interes: 'Access Monitor',
-        comentarios: mensaje,
-        message: mensaje,
+        comentarios: propio ? propio.html.replace(/<[^>]+>/g, ' ') : mensaje,
+        message: propio ? propio.html.replace(/<[^>]+>/g, ' ') : mensaje,
         code: codigo
       }
     })

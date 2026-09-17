@@ -6,10 +6,14 @@ import type { Meeting, MeetingStatus, Person } from '../nucleo/contrato.js';
 import { ErrorProveedor } from '../nucleo/errores.js';
 import { pedirJson } from '../nucleo/http.js';
 import {
+  candidatosParaIa,
+  descripcionDeCorreo,
   detectarLicenciasConEvidencia,
-  detectarPendientes,
+  detectarPendientesConEvidencia,
   montoDelRecibo,
-  type DatosCorreo
+  type CandidatoIa,
+  type DatosCorreo,
+  type OpcionesIa
 } from './correo.js';
 import type { EncabezadoCorreo } from './imap.js';
 import { sinEtiquetas } from './mime.js';
@@ -219,11 +223,23 @@ export async function quienSoy(
   return yo.mail ?? yo.userPrincipalName ?? yo.displayName ?? '(sin nombre)';
 }
 
+interface Direccion {
+  emailAddress?: { name?: string; address?: string };
+}
+
 interface MensajeGraph {
   id: string;
   subject?: string;
   receivedDateTime?: string;
-  from?: { emailAddress?: { name?: string; address?: string } };
+  from?: Direccion;
+  toRecipients?: Direccion[];
+  ccRecipients?: Direccion[];
+  bodyPreview?: string;
+}
+
+function direccion(d: Direccion | undefined): string {
+  const e = d?.emailAddress;
+  return e?.name ? `${e.name} <${e.address ?? ''}>` : (e?.address ?? '');
 }
 
 interface Pagina<T> {
@@ -250,7 +266,8 @@ interface EventoGraph {
 /** Lee el buzon y el calendario de una cuenta de Microsoft ya conectada. */
 export async function leerCorreoMicrosoft(
   config: ConfiguracionCorreo,
-  ahora = new Date()
+  ahora = new Date(),
+  ia?: OpcionesIa
 ): Promise<DatosCorreo> {
   const microsoft = config.microsoft;
   if (!microsoft) {
@@ -268,8 +285,9 @@ export async function leerCorreoMicrosoft(
   ).toISOString();
   const encabezados: EncabezadoCorreo[] = [];
   const idPorUid = new Map<number, string>();
+  const vistaPorUid = new Map<number, string>();
   let siguiente: string | undefined =
-    `/me/messages?$select=id,subject,receivedDateTime,from&$filter=receivedDateTime ge ${desde}&$orderby=receivedDateTime desc&$top=500`;
+    `/me/messages?$select=id,subject,receivedDateTime,from,toRecipients,ccRecipients,bodyPreview&$filter=receivedDateTime ge ${desde}&$orderby=receivedDateTime desc&$top=500`;
   while (siguiente && encabezados.length < MAXIMO_CORREOS) {
     const pagina: Pagina<MensajeGraph> = await graph<Pagina<MensajeGraph>>(
       token,
@@ -278,15 +296,15 @@ export async function leerCorreoMicrosoft(
     for (const mensaje of pagina.value ?? []) {
       const uid = encabezados.length + 1;
       idPorUid.set(uid, mensaje.id);
-      const de = mensaje.from?.emailAddress;
+      vistaPorUid.set(uid, mensaje.bodyPreview ?? '');
       encabezados.push({
         uid,
         fecha: mensaje.receivedDateTime ?? '',
-        remitente: de?.name
-          ? `${de.name} <${de.address ?? ''}>`
-          : (de?.address ?? ''),
+        remitente: direccion(mensaje.from),
         asunto: mensaje.subject ?? '',
-        tipoContenido: ''
+        tipoContenido: '',
+        para: mensaje.toRecipients?.map(direccion).join(', ') || undefined,
+        cc: mensaje.ccRecipients?.map(direccion).join(', ') || undefined
       });
     }
     siguiente = pagina['@odata.nextLink'];
@@ -323,6 +341,43 @@ export async function leerCorreoMicrosoft(
     }
   }
 
+  // --- Pendientes con el correo completo ---
+  const pendientes = detectarPendientesConEvidencia(
+    encabezados,
+    config.accountId,
+    ahora
+  );
+  for (const pendiente of pendientes) {
+    const idMensaje = idPorUid.get(pendiente.encabezado.uid);
+    if (!idMensaje) {
+      continue;
+    }
+    const mensaje = await graph<{
+      body?: { content?: string; contentType?: string };
+    }>(token, `/me/messages/${idMensaje}?$select=body`);
+    const contenido = mensaje.body?.content ?? '';
+    pendiente.tarea.description = descripcionDeCorreo(
+      pendiente.encabezado,
+      mensaje.body?.contentType === 'html' ? sinEtiquetas(contenido) : contenido
+    );
+  }
+
+  // --- Lo que las reglas no reconocen, para la IA ---
+  // Graph manda con cada mensaje un adelanto del cuerpo (bodyPreview); con
+  // eso alcanza para clasificar sin bajar nada mas.
+  const paraIa: CandidatoIa[] = ia
+    ? candidatosParaIa(
+        encabezados,
+        new Set([
+          ...evidencias.map((e) => e.ultimo.uid),
+          ...pendientes.map((p) => p.encabezado.uid)
+        ]),
+        config.accountId,
+        ia,
+        ahora
+      ).map((c) => ({ ...c, texto: vistaPorUid.get(c.encabezado.uid) ?? '' }))
+    : [];
+
   // --- Calendario completo, no solo invitaciones ---
   const inicio = new Date(ahora.getTime() - DIAS_CALENDARIO_ATRAS * 86_400_000);
   const fin = new Date(ahora.getTime() + DIAS_CALENDARIO_ADELANTE * 86_400_000);
@@ -347,9 +402,10 @@ export async function leerCorreoMicrosoft(
 
   return {
     licencias: evidencias.map((e) => e.licencia),
-    pendientes: detectarPendientes(encabezados, config.accountId, ahora),
+    pendientes: pendientes.map((p) => p.tarea),
     juntas: juntas.sort((a, b) => a.start.localeCompare(b.start)),
-    leidos: encabezados.length
+    leidos: encabezados.length,
+    paraIa
   };
 }
 

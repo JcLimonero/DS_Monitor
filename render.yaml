@@ -30,7 +30,7 @@ services:
       - key: PUENTE_PUERTO
         value: "10000"
       - key: PUENTE_ORIGENES
-        value: https://ds-monitor-nine.vercel.app
+        value: https://ds-monitor-nine.vercel.app,https://portal.dealersolutions.com.mx
       - key: PUENTE_URL_PUBLICA
         value: https://ds-monitor-nine.vercel.app/api/portal
       - key: DATOS_DIRECTORIO

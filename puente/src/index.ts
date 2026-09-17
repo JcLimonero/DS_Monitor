@@ -93,7 +93,9 @@ await Promise.all([
   datos.dominios.cargar(),
   datos.sesiones.cargar(),
   datos.personales.cargar(),
-  datos.emisores.cargar()
+  datos.emisores.cargar(),
+  datos.anotaciones.cargar(),
+  datos.registroCorreo.cargar()
 ]);
 
 const servidor = createServer(

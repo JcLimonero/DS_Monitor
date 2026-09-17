@@ -6,10 +6,21 @@ export type TaskPriority = 'baja' | 'media' | 'alta' | 'urgente';
 /** De dónde salió el pendiente. Decide el icono y a donde lleva el enlace. */
 export type TaskOrigin = 'odoo' | 'ops' | 'local' | 'correo';
 
+/** Un comentario puesto desde el portal sobre un pendiente. */
+export interface TaskComment {
+  text: string;
+  at: string;
+  by?: string;
+}
+
 export interface TaskItem {
   id: string;
   title: string;
   description?: string;
+  /** Comentarios capturados en el portal, el más reciente al final. */
+  comments?: TaskComment[];
+  /** Empresa a la que pertenece: Itech Dev, Dealer Solutions, NexusQTech, OperativAI. */
+  company?: string;
   status: TaskStatus;
   priority: TaskPriority;
   /** Fecha compromiso en ISO. Sin fecha significa que nadie la ha puesto. */
