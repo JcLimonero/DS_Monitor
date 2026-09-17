@@ -380,8 +380,8 @@ INTEGRACIONES.push({
       'la configuración de EmailJS y la lista de correos'
     );
     const destino = acceso.correos[0] as string;
-    await enviarPorEmailJs(acceso, destino, '000000');
-    return `Correo de prueba enviado a ${destino} con el código 000000 (no sirve para entrar).`;
+    await enviarPorEmailJs(acceso, destino, '', true);
+    return `Correo de prueba enviado a ${destino}. Los códigos reales llegan al pedir acceso.`;
   }
 });
 

@@ -145,9 +145,18 @@ function iguales(a: string, b: string): boolean {
 export async function enviarPorEmailJs(
   config: ConfiguracionAcceso,
   correo: string,
-  codigo: string
+  codigo: string,
+  /** True para el correo de prueba de Ajustes: no lleva codigo. */
+  prueba = false
 ): Promise<void> {
-  const mensaje = `Tu código de acceso a DS Monitor es ${codigo}. Vence en ${CODIGO_MINUTOS} minutos.`;
+  const mensaje = prueba
+    ? 'Correo de prueba: el envío de códigos de acceso a DS Monitor funciona. Los códigos reales son seis dígitos al azar y llegan al pedir acceso.'
+    : `Tu código de acceso a DS Monitor es ${codigo}. Vence en ${CODIGO_MINUTOS} minutos.`;
+  const cuerpo = prueba
+    ? `<p>${mensaje}</p>`
+    : `<p>Tu código de acceso a <strong>DS Monitor</strong> es</p>` +
+      `<p style="font-size:28px;letter-spacing:6px;font-family:monospace"><strong>${codigo}</strong></p>` +
+      `<p>Vence en ${CODIGO_MINUTOS} minutos. Si no pediste entrar, ignora este correo.</p>`;
   const respuesta = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -163,10 +172,7 @@ export async function enviarPorEmailJs(
         // van por si la plantilla cambia a la de las landings.
         title: 'Access Monitor',
         subject: 'Access Monitor',
-        html_content:
-          `<p>Tu código de acceso a <strong>DS Monitor</strong> es</p>` +
-          `<p style="font-size:28px;letter-spacing:6px;font-family:monospace"><strong>${codigo}</strong></p>` +
-          `<p>Vence en ${CODIGO_MINUTOS} minutos. Si no pediste entrar, ignora este correo.</p>`,
+        html_content: cuerpo,
         to_email: correo,
         email: correo,
         reply_to: correo,
