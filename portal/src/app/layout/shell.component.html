@@ -109,6 +109,15 @@
             (click)="toggleTheme()">
             <pt-icon [name]="themeIcon()" class="h-4 w-4" />
           </button>
+          @if (sesion.token()) {
+            <button
+              type="button"
+              class="btn px-2 py-1.5 text-xs"
+              title="Cerrar la sesión en este navegador"
+              (click)="salir()">
+              Salir
+            </button>
+          }
         </div>
       </div>
     </header>

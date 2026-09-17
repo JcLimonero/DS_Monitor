@@ -1,4 +1,8 @@
-import { provideHttpClient, withFetch } from '@angular/common/http';
+import {
+  provideHttpClient,
+  withFetch,
+  withInterceptors
+} from '@angular/common/http';
 import {
   ApplicationConfig,
   provideZonelessChangeDetection
@@ -9,9 +13,22 @@ import {
   withInMemoryScrolling
 } from '@angular/router';
 import { environment } from '../environments/environment';
+import { sesionInterceptor } from './core/acceso/sesion.interceptor';
+import { withGatewayOverride } from './core/config/gateway-override';
+import {
+  readLocalSettings,
+  withLocalSettings
+} from './core/config/local-settings';
 import { PORTAL_CONFIG } from './core/config/portal-config.token';
 import { providePortalSources } from './core/sources/source.providers';
 import { routes } from './app.routes';
+
+// La raíz del puente y las cuentas agregadas a mano vienen del navegador
+// (ver gateway-override.ts y local-settings.ts).
+const portal = withLocalSettings(
+  withGatewayOverride(environment.portal),
+  readLocalSettings()
+);
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -22,8 +39,8 @@ export const appConfig: ApplicationConfig = {
       withComponentInputBinding(),
       withInMemoryScrolling({ scrollPositionRestoration: 'top' })
     ),
-    provideHttpClient(withFetch()),
-    { provide: PORTAL_CONFIG, useValue: environment.portal },
-    providePortalSources(environment.portal)
+    provideHttpClient(withFetch(), withInterceptors([sesionInterceptor])),
+    { provide: PORTAL_CONFIG, useValue: portal },
+    providePortalSources(portal)
   ]
 };

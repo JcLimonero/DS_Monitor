@@ -1,5 +1,9 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, catchError, forkJoin, map, of, tap } from 'rxjs';
+import {
+  LocalSettingsStore,
+  applyLicenseSettings
+} from '../config/local-settings.store';
 import { PORTAL_CONFIG } from '../config/portal-config.token';
 import {
   Account,
@@ -41,6 +45,7 @@ const CALENDAR_DAYS_FORWARD = 21;
 @Injectable({ providedIn: 'root' })
 export class PortalStore {
   private readonly config = inject(PORTAL_CONFIG);
+  private readonly localSettings = inject(LocalSettingsStore);
   private readonly taskSources = inject(TASK_SOURCES);
   private readonly calendarSources = inject(CALENDAR_SOURCES);
   private readonly monitorSources = inject(MONITOR_SOURCES);
@@ -66,7 +71,12 @@ export class PortalStore {
   readonly targets = this.targetsSignal.asReadonly();
   readonly opportunities = this.opportunitiesSignal.asReadonly();
   readonly activities = this.activitiesSignal.asReadonly();
-  readonly licenses = this.licensesSignal.asReadonly();
+  /** Lo que llegó de las fuentes, con las correcciones y altas de Ajustes. */
+  readonly licenses = computed(() =>
+    applyLicenseSettings(this.licensesSignal(), this.localSettings.settings())
+  );
+  /** Tal cual llegó de las fuentes, para que Ajustes muestre también lo oculto. */
+  readonly fetchedLicenses = this.licensesSignal.asReadonly();
   readonly deployments = this.deploymentsSignal.asReadonly();
   readonly platformStatus = this.platformStatusSignal.asReadonly();
   readonly repos = this.reposSignal.asReadonly();

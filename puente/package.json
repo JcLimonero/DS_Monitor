@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "check:contrato": "tsc --noEmit -p tsconfig.contrato.json",
     "format": "prettier --write \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\""
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "barrido": "node dist/herramientas/barrido-mail.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

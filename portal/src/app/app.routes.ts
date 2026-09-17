@@ -9,6 +9,14 @@ import { Routes } from '@angular/router';
  */
 export const routes: Routes = [
   {
+    path: 'acceso',
+    title: 'Acceso | DS Monitor',
+    loadComponent: () =>
+      import('./features/acceso/acceso.component').then(
+        (m) => m.AccesoComponent
+      )
+  },
+  {
     path: 'carrusel',
     title: 'Carrusel | DS Monitor',
     loadComponent: () =>
@@ -35,6 +43,14 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/pendientes/pendientes.component').then(
             (m) => m.PendientesComponent
+          )
+      },
+      {
+        path: 'personales',
+        title: 'Pendientes personales | DS Monitor',
+        loadComponent: () =>
+          import('./features/personales/personales.component').then(
+            (m) => m.PersonalesComponent
           )
       },
       {

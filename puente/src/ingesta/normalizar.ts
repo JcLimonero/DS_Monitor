@@ -87,6 +87,8 @@ const ESTADOS_TAREA = [
   'hecho'
 ] as const;
 const PRIORIDADES = ['baja', 'media', 'alta', 'urgente'] as const;
+/** De donde puede decir un emisor que salio el pendiente. */
+const ORIGENES_TAREA = ['ops', 'correo'] as const;
 
 export function normalizarPendientes(
   datos: unknown,
@@ -110,7 +112,9 @@ export function normalizarPendientes(
       dueDate: fechaOpcional(entrante.venceEn, `${donde}.venceEn`),
       assignee: persona(entrante.responsable, `${donde}.responsable`),
       accountId,
-      origin: 'ops',
+      origin:
+        opcionOpcional(entrante.origen, ORIGENES_TAREA, `${donde}.origen`) ??
+        'ops',
       project: textoOpcional(entrante.proyecto, `${donde}.proyecto`),
       url: textoOpcional(entrante.url, `${donde}.url`),
       tags: Array.isArray(entrante.etiquetas)

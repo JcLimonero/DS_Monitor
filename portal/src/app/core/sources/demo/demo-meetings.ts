@@ -1,6 +1,7 @@
 import { Meeting, MeetingStatus, Person } from '../../models';
 import { addDays, addMinutes, atTime } from '../../util/date.util';
 import { DEMO_PEOPLE } from './demo-people';
+import { sliceFor } from './demo-random';
 
 interface MeetingSeed {
   id: string;
@@ -168,9 +169,19 @@ export function demoWorkMeetings(
   return TRABAJO_SEEDS.map((seed) => toMeeting(seed, accountId, now));
 }
 
-export function demoPersonalMeetings(
+/**
+ * Juntas de un buzón de correo en demostración.
+ *
+ * Hay varios buzones y todos corren contra este mismo adaptador, así que cada
+ * uno recibe un tramo distinto de la lista según su identificador. Si todos
+ * devolvieran lo mismo, la agenda mostraría ocho "Daily del equipo" idénticos
+ * y no se vería el filtro por cuenta.
+ */
+export function demoMailMeetings(
   accountId: string,
   now = new Date()
 ): Meeting[] {
-  return PERSONAL_SEEDS.map((seed) => toMeeting(seed, accountId, now));
+  return sliceFor(accountId, [...TRABAJO_SEEDS, ...PERSONAL_SEEDS], 3).map(
+    (seed) => toMeeting(seed, accountId, now)
+  );
 }

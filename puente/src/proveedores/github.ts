@@ -239,14 +239,43 @@ async function estadoDeRepo(
   };
 }
 
+/** Cuantos repositorios se vigilan cuando no se dice cuales. */
+const REPOS_RECIENTES = 10;
+
+/**
+ * Los repositorios a los que se tiene acceso, los de cambios mas recientes
+ * primero. Es lo que se vigila cuando GITHUB_REPOS va vacio: los diez donde
+ * hubo un push hace menos tiempo, que son los que estan vivos.
+ */
+export async function reposRecientes(
+  config: ConfiguracionGithub,
+  cuantos = REPOS_RECIENTES
+): Promise<string[]> {
+  const repos = await pedirJson<RepoGithub[]>(
+    'github',
+    conParametros(`${BASE}/user/repos`, {
+      sort: 'pushed',
+      direction: 'desc',
+      per_page: String(cuantos),
+      affiliation: 'owner,collaborator,organization_member'
+    }),
+    { encabezados: encabezados(config) }
+  );
+  return repos
+    .map((repo) => repo.full_name)
+    .filter((nombre): nombre is string => !!nombre);
+}
+
 export async function reposGithub(
   config: ConfiguracionGithub,
   ahora = new Date()
 ): Promise<RepoStatus[]> {
+  const nombres =
+    config.repos.length > 0 ? config.repos : await reposRecientes(config);
   // Un repositorio que falle no debe tumbar a los demas: se reporta lo que si
   // se pudo leer, que es mas util que una pantalla vacia.
   const resultados = await Promise.allSettled(
-    config.repos.map((nombre) => estadoDeRepo(config, nombre, ahora))
+    nombres.map((nombre) => estadoDeRepo(config, nombre, ahora))
   );
 
   const listos: RepoStatus[] = [];
@@ -255,18 +284,24 @@ export async function reposGithub(
       listos.push(resultado.value);
     } else {
       console.error(
-        `[puente] no se pudo leer ${config.repos[indice]}:`,
+        `[puente] no se pudo leer ${nombres[indice]}:`,
         resultado.reason
       );
     }
   }
 
-  if (listos.length === 0 && config.repos.length > 0) {
+  if (listos.length === 0 && nombres.length > 0) {
     // Si fallaron todos, es un problema de credencial o de red, no de un repo.
     throw resultados[0]?.status === 'rejected'
       ? resultados[0].reason
       : new Error('sin datos');
   }
 
-  return listos.sort((a, b) => a.name.localeCompare(b.name));
+  // Los de cambios mas recientes primero: es lo que uno quiere ver arriba.
+  return listos.sort(
+    (a, b) =>
+      (b.pushedAt ?? b.lastCommit?.at ?? '').localeCompare(
+        a.pushedAt ?? a.lastCommit?.at ?? ''
+      ) || a.name.localeCompare(b.name)
+  );
 }

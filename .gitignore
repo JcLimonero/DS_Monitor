@@ -17,3 +17,6 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Vinculo local con el proyecto de Vercel
+.vercel

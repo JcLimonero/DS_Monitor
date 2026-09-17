@@ -31,3 +31,26 @@ export function randomInt(
 ): number {
   return min + Math.floor(next() * (max - min + 1));
 }
+
+/**
+ * Un tramo de `count` elementos que depende del identificador.
+ *
+ * Sirve para que varias cuentas del mismo tipo (los buzones de correo, por
+ * ejemplo) no muestren en demostración exactamente los mismos datos: cada una
+ * empieza en un punto distinto de la lista y toma los siguientes.
+ */
+export function sliceFor<T>(
+  seed: string,
+  items: readonly T[],
+  count: number
+): T[] {
+  if (items.length === 0) {
+    return [];
+  }
+  const start = Math.floor(seededRandom(seed)() * items.length);
+  const take = Math.min(count, items.length);
+  return Array.from(
+    { length: take },
+    (_, i) => items[(start + i) % items.length]
+  );
+}

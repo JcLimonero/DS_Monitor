@@ -1,0 +1,95 @@
+<pt-page-header title="Pendientes personales" [subtitle]="subtitle()">
+  <label class="flex items-center gap-2 text-xs text-ink-muted">
+    <input
+      type="checkbox"
+      [checked]="includeDone()"
+      (change)="includeDone.set(!includeDone())" />
+    Ver los hechos
+  </label>
+</pt-page-header>
+
+<section class="card card-pad">
+  <h2 class="text-sm font-semibold text-ink">Apuntar uno nuevo</h2>
+  <form class="mt-3 flex flex-wrap items-end gap-3" (ngSubmit)="addTask()">
+    <label class="min-w-0 flex-1">
+      <span class="mb-1 block text-xs font-medium text-ink-muted"
+        >Qué hay que hacer</span
+      >
+      <input
+        class="field"
+        type="text"
+        name="titulo"
+        placeholder="Por ejemplo: renovar el dominio de vgd.com.mx"
+        [ngModel]="newTitle()"
+        (ngModelChange)="newTitle.set($event)" />
+    </label>
+    <label>
+      <span class="mb-1 block text-xs font-medium text-ink-muted"
+        >Prioridad</span
+      >
+      <select
+        class="field"
+        name="prioridad"
+        [ngModel]="newPriority()"
+        (ngModelChange)="newPriority.set($event)">
+        @for (option of priorities; track option) {
+          <option [value]="option">{{ priorityLabel[option] }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span class="mb-1 block text-xs font-medium text-ink-muted"
+        >Para cuándo</span
+      >
+      <input
+        class="field"
+        type="date"
+        name="fecha"
+        [ngModel]="newDueDate()"
+        (ngModelChange)="newDueDate.set($event)" />
+    </label>
+    <label>
+      <span class="mb-1 block text-xs font-medium text-ink-muted"
+        >Proyecto</span
+      >
+      <input
+        class="field"
+        type="text"
+        name="proyecto"
+        placeholder="Personal"
+        [ngModel]="newProject()"
+        (ngModelChange)="newProject.set($event)" />
+    </label>
+    <button type="submit" class="btn btn-primary" [disabled]="!canAdd()">
+      <pt-icon name="mas" class="h-4 w-4" />
+      Agregar
+    </button>
+  </form>
+</section>
+
+<section class="mt-4">
+  @if (open().length === 0) {
+    <pt-empty-state
+      title="Nada pendiente"
+      hint="Lo que apuntes aquí es solo tuyo y se guarda en este navegador." />
+  } @else {
+    <div class="space-y-2">
+      @for (task of open(); track task.id) {
+        <pt-task-card [task]="task" />
+      }
+    </div>
+  }
+</section>
+
+@if (includeDone() && done().length > 0) {
+  <section class="mt-6">
+    <h2 class="mb-2 text-xs font-bold uppercase tracking-wide text-ink-subtle">
+      Hechos
+    </h2>
+    <div class="space-y-2 opacity-70">
+      @for (task of done(); track task.id) {
+        <pt-task-card [task]="task" />
+      }
+    </div>
+  </section>
+}

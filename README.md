@@ -33,7 +33,8 @@ vista.
 **El puente trae los datos de dos maneras:**
 
 - *Yendo por ellos* — consulta la API del proveedor. Hoy: Claude, Cursor, Figma,
-  Vercel, GitHub, Odoo y el monitoreo propio.
+  Vercel, GitHub, Odoo, el monitoreo propio y los buzones de correo por IMAP
+  (de ahí salen juntas, pendientes y las licencias que se cobran por correo).
 - *Recibiéndolos* — el sistema de origen empuja con un token. Es lo natural para
   lo nuestro (Ops, el CI, un script de vigilancia) y no requiere darle al puente
   credenciales de esos sistemas. El cuerpo exacto de cada envío está en
@@ -44,6 +45,16 @@ resueltos: los envíos llegan fuera de orden (se descartan por `generadoEn`), un
 reinicio borraría lo recibido (se escribe a disco), y un emisor que deja de
 mandar no se nota (cada uno tiene ventana de frescura y su ruta responde 503 al
 vencerse).
+
+## Desplegado
+
+- **Portal**: Vercel, https://ds-monitor-nine.vercel.app (`portal/vercel.json`;
+  se publica con `npx vercel@latest --prod --yes` desde `portal/`).
+- **Puente**: Render, con disco, según `render.yaml`. Vercel reenvía
+  `/api/portal/*` al puente, así el portal y el puente quedan en el mismo
+  origen y no hay CORS.
+- **Acceso**: el puente pide entrar con un código de seis dígitos que llega por
+  correo (EmailJS, asunto "Access Monitor") a los correos de `ACCESO_CORREOS`.
 
 ## Estado
 
@@ -56,8 +67,14 @@ variables en `puente/.env`, levantarlo, y cambiar el `mode` de esa conexión de
 conectar de una en una — una conexión sin credencial responde 503 diciendo qué
 falta, y las demás siguen funcionando.
 
-Sin construir todavía: los calendarios de Google y Microsoft del lado del
-puente. Ops ya se puede resolver por envío.
+Los ocho buzones de correo ya están como cuentas del portal. Gmail, iCloud y
+Neubox se leen por IMAP en cuanto tengan contraseña en el puente; los de
+Microsoft no aceptan IMAP con contraseña y los alimenta el barrido de Mail.app
+(`npm run barrido` en `puente/`) hasta que exista el adaptador OAuth.
+
+Sin construir todavía: el adaptador OAuth de Microsoft y los calendarios
+completos (por correo solo se ven las invitaciones). Ops ya se puede resolver
+por envío.
 
 Los detalles de cada lado están en [`portal/README.md`](portal/README.md) y
 [`puente/README.md`](puente/README.md).

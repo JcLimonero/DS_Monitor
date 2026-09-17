@@ -20,20 +20,75 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       color: 'violet',
       enabled: true
     },
+    // --- Buzones de correo ---
+    //
+    // De cada uno se sacan tres cosas: las juntas (invitaciones con archivo
+    // de calendario), los pendientes (correos que piden una acción: un pago
+    // rechazado, un dominio por vencer) y las licencias (recibos y avisos de
+    // renovación de suscripciones). El puente entra con las credenciales de
+    // CORREO_CUENTAS; aquí solo va la dirección.
     {
-      id: 'correo-trabajo',
-      label: 'Trabajo',
-      detail: 'Calendario de la cuenta de trabajo',
-      kind: 'google',
+      id: 'correo-nexus',
+      label: 'Nexus',
+      detail: 'carlos.limon@nexusqtech.com · Microsoft 365',
+      kind: 'microsoft',
       color: 'sky',
       enabled: true
     },
     {
-      id: 'correo-personal',
-      label: 'Personal',
-      detail: 'Calendario de la cuenta personal',
+      id: 'correo-outlook',
+      label: 'Outlook',
+      detail: 'carloslimon@outlook.com · Microsoft personal',
       kind: 'microsoft',
       color: 'emerald',
+      enabled: true
+    },
+    {
+      id: 'correo-vanguardia',
+      label: 'Vanguardia',
+      detail: 'webmaster@grupovanguardia.com · Microsoft 365',
+      kind: 'microsoft',
+      color: 'teal',
+      enabled: true
+    },
+    {
+      id: 'correo-itech',
+      label: 'Itech correo',
+      detail: 'climon@itechdev.com.mx · Microsoft 365',
+      kind: 'microsoft',
+      color: 'violet',
+      enabled: true
+    },
+    {
+      id: 'correo-itech-alterno',
+      label: 'Itech alterno',
+      detail: 'carlos.limon@itechdev.com.mx · Microsoft 365 (buzón vacío hoy)',
+      kind: 'microsoft',
+      color: 'violet',
+      enabled: false
+    },
+    {
+      id: 'correo-gmail',
+      label: 'Gmail',
+      detail: 'limon2633@gmail.com · Google',
+      kind: 'google',
+      color: 'amber',
+      enabled: true
+    },
+    {
+      id: 'correo-icloud',
+      label: 'iCloud',
+      detail: 'limon2633@icloud.com · IMAP en iCloud',
+      kind: 'imap',
+      color: 'rose',
+      enabled: true
+    },
+    {
+      id: 'correo-dealer',
+      label: 'Dealer',
+      detail: 'carlos.limon@dealersolutions.com.mx · IMAP en Neubox',
+      kind: 'imap',
+      color: 'fuchsia',
       enabled: true
     },
     {
@@ -52,13 +107,17 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       color: 'rose',
       enabled: true
     },
+    // Las integraciones de Claude, Cursor y Figma arrancan apagadas: hoy no
+    // hay Admin API keys y sus datos de demostración (asientos de equipo)
+    // no corresponden a lo contratado, que es lo que llega por correo. Se
+    // encienden desde Ajustes cuando haya credenciales en el puente.
     {
       id: 'claude',
       label: 'Claude',
       detail: 'Consumo de la API y asientos de Claude Code',
       kind: 'anthropic',
       color: 'orange',
-      enabled: true
+      enabled: false
     },
     {
       id: 'cursor',
@@ -66,7 +125,7 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       detail: 'Asientos y solicitudes del equipo',
       kind: 'cursor',
       color: 'indigo',
-      enabled: true
+      enabled: false
     },
     {
       id: 'figma',
@@ -74,7 +133,7 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       detail: 'Asientos de edición de la organización',
       kind: 'figma',
       color: 'fuchsia',
-      enabled: true
+      enabled: false
     },
     {
       id: 'vercel',
@@ -90,6 +149,14 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       detail: 'Estado de los repositorios y sus pull requests',
       kind: 'github',
       color: 'slate',
+      enabled: true
+    },
+    {
+      id: 'dominios',
+      label: 'Dominios',
+      detail: 'Dominios registrados: vencimiento y costo de renovación',
+      kind: 'dominios',
+      color: 'teal',
       enabled: true
     },
     {
@@ -110,21 +177,71 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       provides: ['crm', 'tasks'],
       path: '/odoo/itech'
     },
+    // Cada buzón es una conexión: así se enciende de uno en uno y Ajustes dice
+    // cuál falta. La ruta lleva el identificador de la cuenta.
     {
-      id: 'google-trabajo',
-      accountId: 'correo-trabajo',
-      kind: 'google',
-      mode: 'demo',
-      provides: ['meetings'],
-      path: '/calendar/google/trabajo'
+      id: 'correo-nexus',
+      accountId: 'correo-nexus',
+      kind: 'microsoft',
+      mode: 'gateway',
+      provides: ['meetings', 'tasks', 'licenses'],
+      path: '/correo/correo-nexus'
     },
     {
-      id: 'microsoft-personal',
-      accountId: 'correo-personal',
+      id: 'correo-outlook',
+      accountId: 'correo-outlook',
       kind: 'microsoft',
-      mode: 'demo',
-      provides: ['meetings'],
-      path: '/calendar/microsoft/personal'
+      mode: 'gateway',
+      provides: ['meetings', 'tasks', 'licenses'],
+      path: '/correo/correo-outlook'
+    },
+    {
+      id: 'correo-vanguardia',
+      accountId: 'correo-vanguardia',
+      kind: 'microsoft',
+      mode: 'gateway',
+      provides: ['meetings', 'tasks', 'licenses'],
+      path: '/correo/correo-vanguardia'
+    },
+    {
+      id: 'correo-itech',
+      accountId: 'correo-itech',
+      kind: 'microsoft',
+      mode: 'gateway',
+      provides: ['meetings', 'tasks', 'licenses'],
+      path: '/correo/correo-itech'
+    },
+    {
+      id: 'correo-itech-alterno',
+      accountId: 'correo-itech-alterno',
+      kind: 'microsoft',
+      mode: 'gateway',
+      provides: ['meetings', 'tasks', 'licenses'],
+      path: '/correo/correo-itech-alterno'
+    },
+    {
+      id: 'correo-gmail',
+      accountId: 'correo-gmail',
+      kind: 'google',
+      mode: 'gateway',
+      provides: ['meetings', 'tasks', 'licenses'],
+      path: '/correo/correo-gmail'
+    },
+    {
+      id: 'correo-icloud',
+      accountId: 'correo-icloud',
+      kind: 'imap',
+      mode: 'gateway',
+      provides: ['meetings', 'tasks', 'licenses'],
+      path: '/correo/correo-icloud'
+    },
+    {
+      id: 'correo-dealer',
+      accountId: 'correo-dealer',
+      kind: 'imap',
+      mode: 'gateway',
+      provides: ['meetings', 'tasks', 'licenses'],
+      path: '/correo/correo-dealer'
     },
     {
       id: 'ops-equipo',
@@ -171,7 +288,9 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       accountId: 'vercel',
       kind: 'vercel',
       mode: 'demo',
-      provides: ['deployments', 'licenses'],
+      // Solo despliegues: el consumo de Vercel se cobra por correo y de ahí
+      // sale la licencia, no de esta conexión.
+      provides: ['deployments'],
       path: '/vercel'
     },
     {
@@ -181,6 +300,16 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       mode: 'demo',
       provides: ['repos'],
       path: '/github'
+    },
+    {
+      id: 'dominios',
+      accountId: 'dominios',
+      kind: 'dominios',
+      // Viven en el puente (se capturan en Ajustes → Dominios) y salen en el
+      // tablero de licencias como renovaciones anuales.
+      mode: 'gateway',
+      provides: ['licenses'],
+      path: '/dominios'
     },
     {
       id: 'pendientes-locales',

@@ -79,6 +79,11 @@ export interface PendienteEntrante {
   estado?: 'pendiente' | 'en_progreso' | 'bloqueado' | 'hecho';
   /** Por omision `media`. */
   prioridad?: 'baja' | 'media' | 'alta' | 'urgente';
+  /**
+   * De donde salio: `ops` (por omision) o `correo` cuando lo dedujo un
+   * barrido del buzon. Decide el icono en el portal.
+   */
+  origen?: 'ops' | 'correo';
   /** Fecha compromiso en ISO. Sin ella el pendiente sale como "sin fecha". */
   venceEn?: string;
   responsable?: PersonaEntrante;

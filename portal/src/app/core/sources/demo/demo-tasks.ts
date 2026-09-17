@@ -1,6 +1,7 @@
 import { TaskItem, TaskOrigin, TaskPriority, TaskStatus } from '../../models';
 import { addDays, atTime } from '../../util/date.util';
 import { DEMO_PEOPLE } from './demo-people';
+import { sliceFor } from './demo-random';
 
 /** Plantilla de un pendiente de demostración, con el vencimiento en días. */
 interface TaskSeed {
@@ -163,6 +164,71 @@ const ODOO_SEEDS: TaskSeed[] = [
   }
 ];
 
+/**
+ * Pendientes que salen del correo: no los captura nadie, el puente los deduce
+ * de correos que piden una acción. Por eso ninguno trae responsable.
+ */
+const CORREO_SEEDS: TaskSeed[] = [
+  {
+    id: 'correo-1',
+    title: 'Se requiere una acción para mantener tu suscripción Personal Plan',
+    description:
+      'El cobro mensual fue rechazado; hay que actualizar la tarjeta.',
+    status: 'pendiente',
+    priority: 'alta',
+    dueInDays: 2,
+    dueHour: 9,
+    project: 'Suscripciones',
+    tags: ['pago', 'suscripción'],
+    updatedDaysAgo: 0
+  },
+  {
+    id: 'correo-2',
+    title: 'La renovación de uno o más dominios está próxima',
+    description: 'ejemplo.com.mx vence en 12 días.',
+    status: 'pendiente',
+    priority: 'media',
+    dueInDays: 12,
+    dueHour: 9,
+    project: 'Dominios',
+    tags: ['dominio', 'renovación'],
+    updatedDaysAgo: 1
+  },
+  {
+    id: 'correo-3',
+    title: 'Tu factura de Microsoft G0000000 está lista',
+    status: 'pendiente',
+    priority: 'baja',
+    dueInDays: 7,
+    dueHour: 9,
+    project: 'Facturas',
+    tags: ['factura'],
+    updatedDaysAgo: 2
+  },
+  {
+    id: 'correo-4',
+    title: 'Action needed: your payment to SendGrid has failed',
+    status: 'pendiente',
+    priority: 'urgente',
+    dueInDays: 0,
+    dueHour: 18,
+    project: 'Suscripciones',
+    tags: ['pago'],
+    updatedDaysAgo: 0
+  },
+  {
+    id: 'correo-5',
+    title: 'Tu plan vence hoy',
+    status: 'pendiente',
+    priority: 'alta',
+    dueInDays: 0,
+    dueHour: 23,
+    project: 'Suscripciones',
+    tags: ['renovación'],
+    updatedDaysAgo: 0
+  }
+];
+
 const LOCAL_SEEDS: TaskSeed[] = [
   {
     id: 'local-1',
@@ -213,7 +279,7 @@ function toTask(
     origin,
     project: seed.project,
     url:
-      origin === 'local'
+      origin === 'local' || origin === 'correo'
         ? undefined
         : `https://${origin}.example.com/tarea/${seed.id}`,
     tags: seed.tags,
@@ -227,6 +293,13 @@ export function demoOpsTasks(accountId: string, now = new Date()): TaskItem[] {
 
 export function demoOdooTasks(accountId: string, now = new Date()): TaskItem[] {
   return ODOO_SEEDS.map((seed) => toTask(seed, 'odoo', accountId, now));
+}
+
+/** Cada buzón recibe un tramo distinto; ver `demoMailMeetings`. */
+export function demoMailTasks(accountId: string, now = new Date()): TaskItem[] {
+  return sliceFor(accountId, CORREO_SEEDS, 2).map((seed) =>
+    toTask({ ...seed, id: `${accountId}-${seed.id}` }, 'correo', accountId, now)
+  );
 }
 
 /** Semilla de pendientes propios, solo para el primer arranque del portal. */

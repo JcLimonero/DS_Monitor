@@ -124,6 +124,37 @@ function acumularMonitoreo(
 }
 
 /** "45 s", "20 min", "3 h". Redondear todo a minutos da mensajes con "0 min". */
+/**
+ * Lo ultimo que mando un emisor, o un 503 que dice por que no se sirve: no ha
+ * llegado nada, o lo que llego ya es mas viejo que su ventana de frescura.
+ * Servir datos de hace horas como si fueran de ahora es peor que no servir
+ * nada: el portal lo marca como fuente con error y se ve.
+ */
+export function servirRecibido(
+  almacen: AlmacenIngesta,
+  cliente: ClienteIngesta,
+  tipo: TipoIngesta,
+  origen = cliente.nombre
+): unknown[] {
+  const snapshot = almacen.leer(tipo, origen);
+  if (!snapshot) {
+    throw new ErrorPuente(
+      `Todavía no llega ningún envío de "${cliente.nombre}" para "${tipo}".`,
+      503
+    );
+  }
+  const edadSegundos = Math.round(
+    (Date.now() - Date.parse(snapshot.generadoEn)) / 1000
+  );
+  if (cliente.vigenciaSegundos > 0 && edadSegundos > cliente.vigenciaSegundos) {
+    throw new ErrorPuente(
+      `El último envío de "${cliente.nombre}" es de hace ${enPalabras(edadSegundos)} y se esperaba uno cada ${enPalabras(cliente.vigenciaSegundos)}.`,
+      503
+    );
+  }
+  return snapshot.elementos;
+}
+
 export function enPalabras(segundos: number): string {
   if (segundos < 60) {
     return `${segundos} s`;
@@ -256,31 +287,7 @@ export function registrarRutasIngesta(
             tipo === 'crm'
               ? `${cliente.nombre}__${recurso === 'opportunities' ? 'oportunidades' : 'actividades'}`
               : cliente.nombre;
-          const snapshot = almacen.leer(tipo, origen);
-
-          if (!snapshot) {
-            throw new ErrorPuente(
-              `Todavía no llega ningún envío de "${cliente.nombre}" para "${tipo}".`,
-              503
-            );
-          }
-
-          const edadSegundos = Math.round(
-            (Date.now() - Date.parse(snapshot.generadoEn)) / 1000
-          );
-          if (
-            cliente.vigenciaSegundos > 0 &&
-            edadSegundos > cliente.vigenciaSegundos
-          ) {
-            // Servir datos de hace horas como si fueran de ahora es peor que no
-            // servir nada: el portal lo marca como fuente con error y se ve.
-            throw new ErrorPuente(
-              `El último envío de "${cliente.nombre}" es de hace ${enPalabras(edadSegundos)} y se esperaba uno cada ${enPalabras(cliente.vigenciaSegundos)}.`,
-              503
-            );
-          }
-
-          return snapshot.elementos;
+          return servirRecibido(almacen, cliente, tipo, origen);
         });
       }
     }

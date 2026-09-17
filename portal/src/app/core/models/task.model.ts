@@ -4,7 +4,7 @@ export type TaskStatus = 'pendiente' | 'en_progreso' | 'bloqueado' | 'hecho';
 export type TaskPriority = 'baja' | 'media' | 'alta' | 'urgente';
 
 /** De dónde salió el pendiente. Decide el icono y a donde lleva el enlace. */
-export type TaskOrigin = 'odoo' | 'ops' | 'local';
+export type TaskOrigin = 'odoo' | 'ops' | 'local' | 'correo';
 
 export interface TaskItem {
   id: string;

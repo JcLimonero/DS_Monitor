@@ -32,10 +32,39 @@ sistema nuestro puede empujar sus pendientes, juntas, despliegues o repos con un
 token, sin que el puente necesite credenciales de ese sistema. El cuerpo exacto
 de cada envío está en [`puente/INGESTA.md`](../puente/INGESTA.md).
 
-Lo que todavía no hay: los calendarios de Google y Microsoft del lado del puente
-(el tablero de Ops ya se puede resolver por envío), y pruebas automatizadas de
-los selectores del portal (`portal.selectors.ts`), que es donde vive la lógica
-que más se puede romper en silencio. Lo del puente sí está probado.
+Los ocho buzones de correo ya son cuentas del portal (`correo-*` en
+`portal-defaults.ts`), cada uno con su conexión `/correo/<id>` que alimenta
+juntas, pendientes y licencias. Desde Ajustes → Correo se edita la
+conexión de cada buzón (servidor y contraseña para IMAP; client ID, secret y el
+consentimiento de Microsoft para Graph), se prueba, y lo capturado se guarda en
+el puente, nunca en el navegador; hace falta el token de `PUENTE_ADMIN_TOKEN`
+en la pestaña Puente. Un buzón sin conexión lo alimenta el barrido de Mail.app
+(ver `puente/README.md`). Ajustes va por
+pestañas (Correo, Licencias, Integraciones, Puente) y desde ahí se configura
+cada integración con sus variables (GitHub, Claude, Cursor, Figma, Vercel,
+Odoo, monitoreo), se prueba, y la conexión pasa sola de demostración a datos
+reales; se agregan buzones, se encienden o apagan cuentas, se corrige el costo de una licencia que
+el recibo no trae, se ocultan las que no interesan y se capturan a mano las que
+no llegan por ninguna fuente; todo eso, igual que la raíz del puente, se guarda
+en el navegador (`core/config/local-settings.ts`).
+
+Hay además una sección de **Pendientes personales** (`/personales`, guardados
+en el navegador), la vista **Equipo** toma la lista que se administra en
+Ajustes → Equipo, y Ajustes → Dominios lleva el control de los dominios
+registrados (vencimiento y costo), que salen en Licencias como renovaciones
+anuales. Con el acceso por código configurado en el puente, el portal manda a
+`/acceso` cuando el puente contesta 401.
+
+Las integraciones de Claude, Cursor y Figma arrancan apagadas: sus datos de
+demostración (asientos de equipo) no corresponden a lo contratado, que llega
+por correo como cualquier otra suscripción. Se encienden en Ajustes cuando el
+puente tenga sus Admin API keys.
+
+Lo que todavía no hay: el adaptador OAuth de Microsoft (para leer esos buzones
+y sus calendarios directo), los calendarios completos de Google e iCloud (por
+correo solo se ven las invitaciones), y pruebas automatizadas de los selectores
+del portal (`portal.selectors.ts`), que es donde vive la lógica que más se
+puede romper en silencio. Lo del puente sí está probado.
 
 ## Arrancar
 

@@ -1,0 +1,49 @@
+# Render Blueprint del puente de DS Monitor.
+#
+# Solo el puente vive aquí: el portal es estático y se publica en Vercel, que
+# reenvía /api/portal/* a este servicio (ver portal/vercel.json).
+#
+# Cómo usarlo: en Render, New > Blueprint, apuntar a este repo. Render crea el
+# web service con su disco. Después, en el dashboard, llenar las variables
+# marcadas sync: false (credenciales) y las de .env.example que hagan falta.
+#
+# El disco importa: ahí quedan las credenciales capturadas desde Ajustes, los
+# dominios, el equipo, las sesiones y lo recibido por ingesta. Sin disco todo
+# eso se pierde en cada deploy.
+services:
+  - type: web
+    name: ds-monitor-puente
+    runtime: node
+    rootDir: puente
+    plan: starter
+    region: oregon
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: node dist/index.js
+    healthCheckPath: /salud
+    disk:
+      name: datos
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: PUENTE_PUERTO
+        value: "10000"
+      - key: PUENTE_ORIGENES
+        value: https://ds-monitor-nine.vercel.app
+      - key: PUENTE_URL_PUBLICA
+        value: https://ds-monitor-nine.vercel.app/api/portal
+      - key: DATOS_DIRECTORIO
+        value: /var/data
+      - key: INGESTA_DIRECTORIO
+        value: /var/data/ingesta
+      - key: CORREO_DIRECTORIO
+        value: /var/data/correo
+      - key: INTEGRACIONES_DIRECTORIO
+        value: /var/data/integraciones
+      - key: PUENTE_ADMIN_TOKEN
+        generateValue: true
+      - key: CORREO_CUENTAS
+        sync: false
+      - key: INGESTA_CLIENTES
+        sync: false

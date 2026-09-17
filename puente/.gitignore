@@ -6,3 +6,6 @@
 # traer nombres, correos, importes del CRM y demás datos reales, y este
 # repositorio es público.
 /datos
+
+# Tokens locales del barrido de Mail.app
+.env.barrido

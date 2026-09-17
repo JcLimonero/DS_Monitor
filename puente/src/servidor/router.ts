@@ -15,6 +15,14 @@ import {
 
 export type Manejador = (contexto: Contexto) => Promise<unknown>;
 
+/**
+ * Lo que devuelve un manejador cuando la respuesta no es JSON sino mandar al
+ * navegador a otra parte. Solo lo usa el regreso de OAuth.
+ */
+export class Redireccion {
+  constructor(readonly url: string) {}
+}
+
 export type Metodo = 'GET' | 'POST';
 
 export interface Contexto {
@@ -34,8 +42,24 @@ interface Ruta {
   manejador: Manejador;
 }
 
+/**
+ * Se corre antes de cualquier manejador, con la ruta ya limpia. Sirve para
+ * exigir sesion: si lanza, la peticion termina ahi.
+ */
+export type Guardia = (
+  segmentos: string[],
+  contexto: Contexto
+) => void | Promise<void>;
+
 export class Router {
   private readonly rutas: Ruta[] = [];
+  private guardia?: Guardia;
+
+  /** Registra la guardia que se corre antes de resolver cualquier ruta. */
+  proteger(guardia: Guardia): this {
+    this.guardia = guardia;
+    return this;
+  }
 
   get(patron: string, manejador: Manejador): this {
     this.rutas.push({ metodo: 'GET', patron: partir(patron), manejador });
@@ -56,6 +80,15 @@ export class Router {
   ): Promise<unknown> {
     const segmentos = partir(ruta);
     let existeConOtroMetodo = false;
+
+    if (this.guardia) {
+      await this.guardia(segmentos, {
+        segmentos,
+        parametros,
+        cuerpo,
+        encabezados
+      });
+    }
 
     for (const candidata of this.rutas) {
       if (!coincide(candidata.patron, segmentos)) {
@@ -167,6 +200,14 @@ export function manejar(
       respuesta.setHeader('access-control-allow-origin', origen);
       respuesta.setHeader('access-control-allow-credentials', 'true');
       respuesta.setHeader('vary', 'Origin');
+      // Chrome exige este permiso extra cuando una pagina publica (el portal
+      // en Vercel) llama a un servidor de la red local o localhost. Solo
+      // aplica a origenes ya permitidos, asi que no abre nada nuevo.
+      if (
+        peticion.headers['access-control-request-private-network'] === 'true'
+      ) {
+        respuesta.setHeader('access-control-allow-private-network', 'true');
+      }
     }
 
     if (peticion.method === 'OPTIONS') {
@@ -192,7 +233,17 @@ export function manejar(
       .then((cuerpo) =>
         router.resolver(ruta, url.searchParams, metodo, cuerpo, encabezados)
       )
-      .then((datos) => responder(respuesta, 200, datos))
+      .then((datos) => {
+        if (datos instanceof Redireccion) {
+          respuesta.writeHead(302, {
+            location: datos.url,
+            'cache-control': 'no-store'
+          });
+          respuesta.end();
+          return;
+        }
+        responder(respuesta, 200, datos);
+      })
       .catch((error: unknown) => {
         if (error instanceof ErrorPuente) {
           if (error.estado >= 500) {

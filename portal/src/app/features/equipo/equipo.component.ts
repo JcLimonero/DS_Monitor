@@ -5,8 +5,9 @@ import {
   inject,
   signal
 } from '@angular/core';
-import { TaskItem } from '../../core/models';
-import { teamWorkload } from '../../core/state/portal.selectors';
+import { Person, TaskItem } from '../../core/models';
+import { PuenteAdminService } from '../../core/sources/gateway/puente-admin.service';
+import { TeamLoad, teamWorkload } from '../../core/state/portal.selectors';
 import { PortalStore } from '../../core/state/portal.store';
 import { plural } from '../../core/util/text.util';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
@@ -21,11 +22,67 @@ import { TaskCardComponent } from '../../ui/task-card.component';
 })
 export class EquipoComponent {
   private readonly store = inject(PortalStore);
+  private readonly admin = inject(PuenteAdminService);
 
   /** Persona cuyo detalle está abierto. Solo una a la vez. */
   readonly expanded = signal<string | undefined>(undefined);
 
-  readonly loads = computed(() => teamWorkload(this.store.tasks()));
+  /** El equipo tal como se administra en Ajustes, si hay puente. */
+  readonly roster = signal<Person[]>([]);
+
+  constructor() {
+    if (this.admin.disponible) {
+      this.admin.equipo().subscribe({
+        next: (personas) => this.roster.set(personas),
+        error: () => this.roster.set([])
+      });
+    }
+  }
+
+  /**
+   * La carga por persona, con el equipo de Ajustes encima: quien esté en la
+   * lista aparece aunque no tenga pendientes, y su rol es el de la lista. Los
+   * pendientes se cuelgan por correo o por identificador.
+   */
+  readonly loads = computed(() => {
+    const cargas = teamWorkload(this.store.tasks());
+    const porClave = new Map(
+      cargas.flatMap((carga) =>
+        [carga.person.id, carga.person.email?.toLowerCase()]
+          .filter((k): k is string => !!k)
+          .map((k) => [k, carga] as const)
+      )
+    );
+    const vistas = new Set<(typeof cargas)[number]>();
+    const resultado: TeamLoad[] = this.roster().map((persona) => {
+      const carga =
+        porClave.get(persona.id) ??
+        porClave.get(persona.email?.toLowerCase() ?? '');
+      if (carga) {
+        vistas.add(carga);
+        return {
+          ...carga,
+          person: { ...carga.person, name: persona.name, role: persona.role }
+        };
+      }
+      return {
+        person: persona,
+        open: 0,
+        overdue: 0,
+        dueToday: 0,
+        blocked: 0,
+        tasks: []
+      };
+    });
+    for (const carga of cargas) {
+      if (!vistas.has(carga)) {
+        resultado.push(carga);
+      }
+    }
+    return resultado.sort(
+      (a, b) => b.open - a.open || a.person.name.localeCompare(b.person.name)
+    );
+  });
 
   readonly unassigned = computed<TaskItem[]>(() =>
     this.store
@@ -35,7 +92,10 @@ export class EquipoComponent {
 
   /** La carga más alta del equipo; sirve de escala para las barras. */
   readonly subtitle = computed(
-    () => `${plural(this.loads().length, 'persona')} con pendientes asignados`
+    () =>
+      `${plural(this.loads().length, 'persona')} · ${
+        this.loads().filter((l) => l.open > 0).length
+      } con pendientes abiertos`
   );
 
   private readonly maxOpen = computed(() =>

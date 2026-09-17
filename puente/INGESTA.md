@@ -95,6 +95,8 @@ Solo `id` y `titulo` son obligatorios.
 
 `estado`: `pendiente` · `en_progreso` · `bloqueado` · `hecho` (por omisión `pendiente`)
 `prioridad`: `baja` · `media` · `alta` · `urgente` (por omisión `media`)
+`origen`: `ops` (por omisión) · `correo`, cuando el pendiente se dedujo de un
+buzón; el portal lo agrupa con los demás del correo.
 
 ### Juntas — `POST /ingesta/juntas`
 

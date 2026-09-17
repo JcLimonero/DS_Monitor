@@ -21,11 +21,88 @@ Conectadas y probadas:
 | Monitoreo | Plataformas | Revisión propia de cada URL |
 | Odoo | CRM y pendientes | JSON-RPC contra `crm.lead` y `mail.activity` |
 | GitHub | Repositorios | `/repos`, `/commits`, `/check-runs` y `/pulls` |
+| Correo | Juntas, pendientes y licencias | IMAP (solo lectura) — ver abajo |
 
-Todavía sin conectar: los calendarios de Google y Microsoft, y el tablero de
-Ops. Sus rutas ya están registradas y responden 501 con un mensaje claro, para
-que si alguien cambia esa conexión a modo gateway antes de tiempo, Ajustes le
-diga que falta construirla en vez de un 404 que parece un error de escritura.
+Todavía sin conectar: el tablero de Ops, y los buzones de Microsoft por API.
+Sus rutas ya están registradas y responden con un mensaje claro, para que si
+alguien cambia esa conexión a modo gateway antes de tiempo, Ajustes le diga qué
+falta en vez de un 404 que parece un error de escritura.
+
+## Los buzones de correo
+
+Un buzón alimenta tres cosas, y ninguna viene de una API: se deducen de los
+encabezados de los últimos meses.
+
+- **Licencias**: recibos y avisos de renovación de suscripciones. Cada regla de
+  `src/proveedores/correo.ts` reconoce a un proveedor (Microsoft 365, Zoom,
+  AWS, Figma, Canva, Neubox, GoDaddy…); lo que suena a suscripción pero no es
+  de un proveedor conocido cae en la regla genérica con el nombre del
+  remitente. Una suscripción sigue vigente mientras su último recibo no tenga
+  más de 75 días (mensuales) o dos años (anuales). El importe se lee del
+  cuerpo del último recibo (la cantidad que sigue a "total", o la mayor);
+  cuando el recibo no lo trae, el portal deja capturarlo a mano en Ajustes.
+- **Pendientes**: correos de los últimos 30 días que piden hacer algo — un
+  cobro rechazado, un dominio por vencer, un plan que vence hoy. Uno por asunto,
+  con prioridad según la urgencia del aviso.
+- **Juntas**: invitaciones con parte `text/calendar`. Solo lo que alguien mandó
+  por correo; lo que uno crea directo en su calendario no pasa por aquí.
+
+Cada buzón es una conexión del portal con ruta `/correo/<id>`, y se configuran
+en `CORREO_CUENTAS` con la contraseña de cada uno en `CORREO_CONTRASENA_<ID>`
+(ver `.env.example`). Hay dos caminos según el proveedor:
+
+| Proveedor | Cómo entra el puente |
+| --- | --- |
+| Gmail (`google`) | IMAP a `imap.gmail.com` con una contraseña de aplicación |
+| iCloud y Neubox (`imap`) | IMAP con contraseña de aplicación (iCloud) o del buzón (Neubox) |
+| Microsoft (`microsoft`) | Microsoft ya no acepta IMAP con contraseña: se entra por **Microsoft Graph** con una aplicación registrada en Entra ID y el consentimiento de la persona. De ahí salen los correos y, mejor que las invitaciones sueltas, el **calendario completo** (`/me/calendarView`). Mientras una cuenta no esté conectada, la alimenta el barrido de Mail.app |
+
+**Conectar un buzón desde Ajustes.** Con `PUENTE_ADMIN_TOKEN` en el entorno,
+el portal puede guardar las credenciales de cada buzón (`POST
+/correo/{id}/guardar`), probarlas (`POST /correo/{id}/probar`) y, para
+Microsoft, pasar por el consentimiento (`POST /correo/{id}/oauth/inicio` →
+login.microsoftonline.com → `GET /correo/oauth/callback`). Lo capturado se
+guarda en `CORREO_DIRECTORIO` (por omisión `datos/correo/`, fuera del repo, un
+archivo por buzón con permisos 600) y se pone encima de `CORREO_CUENTAS`.
+`GET /correo/{id}/estado` dice qué tiene y qué le falta sin exponer secretos.
+
+La aplicación de Entra ID necesita: tipo de cuentas con cuentas personales de
+Microsoft incluidas (para Outlook.com), permisos delegados `Mail.Read`,
+`Calendars.Read`, `User.Read` y `offline_access`, un client secret, y la URI de
+redirección `<PUENTE_URL_PUBLICA>/correo/oauth/callback`.
+
+**El barrido de Mail.app** (`npm run barrido`) corre en la Mac donde ya están
+abiertos todos los buzones, les pide a Mail los encabezados por AppleScript,
+corre las mismas reglas que el puente usa con IMAP, y manda licencias y
+pendientes por ingesta. Necesita un emisor por buzón en `INGESTA_CLIENTES`, con
+el mismo nombre que la cuenta y tipos `licencias,pendientes`, y su token en
+`INGESTA_TOKEN_<ID>` al correrlo:
+
+```bash
+node dist/herramientas/barrido-mail.js --puente https://mi-puente/api/portal \
+  --cuenta "JCLN Nexus|Bandeja de entrada|correo-nexus" \
+  --cuenta "JCLN GMAIL|[Gmail]/Todos|correo-gmail"
+```
+
+Un buzón IMAP sin contraseña pero con emisor también se sirve de lo recibido,
+así que el barrido puede alimentar los ocho buzones hasta que cada uno tenga su
+contraseña en el puente. Un buzón grande (decenas de miles de mensajes) tarda
+varios minutos; conviene programarlo cada hora con `launchd` o `cron`.
+
+## Acceso, equipo y dominios
+
+Con `ACCESO_CORREOS` y las cuatro variables de EmailJS (también capturables
+desde Ajustes → Integraciones → Acceso al portal), el puente exige sesión en
+todo menos `/salud`, `/acceso/*`, la ingesta (trae sus propios tokens) y el
+regreso de OAuth. Entrar: `POST /acceso/codigo {correo}` manda un código de
+seis dígitos por EmailJS (mismo servicio y plantilla, asunto "Access
+Monitor"); `POST /acceso/entrar {correo, codigo}` devuelve un token de sesión
+de 30 días que el portal manda como `Authorization: Bearer`. Una sesión
+vigente también sirve para todo lo que antes pedía `PUENTE_ADMIN_TOKEN`.
+
+El equipo (`GET /equipo`, `POST /equipo/guardar`) y los dominios
+(`GET /dominios`, `POST /dominios/guardar`, y `GET /dominios/licenses` para el
+tablero) viven en `DATOS_DIRECTORIO` como JSON, junto con las sesiones.
 
 ## Dos maneras de traer datos
 
@@ -68,6 +145,19 @@ Para desarrollo, `npm run dev` reinicia solo al guardar.
 
 ## Conectar una fuente
 
+Hay dos maneras, y las dos terminan en las mismas variables de
+`.env.example`:
+
+- **Desde Ajustes del portal** (pestaña Integraciones o Correo): con
+  `PUENTE_ADMIN_TOKEN` en el entorno, el portal lista qué variables tiene cada
+  integración (`GET /integraciones`), las guarda (`POST
+  /integraciones/{id}/guardar`) y prueba la conexión con la misma consulta que
+  usa el tablero (`POST /integraciones/{id}/probar`). Lo guardado queda en
+  `INTEGRACIONES_DIRECTORIO` (por omisión `datos/integraciones/`, fuera del
+  repo) y se pone encima del entorno sin reiniciar. GitHub sin lista de
+  repositorios vigila los diez con cambios más recientes.
+- **En el entorno**, a mano:
+
 1. Llenar sus variables en `.env` (ver `.env.example`).
 2. Reiniciar el puente. En el arranque dice qué quedó configurado y qué falta:
 
@@ -76,7 +166,8 @@ Para desarrollo, `npm run dev` reinicia solo al guardar.
    [puente]   · anthropic apagada, falta ANTHROPIC_ADMIN_KEY
    ```
 
-3. En el portal, poner `gatewayUrl` en `src/environments/environment.ts` y
+3. En el portal, poner `gatewayUrl` en `src/environments/environment.ts` (o
+   escribir la raíz del puente en Ajustes, que la guarda en ese navegador) y
    cambiar el `mode` de esa conexión de `demo` a `gateway` en
    `src/app/core/config/portal-defaults.ts`.
 
@@ -105,6 +196,17 @@ GET /odoo/itech/opportunities          -> CrmOpportunity[]
 GET /odoo/itech/activities             -> CrmActivity[]
 GET /odoo/itech/tasks                  -> TaskItem[]
 GET /github/repos                      -> RepoStatus[]
+GET /correo/{id}/licenses              -> LicenseUsage[]  (deducidas del buzón)
+GET /correo/{id}/tasks                 -> TaskItem[]      (correos que piden una acción)
+GET /correo/{id}/meetings?from=&to=    -> Meeting[]       (invitaciones .ics o calendario de Graph)
+GET  /integraciones                    -> variables de cada integración, sin secretos
+POST /integraciones/{id}/guardar       <- variables                  (PUENTE_ADMIN_TOKEN)
+POST /integraciones/{id}/probar        -> { ok, mensaje }            (PUENTE_ADMIN_TOKEN)
+GET  /correo/{id}/estado               -> qué tiene y qué le falta al buzón
+POST /correo/{id}/guardar              <- credenciales del buzón   (PUENTE_ADMIN_TOKEN)
+POST /correo/{id}/probar               -> { ok, mensaje }          (PUENTE_ADMIN_TOKEN)
+POST /correo/{id}/oauth/inicio         -> { url } de Microsoft     (PUENTE_ADMIN_TOKEN)
+GET  /correo/oauth/callback            -> regreso de Microsoft, redirige al portal
 
 POST /ingesta/{tipo}                   <- recibir datos (ver INGESTA.md)
 GET  /recibido/{emisor}/{recurso}      -> lo recibido, ya traducido

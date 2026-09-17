@@ -6,6 +6,7 @@ import {
   signal
 } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { SesionService } from '../core/acceso/sesion.service';
 import { PortalStore } from '../core/state/portal.store';
 import { ThemeService } from '../core/theme/theme.service';
 import { BrandLogoComponent } from '../ui/brand-logo.component';
@@ -21,6 +22,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { path: '/panel', label: 'Panel', icon: 'panel' },
   { path: '/pendientes', label: 'Pendientes', icon: 'tareas' },
+  { path: '/personales', label: 'Personales', icon: 'bandeja' },
   { path: '/agenda', label: 'Agenda', icon: 'agenda' },
   { path: '/monitoreo', label: 'Monitoreo', icon: 'monitoreo' },
   { path: '/crm', label: 'CRM Odoo', icon: 'crm' },
@@ -49,6 +51,7 @@ export class ShellComponent {
   private readonly theme = inject(ThemeService);
 
   readonly store = inject(PortalStore);
+  readonly sesion = inject(SesionService);
   readonly nav = NAV;
 
   /** Menu lateral en pantallas chicas. En escritorio siempre esta visible. */
@@ -65,6 +68,11 @@ export class ShellComponent {
 
   toggleTheme(): void {
     this.theme.toggle();
+  }
+
+  salir(): void {
+    this.sesion.salir();
+    location.assign('/acceso');
   }
 
   refresh(): void {

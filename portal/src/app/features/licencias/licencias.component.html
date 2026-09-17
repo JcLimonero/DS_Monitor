@@ -122,7 +122,12 @@
             target="_blank"
             rel="noopener">
             <pt-icon name="externo" class="h-3.5 w-3.5" />
-            Abrir en {{ proveedorLabel[licencia.provider] }}
+            Abrir en
+            {{
+              licencia.provider === "otro"
+                ? licencia.product
+                : proveedorLabel[licencia.provider]
+            }}
           </a>
         }
       </article>

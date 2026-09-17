@@ -1,8 +1,17 @@
 import { createServer } from 'node:http';
 import { leerConfiguracion } from './config/entorno.js';
+import { AlmacenCorreo } from './correo/almacen-correo.js';
 import { AlmacenIngesta } from './ingesta/almacen.js';
+import {
+  AlmacenIntegraciones,
+  Configurador
+} from './integraciones/almacen-integraciones.js';
 import { Cache } from './nucleo/cache.js';
-import { construirRutas, estadoDeConexiones } from './servidor/rutas.js';
+import {
+  abrirDatos,
+  construirRutas,
+  estadoDeConexiones
+} from './servidor/rutas.js';
 import { manejar } from './servidor/router.js';
 
 /**
@@ -14,6 +23,14 @@ import { manejar } from './servidor/router.js';
  * portal a oscuras mientras tanto.
  */
 
+// El .env es opcional: en el servidor las variables llegan del panel, y en
+// desarrollo se copian de .env.example. Si no existe, se sigue con el entorno.
+try {
+  process.loadEnvFile('.env');
+} catch {
+  // Sin .env no hay nada que cargar.
+}
+
 const config = leerConfiguracion();
 const prefijo = process.env['PUENTE_PREFIJO'] ?? '';
 
@@ -22,16 +39,56 @@ const prefijo = process.env['PUENTE_PREFIJO'] ?? '';
 const almacen = new AlmacenIngesta(config.directorioIngesta);
 const recuperados = await almacen.cargar();
 
+// Las credenciales de buzones capturadas desde Ajustes tambien viven en disco.
+const almacenCorreo = new AlmacenCorreo(config.directorioCorreo);
+const buzonesGuardados = await almacenCorreo.cargar();
+
+// Y las variables de integraciones (GitHub, Claude, Odoo...) capturadas desde
+// Ajustes, que se ponen encima del entorno.
+const almacenIntegraciones = new AlmacenIntegraciones(
+  config.directorioIntegraciones
+);
+const integracionesGuardadas = await almacenIntegraciones.cargar();
+const configurador = new Configurador(almacenIntegraciones);
+
+// Equipo, dominios y sesiones: listas chicas en JSON, una por archivo.
+const datos = abrirDatos(config.directorioDatos);
+await Promise.all([
+  datos.equipo.cargar(),
+  datos.dominios.cargar(),
+  datos.sesiones.cargar()
+]);
+
 const servidor = createServer(
-  manejar(construirRutas(config, new Cache(), almacen), {
-    origenesPermitidos: config.origenesPermitidos,
-    prefijo,
-    maximoCuerpoBytes: config.maximoCuerpoBytes
-  })
+  manejar(
+    construirRutas(
+      config,
+      new Cache(),
+      almacen,
+      almacenCorreo,
+      { almacen: almacenIntegraciones, configurador },
+      datos
+    ),
+    {
+      origenesPermitidos: config.origenesPermitidos,
+      prefijo,
+      maximoCuerpoBytes: config.maximoCuerpoBytes
+    }
+  )
 );
 
 servidor.listen(config.puerto, () => {
-  const conexiones = estadoDeConexiones(config);
+  const conexiones = estadoDeConexiones(configurador.config(), almacenCorreo);
+  console.log(
+    configurador.config().acceso
+      ? `[puente] acceso con código por correo para: ${configurador.config().acceso?.correos.join(', ')}`
+      : '[puente] acceso abierto: sin EmailJS y ACCESO_CORREOS no se pide código'
+  );
+  if (integracionesGuardadas > 0) {
+    console.log(
+      `[puente] ${integracionesGuardadas} integraciones con variables guardadas desde Ajustes`
+    );
+  }
   const listas = conexiones.filter((estado) => estado.configurada);
   console.log(`[puente] escuchando en :${config.puerto}${prefijo || ''}`);
   if (config.clientesIngesta.length > 0) {
@@ -50,6 +107,14 @@ servidor.listen(config.puerto, () => {
   for (const estado of conexiones.filter((fila) => !fila.configurada)) {
     console.log(
       `[puente]   · ${estado.conexion} apagada, falta ${estado.faltante}`
+    );
+  }
+  if (config.correos.length > 0 || buzonesGuardados > 0) {
+    console.log(
+      `[puente] buzones: ${config.correos.length} en CORREO_CUENTAS, ${buzonesGuardados} guardados desde Ajustes` +
+        (config.adminToken
+          ? ''
+          : ' · sin PUENTE_ADMIN_TOKEN no se pueden editar desde el portal')
     );
   }
 });

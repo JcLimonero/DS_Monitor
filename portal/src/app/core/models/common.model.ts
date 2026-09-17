@@ -6,11 +6,20 @@
  * vistas nunca ven un campo de Odoo ni uno de Google, solo estos modelos.
  */
 
-/** Cada integración que puede alimentar al portal. */
+/**
+ * Cada integración que puede alimentar al portal.
+ *
+ * Los buzones de correo van por proveedor porque cada uno se conecta distinto:
+ * Gmail e iCloud aceptan IMAP con contraseña de aplicación, Microsoft ya no
+ * acepta IMAP con contraseña y exige OAuth, y los buzones de Neubox son IMAP
+ * a secas.
+ */
 export type SourceKind =
   | 'odoo'
   | 'google'
   | 'microsoft'
+  | 'imap'
+  | 'dominios'
   | 'ops'
   | 'local'
   | 'monitor'

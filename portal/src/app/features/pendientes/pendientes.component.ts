@@ -35,6 +35,7 @@ type OwnerFilter = 'todos' | 'mios' | string;
 const ORIGIN_LABEL: Record<TaskOrigin, string> = {
   odoo: 'Odoo',
   ops: 'Ops',
+  correo: 'Correo',
   local: 'Propios'
 };
 
@@ -65,7 +66,7 @@ export class PendientesComponent {
     'bloqueado',
     'hecho'
   ];
-  readonly origins: TaskOrigin[] = ['odoo', 'ops', 'local'];
+  readonly origins: TaskOrigin[] = ['odoo', 'ops', 'correo', 'local'];
 
   readonly search = signal('');
   readonly owner = signal<OwnerFilter>('todos');

@@ -1,0 +1,83 @@
+<main class="flex min-h-screen items-center justify-center bg-app px-4">
+  <section class="card card-pad w-full max-w-sm">
+    <div class="flex items-center gap-3">
+      <pt-brand-logo [heightRem]="2" />
+      <h1 class="text-lg font-bold text-ink">DS Monitor</h1>
+    </div>
+    <div class="regla-marca mt-3"></div>
+
+    @if (sinPuente) {
+      <p class="mt-4 text-sm text-ink-muted">
+        Este portal no tiene puente configurado, así que no pide acceso.
+      </p>
+    } @else if (paso() === "correo") {
+      <p class="mt-4 text-sm text-ink-muted">
+        Escribe tu correo y te mandamos un código de seis dígitos.
+      </p>
+      <form class="mt-4 space-y-3" (ngSubmit)="pedirCodigo()">
+        <label class="block">
+          <span class="mb-1 block text-xs font-medium text-ink-muted"
+            >Correo</span
+          >
+          <input
+            class="field"
+            type="email"
+            name="correo"
+            autocomplete="email"
+            autofocus
+            [ngModel]="correo()"
+            (ngModelChange)="correo.set($event)" />
+        </label>
+        <button
+          type="submit"
+          class="btn btn-primary w-full"
+          [disabled]="ocupado() || !correo().trim()">
+          Mandar código
+        </button>
+      </form>
+    } @else {
+      <p class="mt-4 text-sm text-ink-muted">
+        Revisa el correo de
+        <span class="font-medium text-ink">{{ correo() }}</span
+        >: el asunto es "Access Monitor". El código vence en diez minutos.
+      </p>
+      <form class="mt-4 space-y-3" (ngSubmit)="entrar()">
+        <label class="block">
+          <span class="mb-1 block text-xs font-medium text-ink-muted"
+            >Código</span
+          >
+          <input
+            class="field text-center font-mono text-lg tracking-[0.4em]"
+            type="text"
+            name="codigo"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="7"
+            autofocus
+            [ngModel]="codigo()"
+            (ngModelChange)="codigo.set($event)" />
+        </label>
+        <button
+          type="submit"
+          class="btn btn-primary w-full"
+          [disabled]="ocupado() || codigo().length < 6">
+          Entrar
+        </button>
+        <button type="button" class="btn w-full" (click)="otroCorreo()">
+          Usar otro correo
+        </button>
+      </form>
+    }
+
+    @if (mensaje(); as aviso) {
+      <p
+        class="mt-3 rounded-lg px-3 py-2 text-sm"
+        [class.bg-emerald-50]="aviso.ok"
+        [class.text-emerald-900]="aviso.ok"
+        [class.bg-rose-50]="!aviso.ok"
+        [class.text-rose-900]="!aviso.ok">
+        {{ aviso.texto }}
+      </p>
+    }
+  </section>
+</main>

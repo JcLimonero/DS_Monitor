@@ -25,9 +25,9 @@ import { demoActivities, demoOpportunities } from './demo-crm';
 import { demoDeployments, demoPlatformStatus } from './demo-despliegues';
 import { demoLicenses } from './demo-licencias';
 import { demoRepos } from './demo-repos';
-import { demoPersonalMeetings, demoWorkMeetings } from './demo-meetings';
+import { demoMailMeetings, demoWorkMeetings } from './demo-meetings';
 import { demoMonitorTargets } from './demo-monitors';
-import { demoOdooTasks, demoOpsTasks } from './demo-tasks';
+import { demoMailTasks, demoOdooTasks, demoOpsTasks } from './demo-tasks';
 
 /**
  * Adaptadores de demostración.
@@ -37,6 +37,13 @@ import { demoOdooTasks, demoOpsTasks } from './demo-tasks';
  * veríamos si los esqueletos de carga quedaron bien.
  */
 const FAKE_LATENCY_MS = 450;
+
+/** Integraciones que son un buzón de correo. */
+const MAIL_KINDS: ReadonlySet<SourceKind> = new Set([
+  'google',
+  'microsoft',
+  'imap'
+]);
 
 function emit<T>(value: T): Observable<T> {
   return of(value).pipe(delay(FAKE_LATENCY_MS));
@@ -57,7 +64,9 @@ export class DemoTaskSource implements TaskSource {
     const tasks =
       this.kind === 'odoo'
         ? demoOdooTasks(this.accountId, now)
-        : demoOpsTasks(this.accountId, now);
+        : MAIL_KINDS.has(this.kind)
+          ? demoMailTasks(this.accountId, now)
+          : demoOpsTasks(this.accountId, now);
     return emit(tasks);
   }
 }
@@ -74,10 +83,9 @@ export class DemoCalendarSource implements CalendarSource {
 
   fetchMeetings(range: DateRange): Observable<Meeting[]> {
     const now = new Date();
-    const all =
-      this.kind === 'microsoft'
-        ? demoPersonalMeetings(this.accountId, now)
-        : demoWorkMeetings(this.accountId, now);
+    const all = MAIL_KINDS.has(this.kind)
+      ? demoMailMeetings(this.accountId, now)
+      : demoWorkMeetings(this.accountId, now);
     const from = new Date(range.from).getTime();
     const to = new Date(range.to).getTime();
     const inRange = all.filter((meeting) => {

@@ -97,6 +97,59 @@ export interface ClienteIngesta {
   vigenciaSegundos: number;
 }
 
+/**
+ * Un buzon de correo del que se sacan juntas, pendientes y licencias.
+ *
+ * `proveedor` decide como se entra: `google` e `imap` van por IMAP con
+ * contraseña (de aplicacion en Gmail e iCloud, del buzon en Neubox);
+ * `microsoft` ya no acepta IMAP con contraseña y necesita OAuth, que todavia
+ * no esta construido, asi que su ruta responde 501 explicandolo.
+ */
+export interface ConfiguracionCorreo {
+  id: string;
+  proveedor: 'google' | 'microsoft' | 'imap';
+  host: string;
+  puerto: number;
+  usuario: string;
+  contrasena: string;
+  /** Cuenta del portal con la que se marcan sus datos. */
+  accountId: string;
+  /** Buzones IMAP a leer. Por omision solo INBOX. */
+  buzones: string[];
+  /** Cuantos dias hacia atras se leen los encabezados. */
+  diasAtras: number;
+  /**
+   * Para Microsoft: la aplicacion registrada en Entra ID con la que el puente
+   * entra por Microsoft Graph, y el refresh token que quedo al conectar la
+   * cuenta desde Ajustes. Sin refresh token la cuenta esta registrada pero no
+   * conectada.
+   */
+  microsoft?: ConfiguracionMicrosoft;
+}
+
+export interface ConfiguracionMicrosoft {
+  /** `common` para aceptar cuentas de trabajo y personales. */
+  tenant: string;
+  clientId: string;
+  clientSecret: string;
+  refreshToken?: string;
+  /** Con que cuenta se completo el consentimiento, para mostrarlo. */
+  conectadaComo?: string;
+}
+
+/**
+ * Acceso al portal con codigo por correo. Los correos de la lista son los
+ * unicos que pueden entrar; el codigo se manda por EmailJS con el servicio y
+ * la plantilla que ya existen.
+ */
+export interface ConfiguracionAcceso {
+  serviceId: string;
+  templateId: string;
+  publicKey: string;
+  privateKey: string;
+  correos: string[];
+}
+
 export interface ConfiguracionGithub {
   token: string;
   accountId: string;
@@ -118,6 +171,7 @@ export interface Configuracion {
     monitoreo: number;
     crm: number;
     repos: number;
+    correo: number;
   };
   anthropic?: ConfiguracionAnthropic;
   cursor?: ConfiguracionCursor;
@@ -126,6 +180,28 @@ export interface Configuracion {
   monitoreo?: ConfiguracionMonitoreo;
   odoo?: ConfiguracionOdoo;
   github?: ConfiguracionGithub;
+  /** Buzones de correo configurados por entorno. Vacio si no hay ninguno. */
+  correos: ConfiguracionCorreo[];
+  /** Donde se guardan las credenciales de buzones capturadas desde Ajustes. */
+  directorioCorreo: string;
+  /** Donde se guardan las variables de integraciones capturadas desde Ajustes. */
+  directorioIntegraciones: string;
+  /** Cuantos dias hacia atras se leen los buzones. */
+  correoDiasAtras: number;
+  /**
+   * Token que el portal manda para editar buzones y probar conexiones. Sin el,
+   * esas rutas responden 503 y el resto del puente sigue igual.
+   */
+  adminToken?: string;
+  /** Con esto configurado, el puente exige sesion (codigo por correo). */
+  acceso?: ConfiguracionAcceso;
+  /** Donde viven el equipo, los dominios y las sesiones. */
+  directorioDatos: string;
+  /**
+   * URL con la que se llega al puente desde afuera, para armar la URL de
+   * regreso de OAuth. Por omision, localhost con el puerto y el prefijo.
+   */
+  urlPublica: string;
   /** Emisores autorizados a mandar datos al puente. */
   clientesIngesta: ClienteIngesta[];
   /** Donde se guarda lo recibido. Vacio lo deja solo en memoria. */
@@ -134,8 +210,15 @@ export interface Configuracion {
   maximoCuerpoBytes: number;
 }
 
+/**
+ * De donde se leen las variables. Por omision el entorno del proceso; el
+ * puente le pone encima lo capturado desde Ajustes, para que una credencial
+ * guardada desde el portal se lea exactamente igual que una del .env.
+ */
+let variables: Record<string, string | undefined> = process.env;
+
 function texto(nombre: string): string | undefined {
-  const valor = process.env[nombre];
+  const valor = variables[nombre];
   return valor && valor.trim() !== '' ? valor.trim() : undefined;
 }
 
@@ -223,7 +306,72 @@ function clientesIngesta(): ClienteIngesta[] {
     }));
 }
 
-export function leerConfiguracion(): Configuracion {
+/**
+ * Los buzones van en `CORREO_CUENTAS` con formato
+ * `id|proveedor|host|puerto|usuario|buzones`, separados por punto y coma, y la
+ * contraseña de cada uno en su propia variable `CORREO_CONTRASENA_<ID>` (el id
+ * en mayusculas, con guiones convertidos a guion bajo). Van separadas a
+ * proposito: una contraseña puede llevar `|` o `;`, y en el panel del servidor
+ * cada secreto se captura por su lado.
+ *
+ * Ejemplo:
+ *   CORREO_CUENTAS=correo-gmail|google|imap.gmail.com|993|alguien@gmail.com|INBOX
+ *   CORREO_CONTRASENA_CORREO_GMAIL=abcd efgh ijkl mnop
+ *
+ * Un buzon sin contraseña queda apagado y su ruta dice que variable falta.
+ */
+function cuentasCorreo(): ConfiguracionCorreo[] {
+  const crudo = texto('CORREO_CUENTAS');
+  if (!crudo) {
+    return [];
+  }
+  const diasAtras = numeroCon('CORREO_DIAS_ATRAS', 400);
+  return crudo
+    .split(';')
+    .map((entrada) => entrada.split('|').map((parte) => parte.trim()))
+    .filter(
+      (partes) =>
+        partes.length >= 5 && partes[0] && partes[1] && partes[2] && partes[4]
+    )
+    .map((partes) => {
+      const id = partes[0] as string;
+      const proveedor = partes[1] as ConfiguracionCorreo['proveedor'];
+      return {
+        id,
+        proveedor: ['google', 'microsoft', 'imap'].includes(proveedor)
+          ? proveedor
+          : 'imap',
+        host: partes[2] as string,
+        puerto: Number(partes[3]) || 993,
+        usuario: partes[4] as string,
+        contrasena: texto(variableContrasena(id)) ?? '',
+        accountId: id,
+        buzones: (partes[5] ?? 'INBOX')
+          .split(',')
+          .map((buzon) => buzon.trim())
+          .filter(Boolean),
+        diasAtras
+      };
+    });
+}
+
+/** `correo-gmail` -> `CORREO_CONTRASENA_CORREO_GMAIL`. */
+export function variableContrasena(id: string): string {
+  return `CORREO_CONTRASENA_${id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`;
+}
+
+export function leerConfiguracion(
+  fuente: Record<string, string | undefined> = process.env
+): Configuracion {
+  variables = fuente;
+  try {
+    return leer();
+  } finally {
+    variables = process.env;
+  }
+}
+
+function leer(): Configuracion {
   const anthropicKey = texto('ANTHROPIC_ADMIN_KEY');
   const cursorKey = texto('CURSOR_API_KEY');
   const figmaToken = texto('FIGMA_TOKEN');
@@ -245,7 +393,10 @@ export function leerConfiguracion(): Configuracion {
       estadoPlataforma: numeroCon('CACHE_ESTADO_SEGUNDOS', 60),
       monitoreo: numeroCon('CACHE_MONITOREO_SEGUNDOS', 60),
       crm: numeroCon('CACHE_CRM_SEGUNDOS', 120),
-      repos: numeroCon('CACHE_REPOS_SEGUNDOS', 120)
+      repos: numeroCon('CACHE_REPOS_SEGUNDOS', 120),
+      // Leer un buzon completo por IMAP es lento y los proveedores limitan las
+      // conexiones simultaneas, asi que se lee cada tanto y se sirve de aqui.
+      correo: numeroCon('CACHE_CORREO_SEGUNDOS', 900)
     },
     anthropic: anthropicKey
       ? {
@@ -319,6 +470,30 @@ export function leerConfiguracion(): Configuracion {
           limitePullRequests: numeroCon('GITHUB_LIMITE_PR', 10)
         }
       : undefined,
+    correos: cuentasCorreo(),
+    directorioCorreo: texto('CORREO_DIRECTORIO') ?? 'datos/correo',
+    directorioIntegraciones:
+      texto('INTEGRACIONES_DIRECTORIO') ?? 'datos/integraciones',
+    correoDiasAtras: numeroCon('CORREO_DIAS_ATRAS', 400),
+    adminToken: texto('PUENTE_ADMIN_TOKEN'),
+    acceso:
+      texto('EMAILJS_SERVICE_ID') &&
+      texto('EMAILJS_TEMPLATE_ID') &&
+      texto('EMAILJS_PUBLIC_KEY') &&
+      texto('EMAILJS_PRIVATE_KEY') &&
+      lista('ACCESO_CORREOS').length > 0
+        ? {
+            serviceId: texto('EMAILJS_SERVICE_ID') as string,
+            templateId: texto('EMAILJS_TEMPLATE_ID') as string,
+            publicKey: texto('EMAILJS_PUBLIC_KEY') as string,
+            privateKey: texto('EMAILJS_PRIVATE_KEY') as string,
+            correos: lista('ACCESO_CORREOS').map((c) => c.toLowerCase())
+          }
+        : undefined,
+    directorioDatos: texto('DATOS_DIRECTORIO') ?? 'datos',
+    urlPublica:
+      texto('PUENTE_URL_PUBLICA')?.replace(/\/+$/, '') ??
+      `http://localhost:${numeroCon('PUENTE_PUERTO', 8787)}${texto('PUENTE_PREFIJO') ?? ''}`,
     clientesIngesta: clientesIngesta(),
     directorioIngesta: texto('INGESTA_DIRECTORIO') ?? 'datos/ingesta',
     maximoCuerpoBytes: numeroCon('INGESTA_MAXIMO_KB', 512) * 1024
