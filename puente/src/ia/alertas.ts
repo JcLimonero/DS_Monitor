@@ -141,7 +141,13 @@ export function detectarAlertas(
   // alerta abajo, con mas contexto; aqui se saltan.
   const nombresDominios = new Set(dominios.map((d) => d.nombre.toLowerCase()));
   for (const l of licencias) {
-    if (!l.renewsAt || nombresDominios.has(l.product.toLowerCase())) {
+    const producto = l.product.toLowerCase();
+    if (
+      !l.renewsAt ||
+      [...nombresDominios].some(
+        (n) => producto === n || producto.endsWith(` ${n}`)
+      )
+    ) {
       continue;
     }
     const dias = diasHasta(l.renewsAt, ahora);
@@ -150,7 +156,7 @@ export function detectarAlertas(
         id: `renueva:${llaveDeLicencia(l)}`,
         tipo: 'renueva',
         gravedad: 'aviso',
-        titulo: `${l.product} se renueva en ${dias === 0 ? 'hoy' : `${dias} días`}`,
+        titulo: `${l.product} se renueva ${dias === 0 ? 'hoy' : dias === 1 ? 'mañana' : `en ${dias} días`}`,
         detalle: `${dinero(l.cost as number, l.currency)}.`,
         accountId: l.accountId,
         producto: l.product
