@@ -1,4 +1,7 @@
+import { mkdirSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
 import { leerConfiguracion } from './config/entorno.js';
 import { AlmacenCorreo } from './correo/almacen-correo.js';
 import { AlmacenIngesta } from './ingesta/almacen.js';
@@ -33,6 +36,38 @@ try {
 
 const config = leerConfiguracion();
 const prefijo = process.env['PUENTE_PREFIJO'] ?? '';
+
+/**
+ * Si el directorio configurado no se puede crear (en Render, /var/data no
+ * existe hasta que se agrega el disco), se usa uno temporal y se avisa: es
+ * mejor guardar en un lugar que se pierde al reiniciar que no guardar nada.
+ */
+function directorioEscribible(preferido: string): string {
+  try {
+    mkdirSync(preferido, { recursive: true, mode: 0o700 });
+    return preferido;
+  } catch (error) {
+    const alterno = join(
+      tmpdir(),
+      'ds-monitor',
+      basename(preferido) || 'datos'
+    );
+    mkdirSync(alterno, { recursive: true, mode: 0o700 });
+    console.warn(
+      `[puente] no se puede escribir en ${preferido} (${error instanceof Error ? error.message : error}); se usa ${alterno}, que NO sobrevive a un reinicio. En Render, agrega el disco.`
+    );
+    return alterno;
+  }
+}
+
+config.directorioIngesta = directorioEscribible(
+  config.directorioIngesta ?? 'datos/ingesta'
+);
+config.directorioCorreo = directorioEscribible(config.directorioCorreo);
+config.directorioIntegraciones = directorioEscribible(
+  config.directorioIntegraciones
+);
+config.directorioDatos = directorioEscribible(config.directorioDatos);
 
 // Lo recibido se lee del disco antes de escuchar: si no, el portal vería el
 // buzón vacío entre el reinicio y el siguiente envío, que puede ser horas.
