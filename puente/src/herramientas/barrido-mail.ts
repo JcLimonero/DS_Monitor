@@ -304,7 +304,8 @@ async function principal(): Promise<void> {
     for (const evidencia of evidencias) {
       const monto = montoDelRecibo(
         await cuerpoDeMail(cuenta, evidencia.ultimo.uid),
-        evidencia.ultimo.remitente
+        evidencia.ultimo.remitente,
+        evidencia.moneda
       );
       if (monto) {
         evidencia.licencia.cost = monto.costo;

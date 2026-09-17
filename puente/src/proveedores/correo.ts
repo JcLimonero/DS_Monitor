@@ -51,11 +51,14 @@ interface ReglaLicencia {
   productoDesde?: number;
   periodo: Periodo;
   url?: string;
+  /** Moneda del recibo cuando el cuerpo solo trae "$" (MXN o USD). */
+  moneda?: string;
 }
 
 const REGLAS_LICENCIA: ReglaLicencia[] = [
   {
     id: 'microsoft',
+    moneda: 'USD',
     producto: 'Microsoft 365',
     remitente: /@microsoft\.com/i,
     asunto:
@@ -66,6 +69,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'emailjs',
+    moneda: 'USD',
     producto: 'EmailJS',
     remitente: /EmailJS.*@paddle\.com|@emailjs\.com/i,
     asunto: /suscripci[oó]n (.+)$|subscription (.+)$/i,
@@ -75,6 +79,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'google-workspace',
+    moneda: 'MXN',
     producto: 'Google Workspace',
     remitente: /@google\.com/i,
     asunto: /Google Workspace: tu factura de (\S+)|Google Workspace.*invoice/i,
@@ -83,6 +88,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'apple-developer',
+    moneda: 'USD',
     producto: 'Apple Developer Program',
     remitente: /@email\.apple\.com|@apple\.com/i,
     asunto: /Your Membership has been Renewed/i,
@@ -91,6 +97,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'apple-suscripciones',
+    moneda: 'MXN',
     producto: 'Suscripciones de Apple',
     remitente: /@email\.apple\.com|@apple\.com/i,
     asunto:
@@ -100,6 +107,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'sendgrid',
+    moneda: 'USD',
     producto: 'SendGrid',
     remitente: /@sendgrid\.com/i,
     asunto: /new invoice from SendGrid|payment to SendGrid was successful/i,
@@ -108,6 +116,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'aws',
+    moneda: 'USD',
     producto: 'Amazon Web Services',
     remitente: /@amazon\.com|@aws\.com|amazonaws\.com/i,
     asunto: /Billing Statement Available/i,
@@ -116,6 +125,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'zoom',
+    moneda: 'USD',
     producto: 'Zoom',
     remitente: /@zoom\.us/i,
     asunto: /Payment Processed|Your invoice is available|Tu factura/i,
@@ -124,6 +134,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'render',
+    moneda: 'USD',
     producto: 'Render',
     remitente: /@stripe\.com|@render\.com/i,
     asunto: /receipt from Render/i,
@@ -132,6 +143,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'gamma',
+    moneda: 'USD',
     producto: 'Gamma',
     remitente: /@stripe\.com|@gamma\.app/i,
     asunto: /receipt from Gamma/i,
@@ -139,6 +151,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'anthropic',
+    moneda: 'USD',
     producto: 'Claude',
     proveedor: 'anthropic',
     remitente: /@mail\.anthropic\.com|@anthropic\.com|@claude\.com/i,
@@ -148,6 +161,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'figma',
+    moneda: 'USD',
     producto: 'Figma',
     proveedor: 'figma',
     remitente: /@figma\.com/i,
@@ -158,6 +172,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'cursor',
+    moneda: 'USD',
     producto: 'Cursor',
     proveedor: 'cursor',
     remitente: /@cursor\.(com|sh)|Cursor.*@stripe\.com/i,
@@ -167,6 +182,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'vercel',
+    moneda: 'USD',
     producto: 'Vercel',
     proveedor: 'vercel',
     remitente: /@vercel\.com/i,
@@ -176,6 +192,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'canva',
+    moneda: 'MXN',
     producto: 'Canva Pro',
     remitente: /@ebanx\.com|@account\.canva\.com|@canva\.com/i,
     asunto: /de Canva|Tu factura de Canva|Canva.*(receipt|invoice)/i,
@@ -184,6 +201,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'godaddy',
+    moneda: 'MXN',
     producto: 'GoDaddy (dominios)',
     remitente: /@godaddy\.com/i,
     asunto: /Recibo de renovaci[oó]n|renewal receipt|Order Confirmation/i,
@@ -192,6 +210,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'neubox',
+    moneda: 'MXN',
     producto: 'Neubox (dominios y hosting)',
     remitente: /@neubox\.(net|com)/i,
     asunto: /Recibo de Pago|Domiciliaci[oó]n .* Activada/i,
@@ -200,6 +219,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'ionos',
+    moneda: 'MXN',
     producto: 'IONOS',
     remitente: /@ionos\.(mx|com)/i,
     asunto: /Tu factura \d+/i,
@@ -208,6 +228,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'starlink',
+    moneda: 'MXN',
     producto: 'Starlink',
     remitente: /@starlink\.com/i,
     asunto: /Recibo de Starlink|Starlink receipt/i,
@@ -216,6 +237,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'tello',
+    moneda: 'USD',
     producto: 'Tello',
     remitente: /@tello\.com/i,
     asunto: /Renovaci[oó]n completa/i,
@@ -223,6 +245,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'pillofon',
+    moneda: 'MXN',
     producto: 'PilloFon',
     remitente: /@pillofon\.mx/i,
     asunto: /Tu plan PilloFon vence hoy|renovado/i,
@@ -230,6 +253,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'mcafee',
+    moneda: 'MXN',
     producto: 'McAfee',
     remitente: /@(protect|notification)\.mcafee\.com|@mcafee\.com/i,
     asunto: /se ha renovado|renovaci[oó]n de la suscripci[oó]n a McAfee/i,
@@ -237,6 +261,7 @@ const REGLAS_LICENCIA: ReglaLicencia[] = [
   },
   {
     id: 'github',
+    moneda: 'USD',
     producto: 'GitHub',
     remitente: /@github\.com/i,
     asunto: /\[GitHub\] (Payment|Your receipt)|receipt for/i,
@@ -392,7 +417,8 @@ export async function leerCorreo(
       }
       const monto = montoDelRecibo(
         textoDe(await cliente.mensajeCrudo(uid, 131_072)),
-        remitente
+        remitente,
+        evidencia.moneda
       );
       if (monto) {
         evidencia.licencia.cost = monto.costo;
@@ -433,6 +459,8 @@ export interface LicenciaConEvidencia {
   licencia: LicenseUsage;
   /** El correo mas reciente que la sostiene. */
   ultimo: EncabezadoCorreo;
+  /** Moneda que usa ese proveedor cuando el recibo solo trae "$". */
+  moneda?: string;
 }
 
 export function detectarLicencias(
@@ -498,6 +526,7 @@ export function detectarLicenciasConEvidencia(
     }
     resultado.push({
       ultimo: acumulado.ultimo,
+      moneda: acumulado.regla.moneda,
       licencia: {
         id: `${accountId}-${llave.replace(/[^a-z0-9]+/gi, '-')}`,
         provider: acumulado.regla.proveedor ?? 'otro',
@@ -535,14 +564,15 @@ export function detectarLicenciasConEvidencia(
  */
 export function montoDelRecibo(
   texto: string,
-  remitente: string
+  remitente: string,
+  monedaSugerida?: string
 ): { costo: number; moneda: string } | undefined {
   const cantidades: { costo: number; moneda: string; indice: number }[] = [];
   const patron =
     /(MXN|USD|EUR|MX\$|US\$|\$|€)\s?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\d+(?:\.\d{2})?)(?:\s?(MXN|USD|EUR))?|(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s?(MXN|USD|EUR)\b/g;
-  const monedaPorOmision = /\.mx>?\s*$|@[^\s>]+\.mx\b/i.test(remitente)
-    ? 'MXN'
-    : 'USD';
+  const monedaPorOmision =
+    monedaSugerida ??
+    (/\.mx>?\s*$|@[^\s>]+\.mx\b/i.test(remitente) ? 'MXN' : 'USD');
   for (const m of texto.matchAll(patron)) {
     const numero = Number((m[2] ?? m[4] ?? '').replace(/,/g, ''));
     if (!Number.isFinite(numero) || numero <= 0) {

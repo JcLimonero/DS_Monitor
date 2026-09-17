@@ -311,7 +311,11 @@ export async function leerCorreoMicrosoft(
       mensaje.body?.contentType === 'html'
         ? sinEtiquetas(contenido)
         : contenido;
-    const monto = montoDelRecibo(texto, evidencia.ultimo.remitente);
+    const monto = montoDelRecibo(
+      texto,
+      evidencia.ultimo.remitente,
+      evidencia.moneda
+    );
     if (monto) {
       evidencia.licencia.cost = monto.costo;
       evidencia.licencia.currency = monto.moneda;
