@@ -126,11 +126,17 @@ const COMPANY_CLASS: Record<string, string> = {
             class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
             <pt-account-chip [accountId]="task().accountId" />
             <span [class]="statusClass()">{{ statusLabel() }}</span>
-            @if (task().assignee; as assignee) {
-              <span>{{ assignee.name }}</span>
-            } @else {
-              <span class="text-ink-subtle">Sin asignar</span>
-            }
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded px-1 transition hover:bg-surface-muted hover:text-ink"
+              [class.text-ink-subtle]="!task().assignee"
+              [attr.aria-label]="
+                task().assignee ? 'Cambiar responsable' : 'Asignar a alguien'
+              "
+              (click)="abrirAsignar()">
+              <pt-icon name="equipo" class="h-3.5 w-3.5" />
+              {{ task().assignee?.name ?? 'Sin asignar · asignar' }}
+            </button>
             @if (task().project; as project) {
               <span class="text-ink-subtle">{{ project }}</span>
             }
@@ -259,6 +265,19 @@ const COMPANY_CLASS: Record<string, string> = {
         </div>
 
         <div class="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
+            [attr.aria-label]="
+              open() ? 'Cerrar detalle' : 'Comentar, asignar o marcar'
+            "
+            [attr.aria-expanded]="open()"
+            (click)="open.set(!open())">
+            <pt-icon
+              name="siguiente"
+              class="h-4 w-4 transition"
+              [class.rotate-90]="open()" />
+          </button>
           @if (task().url; as url) {
             <a
               class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
@@ -337,6 +356,17 @@ export class TaskCardComponent {
    * sirve encima de lo que diga la fuente. Sin puente (demostración) solo
    * los propios cambian, en memoria.
    */
+  /** Abre la tarjeta y lleva el foco al selector de responsable. */
+  abrirAsignar(): void {
+    this.open.set(true);
+    setTimeout(() => {
+      const select = document.querySelector<HTMLSelectElement>(
+        `select[name="asignar-${CSS.escape(this.task().id)}"]`
+      );
+      select?.focus();
+    });
+  }
+
   toggle(): void {
     if (!this.ia.disponible) {
       if (this.task().origin === 'local') {
