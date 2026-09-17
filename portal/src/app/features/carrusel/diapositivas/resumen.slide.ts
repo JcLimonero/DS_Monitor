@@ -26,7 +26,9 @@ import {
 } from '../../../core/state/portal.selectors';
 import { PortalStore } from '../../../core/state/portal.store';
 import { plural } from '../../../core/util/text.util';
+import { IaService } from '../../../core/ia/ia.service';
 import { IconComponent } from '../../../ui/icon.component';
+import { IaResumenComponent } from '../../ia/ia-resumen.component';
 import { MoneyPipe, TimePipe } from '../../../ui/portal.pipes';
 
 /** Un aviso de la columna de atención: qué pasa y qué tan grave es. */
@@ -50,7 +52,7 @@ const SIGUIENTES = 4;
 @Component({
   selector: 'pt-slide-resumen',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, MoneyPipe, TimePipe],
+  imports: [IaResumenComponent, IconComponent, MoneyPipe, TimePipe],
   host: { class: 'flex h-full flex-col gap-5' },
   template: `
     <div class="grid shrink-0 grid-cols-2 gap-5 xl:grid-cols-4">
@@ -95,7 +97,14 @@ const SIGUIENTES = 4;
     </div>
 
     <div class="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3">
-      <section class="tv-card flex min-h-0 flex-col px-6 py-5 lg:col-span-2">
+      @if (ia.activa()) {
+        <section class="tv-card flex min-h-0 flex-col px-6 py-5">
+          <pt-ia-resumen [tv]="true" />
+        </section>
+      }
+      <section
+        class="tv-card flex min-h-0 flex-col px-6 py-5"
+        [class.lg:col-span-2]="!ia.activa()">
         <h2 class="tv-label shrink-0">Lo que sigue</h2>
         @if (siguientes().length > 0) {
           <ul
@@ -167,6 +176,11 @@ const SIGUIENTES = 4;
 })
 export class ResumenSlideComponent {
   private readonly store = inject(PortalStore);
+  readonly ia = inject(IaService);
+
+  constructor() {
+    this.ia.estado().subscribe({ error: () => undefined });
+  }
 
   readonly abiertos = computed(() => openTasks(this.store.tasks()).length);
   readonly vencidos = computed(() => overdueTasks(this.store.tasks()).length);

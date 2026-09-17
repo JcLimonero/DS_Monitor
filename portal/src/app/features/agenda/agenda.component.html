@@ -102,6 +102,9 @@
                 @if (meeting.notes; as notes) {
                   <p class="mt-1 text-xs text-ink-muted">{{ notes }}</p>
                 }
+                <div class="mt-2">
+                  <pt-ia-acuerdos [junta]="meeting" />
+                </div>
               </div>
 
               @if (meeting.joinUrl; as join) {

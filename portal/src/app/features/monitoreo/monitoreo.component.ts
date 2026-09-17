@@ -1,3 +1,4 @@
+import { IaDiagnosticosComponent } from '../ia/ia-diagnosticos.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -28,6 +29,7 @@ import { IntegracionConfigComponent } from '../configuracion/integracion-config.
   selector: 'pt-monitoreo',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    IaDiagnosticosComponent,
     EmptyStateComponent,
     FormsModule,
     IconComponent,

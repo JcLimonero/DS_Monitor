@@ -1,3 +1,4 @@
+import { IaAcuerdosComponent } from '../ia/ia-acuerdos.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -41,6 +42,7 @@ type RangeId = (typeof RANGES)[number]['id'];
   selector: 'pt-agenda',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    IaAcuerdosComponent,
     AccountChipComponent,
     EmptyStateComponent,
     FormsModule,

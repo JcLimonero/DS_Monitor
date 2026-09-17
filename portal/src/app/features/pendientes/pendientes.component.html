@@ -112,6 +112,20 @@
         }
       </select>
     </label>
+    <label>
+      <span class="mb-1 block text-xs font-medium text-ink-muted">Empresa</span>
+      <select
+        class="field"
+        [ngModel]="company()"
+        (ngModelChange)="company.set($event)"
+        name="filtro-empresa">
+        <option value="todas">Todas</option>
+        @for (empresa of empresas; track empresa) {
+          <option [value]="empresa">{{ empresa }}</option>
+        }
+        <option value="ninguna">Sin empresa</option>
+      </select>
+    </label>
     <label class="flex items-center gap-2 sm:pt-6">
       <input
         type="checkbox"

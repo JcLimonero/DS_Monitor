@@ -1,3 +1,4 @@
+import { SemanaConfigComponent } from '../ia/semana-config.component';
 import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -12,6 +13,7 @@ import { EmisoresConfigComponent } from './emisores-config.component';
   selector: 'pt-equipo-config',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    SemanaConfigComponent,
     AccountChipComponent,
     DayPipe,
     DecimalPipe,

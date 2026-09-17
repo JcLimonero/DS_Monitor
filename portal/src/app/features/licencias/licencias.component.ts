@@ -1,3 +1,4 @@
+import { IaAlertasComponent } from '../ia/ia-alertas.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -38,6 +39,7 @@ import { LicenciasConfigComponent } from '../configuracion/licencias-config.comp
   selector: 'pt-licencias',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    IaAlertasComponent,
     AccountChipComponent,
     DayPipe,
     EmptyStateComponent,

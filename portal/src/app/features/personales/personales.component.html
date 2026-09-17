@@ -60,6 +60,21 @@
         [ngModel]="newProject()"
         (ngModelChange)="newProject.set($event)" />
     </label>
+    <label>
+      <span class="mb-1 block text-xs font-medium text-ink-muted"
+        >Empresa</span
+      >
+      <select
+        class="field"
+        name="empresa"
+        [ngModel]="newCompany()"
+        (ngModelChange)="newCompany.set($event)">
+        <option value="">Sin empresa</option>
+        @for (empresa of empresas; track empresa) {
+          <option [value]="empresa">{{ empresa }}</option>
+        }
+      </select>
+    </label>
     <button type="submit" class="btn btn-primary" [disabled]="!canAdd()">
       <pt-icon name="mas" class="h-4 w-4" />
       Agregar

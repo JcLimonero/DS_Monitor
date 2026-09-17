@@ -245,3 +245,35 @@ export function licenciasVercel(
     }
   ];
 }
+
+interface EventoConstruccion {
+  type?: string;
+  created?: number;
+  payload?: { text?: string; info?: { type?: string } };
+  text?: string;
+}
+
+/**
+ * Las ultimas lineas de la bitacora de construccion de un despliegue, para
+ * diagnosticar por que fallo. Se piden solo las ultimas: el error casi
+ * siempre esta al final.
+ */
+export async function bitacoraDeConstruccion(
+  config: ConfiguracionVercel,
+  idDespliegue: string,
+  lineas = 80
+): Promise<string[]> {
+  const eventos = await pedirJson<EventoConstruccion[]>(
+    'Vercel',
+    conParametros(`${BASE}/v3/deployments/${idDespliegue}/events`, {
+      builds: '1',
+      limit: '500',
+      teamId: config.teamId
+    }),
+    { encabezados: { authorization: `Bearer ${config.token}` } }
+  );
+  return (Array.isArray(eventos) ? eventos : [])
+    .map((e) => (e.payload?.text ?? e.text ?? '').replace(/\s+$/, ''))
+    .filter((t) => t.length > 0)
+    .slice(-lineas);
+}

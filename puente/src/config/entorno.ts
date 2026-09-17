@@ -239,6 +239,8 @@ export interface Configuracion {
   directorioIngesta?: string;
   /** Tope del cuerpo de un envio, en bytes. */
   maximoCuerpoBytes: number;
+  /** Cada cuantos minutos el puente relee los buzones por su cuenta (0 apaga). */
+  refrescoCorreoMinutos: number;
 }
 
 /**
@@ -550,6 +552,7 @@ function leer(): Configuracion {
       `http://localhost:${numeroCon('PUENTE_PUERTO', 8787)}${texto('PUENTE_PREFIJO') ?? ''}`,
     clientesIngesta: clientesIngesta(),
     directorioIngesta: texto('INGESTA_DIRECTORIO') ?? 'datos/ingesta',
-    maximoCuerpoBytes: numeroCon('INGESTA_MAXIMO_KB', 512) * 1024
+    maximoCuerpoBytes: numeroCon('INGESTA_MAXIMO_KB', 512) * 1024,
+    refrescoCorreoMinutos: numeroCon('CORREO_REFRESCO_MINUTOS', 15)
   };
 }

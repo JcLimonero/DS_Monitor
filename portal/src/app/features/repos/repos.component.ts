@@ -1,3 +1,4 @@
+import { IaReposComponent } from '../ia/ia-repos.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -45,6 +46,7 @@ import { IntegracionConfigComponent } from '../configuracion/integracion-config.
   selector: 'pt-repos',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    IaReposComponent,
     EmptyStateComponent,
     IconComponent,
     PageHeaderComponent,

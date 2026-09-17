@@ -1,0 +1,118 @@
+import type { ConfiguracionIa } from '../config/entorno.js';
+import { ErrorProveedor } from '../nucleo/errores.js';
+
+/**
+ * El unico lugar que habla con el modelo.
+ *
+ * Va por la API de OpenRouter (formato de chat de OpenAI) para poder cambiar
+ * de modelo desde la configuracion sin tocar codigo. Todo lo que el portal
+ * resuelve con IA —clasificar correo, resumir el dia, sacar acuerdos de una
+ * junta, redactar— pasa por aqui, asi que el costo se controla en un solo
+ * sitio: temperatura cero, salida acotada y una sola llamada por pregunta.
+ */
+
+export interface Pregunta {
+  sistema: string;
+  usuario: string;
+  /** Pedir JSON (el modelo lo respeta mejor con el response_format). */
+  json?: boolean;
+  maxTokens?: number;
+}
+
+interface RespuestaChat {
+  choices?: { message?: { content?: string } }[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
+  error?: { message?: string };
+}
+
+/** Cuanto se ha gastado desde que arranco el proceso, para la bitacora. */
+export const consumo = { llamadas: 0, entrada: 0, salida: 0 };
+
+export async function preguntar(
+  config: ConfiguracionIa,
+  pregunta: Pregunta
+): Promise<string> {
+  const respuesta = await fetch(
+    'https://openrouter.ai/api/v1/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${config.apiKey}`,
+        'content-type': 'application/json',
+        'http-referer': 'https://portal.dealersolutions.com.mx',
+        'x-title': 'DS Monitor'
+      },
+      body: JSON.stringify({
+        model: config.modelo,
+        temperature: 0,
+        max_tokens: pregunta.maxTokens ?? 2000,
+        ...(pregunta.json ? { response_format: { type: 'json_object' } } : {}),
+        messages: [
+          { role: 'system', content: pregunta.sistema },
+          { role: 'user', content: pregunta.usuario }
+        ]
+      })
+    }
+  );
+  const datos = (await respuesta.json().catch(() => ({}))) as RespuestaChat;
+  if (!respuesta.ok) {
+    throw new ErrorProveedor(
+      'openrouter',
+      `respondió ${respuesta.status}: ${(datos.error?.message ?? '').slice(0, 200)}`,
+      respuesta.status === 401 || respuesta.status === 402 ? 503 : 502
+    );
+  }
+  consumo.llamadas += 1;
+  consumo.entrada += datos.usage?.prompt_tokens ?? 0;
+  consumo.salida += datos.usage?.completion_tokens ?? 0;
+  return datos.choices?.[0]?.message?.content ?? '';
+}
+
+/** Saca el objeto JSON aunque el modelo lo envuelva en texto o en ``` */
+export function comoJson<T>(texto: string): T {
+  const inicio = texto.indexOf('{');
+  const fin = texto.lastIndexOf('}');
+  if (inicio === -1 || fin === -1) {
+    throw new ErrorProveedor('openrouter', 'no devolvió JSON');
+  }
+  try {
+    return JSON.parse(texto.slice(inicio, fin + 1)) as T;
+  } catch {
+    throw new ErrorProveedor(
+      'openrouter',
+      'el JSON que devolvió no se pudo leer'
+    );
+  }
+}
+
+/** Una cadena limpia o nada. */
+export function texto1(valor: unknown): string | undefined {
+  return typeof valor === 'string' && valor.trim() ? valor.trim() : undefined;
+}
+
+/** Una fecha YYYY-MM-DD del modelo, como ISO al mediodia UTC, o nada. */
+export function fechaDe(valor: unknown): string | undefined {
+  return typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}/.test(valor)
+    ? new Date(`${valor.slice(0, 10)}T12:00:00Z`).toISOString()
+    : undefined;
+}
+
+/** Fecha y hora legibles en la zona del equipo. */
+export function enHorario(iso: string, conHora = true): string {
+  return new Date(iso).toLocaleString('es-MX', {
+    timeZone: 'America/Mexico_City',
+    ...(conHora
+      ? { dateStyle: 'medium', timeStyle: 'short' }
+      : { dateStyle: 'medium' })
+  });
+}
+
+export const EMPRESAS = [
+  'Itech Dev',
+  'Dealer Solutions',
+  'NexusQTech',
+  'OperativAI'
+] as const;
+
+export const CONTEXTO_EMPRESAS =
+  'Trabajas para un grupo con cuatro empresas: Itech Dev (desarrollo de software a la medida), Dealer Solutions (software para agencias automotrices), NexusQTech (integraciones y tecnología para grupos automotrices) y OperativAI (agentes de IA). Escribes en español de México, directo y sin adornos.';

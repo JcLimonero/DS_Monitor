@@ -1,5 +1,11 @@
 <pt-page-header title="Licencias y consumo" [subtitle]="subtitle()" />
 
+<div class="mb-4">
+  <pt-ia-alertas
+    titulo="Alertas de licencias"
+    [tipos]="['sube', 'duplicada', 'sin_uso', 'renueva']" />
+</div>
+
 @if (manuales().length > 0) {
   <p
     class="mb-4 flex items-start gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-ink-muted">

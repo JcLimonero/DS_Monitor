@@ -10,8 +10,11 @@ import {
   Configurador
 } from './integraciones/almacen-integraciones.js';
 import { Cache } from './nucleo/cache.js';
+import { programar } from './nucleo/programador.js';
+import type { Programable } from './servidor/rutas-ia.js';
 import {
   abrirDatos,
+  cargarDatos,
   construirRutas,
   estadoDeConexiones
 } from './servidor/rutas.js';
@@ -88,15 +91,10 @@ const configurador = new Configurador(almacenIntegraciones);
 
 // Equipo, dominios y sesiones: listas chicas en JSON, una por archivo.
 const datos = abrirDatos(config.directorioDatos);
-await Promise.all([
-  datos.equipo.cargar(),
-  datos.dominios.cargar(),
-  datos.sesiones.cargar(),
-  datos.personales.cargar(),
-  datos.emisores.cargar(),
-  datos.anotaciones.cargar(),
-  datos.registroCorreo.cargar()
-]);
+await cargarDatos(datos);
+
+// Lo que corre solo: releer buzones, el correo del lunes, el resumen del dia.
+const programables: Programable[] = [];
 
 const servidor = createServer(
   manejar(
@@ -106,7 +104,8 @@ const servidor = createServer(
       almacen,
       almacenCorreo,
       { almacen: almacenIntegraciones, configurador },
-      datos
+      datos,
+      programables
     ),
     {
       origenesPermitidos: config.origenesPermitidos,
@@ -148,6 +147,16 @@ servidor.listen(config.puerto, () => {
       `[puente]   · ${estado.conexion} apagada, falta ${estado.faltante}`
     );
   }
+  programar(programables);
+  console.log(
+    `[puente] tareas programadas: ${programables
+      .filter((t) => t.cadaMinutos > 0)
+      .map((t) => `${t.nombre} cada ${t.cadaMinutos} min`)
+      .join(', ')}` +
+      (configurador.config().ia
+        ? ` · IA activa (${configurador.config().ia?.modelo})`
+        : ' · IA apagada: sin OPENROUTER_API_KEY')
+  );
   if (config.correos.length > 0 || buzonesGuardados > 0) {
     console.log(
       `[puente] buzones: ${config.correos.length} en CORREO_CUENTAS, ${buzonesGuardados} guardados desde Ajustes` +

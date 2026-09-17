@@ -13,11 +13,21 @@ import {
   validarDominio,
   type Dominio
 } from '../datos/dominios.js';
-import type { Person, TaskItem } from '../nucleo/contrato.js';
+import type {
+  LicenseUsage,
+  Meeting,
+  Person,
+  TaskItem
+} from '../nucleo/contrato.js';
+import type { Fuentes } from '../ia/tablero.js';
 import { anotar, type Anotaciones } from '../pendientes/anotaciones.js';
 import { registrar, type Registro } from '../pendientes/registro.js';
 import { enviarPorEmailJs } from '../acceso/acceso.js';
-import type { ClienteIngesta } from '../config/entorno.js';
+import type {
+  ClienteIngesta,
+  ConfiguracionOdoo,
+  ConfiguracionVercel
+} from '../config/entorno.js';
 import {
   AlmacenIntegraciones,
   Configurador
@@ -65,6 +75,12 @@ import {
   licenciasVercel
 } from '../proveedores/vercel.js';
 import { Redireccion, Router, type Contexto } from './router.js';
+import {
+  registrarRutasIa,
+  type DatosIa,
+  type Programable,
+  type ServiciosIa
+} from './rutas-ia.js';
 
 /**
  * Las rutas del contrato que consume el portal.
@@ -185,6 +201,23 @@ export interface Datos {
   registroCorreo: AlmacenJson<Registro>;
   /** Lo que la IA ya dijo de cada correo, para no preguntarle dos veces. */
   iaCorreo: AlmacenJson<Record<string, Clasificacion>>;
+  /** Lo demas que la IA genera y se guarda para no repetir la llamada. */
+  iaResumen: DatosIa['iaResumen'];
+  iaAlertas: DatosIa['iaAlertas'];
+  costosHistorial: DatosIa['costosHistorial'];
+  iaAcuerdos: DatosIa['iaAcuerdos'];
+  iaCrm: DatosIa['iaCrm'];
+  iaDiagnosticos: DatosIa['iaDiagnosticos'];
+  iaRepos: DatosIa['iaRepos'];
+  iaSemana: DatosIa['iaSemana'];
+  iaPendientes: DatosIa['iaPendientes'];
+}
+
+/** Lee todos los almacenes del disco; se llama una vez al arrancar. */
+export async function cargarDatos(datos: Datos): Promise<void> {
+  await Promise.all(
+    Object.values(datos).map((almacen) => (almacen as AlmacenJson<unknown>).cargar())
+  );
 }
 
 export function abrirDatos(directorio: string): Datos {
@@ -211,7 +244,22 @@ export function abrirDatos(directorio: string): Datos {
     iaCorreo: new AlmacenJson<Record<string, Clasificacion>>(
       join(directorio, 'ia-correo.json'),
       {}
-    )
+    ),
+    iaResumen: new AlmacenJson(join(directorio, 'ia-resumen.json'), null),
+    iaAlertas: new AlmacenJson(join(directorio, 'ia-alertas.json'), {}),
+    costosHistorial: new AlmacenJson(
+      join(directorio, 'licencias-historial.json'),
+      {}
+    ),
+    iaAcuerdos: new AlmacenJson(join(directorio, 'ia-acuerdos.json'), {}),
+    iaCrm: new AlmacenJson(join(directorio, 'ia-crm.json'), {}),
+    iaDiagnosticos: new AlmacenJson(
+      join(directorio, 'ia-diagnosticos.json'),
+      {}
+    ),
+    iaRepos: new AlmacenJson(join(directorio, 'ia-repos.json'), null),
+    iaSemana: new AlmacenJson(join(directorio, 'ia-semana.json'), {}),
+    iaPendientes: new AlmacenJson(join(directorio, 'ia-pendientes.json'), {})
   };
 }
 
@@ -324,11 +372,18 @@ export function construirRutas(
     almacen: AlmacenIntegraciones;
     configurador: Configurador;
   },
-  datos = abrirDatos(configInicial.directorioDatos)
+  datos = abrirDatos(configInicial.directorioDatos),
+  /** Donde se apuntan las tareas que corren solas (index.ts las programa). */
+  programables: Programable[] = []
 ): Router {
   const router = new Router();
   const ttl = configInicial.cacheSegundos;
   const acceso = new Acceso(datos.sesiones);
+  // Se asigna mas abajo, cuando ya existen las fuentes que necesita; las
+  // rutas lo usan en tiempo de peticion, cuando ya esta.
+  let ia: ServiciosIa | undefined;
+  const conIa = (tareas: TaskItem[]) =>
+    ia ? ia.conVeredictos(tareas) : Promise.resolve(tareas);
   const hayOps = () =>
     datos.emisores
       .leer()
@@ -565,7 +620,7 @@ export function construirRutas(
   // --- Pendientes personales: se guardan completos en cada cambio ---
 
   router.get('/personales/tasks', async () =>
-    conNotas(datos.personales.leer())
+    conNotas(await conIa(datos.personales.leer()))
   );
 
   router.post('/personales/guardar', async (contexto) => {
@@ -599,6 +654,7 @@ export function construirRutas(
         accountId: 'mios',
         origin: 'local',
         project: texto(t['project']),
+        company: texto(t['company']),
         tags: Array.isArray(t['tags'])
           ? (t['tags'] as unknown[]).filter(
               (x): x is string => typeof x === 'string'
@@ -1295,22 +1351,78 @@ export function construirRutas(
   // empujan con su token (POST /ingesta/pendientes). Aqui se juntan todos los
   // emisores de pendientes que no son un buzon de correo.
 
-  router.get('/ops/pendientes/tasks', async () => {
+  const pendientesOps = (): TaskItem[] => {
     const buzones = new Set(buzones_(cfg(), almacenCorreo).map((c) => c.id));
-    return conNotas(
-      todosLosEmisores()
-        .filter((e) => e.tipos.includes('pendientes') && !buzones.has(e.nombre))
-        .flatMap(
-          (e) => almacen.leer<TaskItem>('pendientes', e.nombre)?.elementos ?? []
-        )
-    );
-  });
+    return todosLosEmisores()
+      .filter((e) => e.tipos.includes('pendientes') && !buzones.has(e.nombre))
+      .flatMap(
+        (e) => almacen.leer<TaskItem>('pendientes', e.nombre)?.elementos ?? []
+      );
+  };
+
+  router.get('/ops/pendientes/tasks', async () =>
+    conNotas(await conIa(pendientesOps()))
+  );
+
 
   // --- Anotar un pendiente: comentario, hecho, asignacion ---
   //
   // Vale para cualquier pendiente, venga del correo, de Ops, de Odoo o de los
   // personales. Al asignar, la persona recibe un correo con el detalle por
   // EmailJS (el mismo servicio del acceso).
+
+  /**
+   * Asigna un pendiente a alguien del equipo y le avisa por correo. Devuelve
+   * el aviso (que se mando, o por que no) para enseñarlo en el portal.
+   */
+  const asignarPendiente = async (
+    id: string,
+    quien: string,
+    tarea: Partial<TaskItem>,
+    sesion: Sesion | undefined
+  ): Promise<string | undefined> => {
+    const todas = datos.anotaciones.leer();
+    const nota = todas[id] ?? { comentarios: [], actualizadoEn: '' };
+    const buscado = quien.trim().toLowerCase();
+    const persona = (await equipoCompleto()).find(
+      (p) => p.id.toLowerCase() === buscado || p.email?.toLowerCase() === buscado
+    );
+    if (!persona) {
+      throw new ErrorPuente(`No hay nadie en el equipo con "${quien}".`, 400);
+    }
+    nota.asignado = persona;
+    nota.actualizadoEn = new Date().toISOString();
+    await datos.anotaciones.escribir({ ...todas, [id]: nota });
+    const config = cfg();
+    if (!persona.email) {
+      return 'Asignado; esa persona no tiene correo en el equipo, no se le avisó.';
+    }
+    if (!config.acceso) {
+      return 'Asignado; para avisar por correo configura el acceso (EmailJS) en Equipo.';
+    }
+    const t = tarea;
+    const html =
+      `<p>Te asignaron un pendiente en <strong>DS Monitor</strong>${sesion ? ` (${sesion.correo})` : ''}:</p>` +
+      `<p style="font-size:20px"><strong>${escapar(t.title ?? id)}</strong></p>` +
+      (t.description ? `<p>${escapar(t.description)}</p>` : '') +
+      `<p>Prioridad: ${escapar(t.priority ?? 'media')}` +
+      (t.dueDate ? ` · Vence: ${new Date(t.dueDate).toLocaleDateString('es-MX', { dateStyle: 'long', timeZone: 'America/Mexico_City' })}` : '') +
+      (t.project ? ` · Proyecto: ${escapar(t.project)}` : '') +
+      `</p>` +
+      (nota.comentarios.length > 0
+        ? `<p>Comentarios:</p><ul>${nota.comentarios.map((c) => `<li>${escapar(c.text)}</li>`).join('')}</ul>`
+        : '') +
+      `<p><a href="${config.urlPublica.replace(/\/api\/portal$/, '')}/pendientes">Abrir en DS Monitor</a></p>`;
+    try {
+      await enviarPorEmailJs(config.acceso, persona.email, '', false, {
+        titulo: `Pendiente asignado: ${t.title ?? id}`,
+        html
+      });
+      return `Se avisó por correo a ${persona.email}.`;
+    } catch (error) {
+      return `Asignado, pero no se pudo mandar el correo: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  };
 
   router.post('/pendientes/anotar', async (contexto) => {
     exigirAdmin(contexto, cfg(), acceso);
@@ -1338,58 +1450,162 @@ export function construirRutas(
     if (typeof cuerpo.hecho === 'boolean') {
       nota.hecho = cuerpo.hecho;
     }
-    let aviso: string | undefined;
-    if (cuerpo.asignarA !== undefined) {
-      const quien = (cuerpo.asignarA ?? '').trim().toLowerCase();
-      if (!quien) {
-        nota.asignado = undefined;
-      } else {
-        const persona = (await equipoCompleto()).find(
-          (p) => p.id.toLowerCase() === quien || p.email?.toLowerCase() === quien
-        );
-        if (!persona) {
-          throw new ErrorPuente(`No hay nadie en el equipo con "${quien}".`, 400);
-        }
-        nota.asignado = persona;
-        const config = cfg();
-        if (persona.email && config.acceso) {
-          const t = cuerpo.tarea ?? {};
-          const html =
-            `<p>Te asignaron un pendiente en <strong>DS Monitor</strong>${sesion ? ` (${sesion.correo})` : ''}:</p>` +
-            `<p style="font-size:20px"><strong>${escapar(t.title ?? id)}</strong></p>` +
-            (t.description ? `<p>${escapar(t.description)}</p>` : '') +
-            `<p>Prioridad: ${escapar(t.priority ?? 'media')}` +
-            (t.dueDate ? ` · Vence: ${new Date(t.dueDate).toLocaleDateString('es-MX', { dateStyle: 'long', timeZone: 'America/Mexico_City' })}` : '') +
-            (t.project ? ` · Proyecto: ${escapar(t.project)}` : '') +
-            `</p>` +
-            (nota.comentarios.length > 0
-              ? `<p>Comentarios:</p><ul>${nota.comentarios.map((c) => `<li>${escapar(c.text)}</li>`).join('')}</ul>`
-              : '') +
-            `<p><a href="${config.urlPublica.replace(/\/api\/portal$/, '')}/pendientes">Abrir en DS Monitor</a></p>`;
-          try {
-            await enviarPorEmailJs(
-              config.acceso,
-              persona.email,
-              '',
-              false,
-              { titulo: `Pendiente asignado: ${t.title ?? id}`, html }
-            );
-            aviso = `Se avisó por correo a ${persona.email}.`;
-          } catch (error) {
-            aviso = `Asignado, pero no se pudo mandar el correo: ${error instanceof Error ? error.message : String(error)}`;
-          }
-        } else if (!persona.email) {
-          aviso = 'Asignado; esa persona no tiene correo en el equipo, no se le avisó.';
-        } else {
-          aviso = 'Asignado; para avisar por correo configura el acceso (EmailJS) en Equipo.';
-        }
-      }
-    }
     nota.actualizadoEn = ahora;
     await datos.anotaciones.escribir({ ...todas, [id]: nota });
+    let aviso: string | undefined;
+    if (cuerpo.asignarA !== undefined) {
+      const quien = (cuerpo.asignarA ?? '').trim();
+      if (!quien) {
+        const actual = datos.anotaciones.leer();
+        await datos.anotaciones.escribir({
+          ...actual,
+          [id]: { ...(actual[id] ?? nota), asignado: undefined, actualizadoEn: ahora }
+        });
+      } else {
+        aviso = await asignarPendiente(id, quien, cuerpo.tarea ?? {}, sesion);
+      }
+    }
     cache.olvidar();
-    return { ok: true, anotacion: nota, aviso };
+    return { ok: true, anotacion: datos.anotaciones.leer()[id], aviso };
   });
+
+  // --- Inteligencia artificial: fuentes del tablero y rutas /ia ---
+  //
+  // El tablero se arma aqui, con las mismas funciones que sirven cada ruta,
+  // para que el resumen del dia y el correo semanal vean lo mismo que el
+  // portal. Cada fuente es tolerante: la que no este configurada da vacio.
+
+  const buzonesLegibles = () =>
+    buzones_(cfg(), almacenCorreo).map((cuenta) => ({
+      cuenta,
+      metodo: metodoDe(cuenta, cfg())
+    }));
+
+  const porBuzon = async <T>(
+    parte: 'licencias' | 'pendientes' | 'juntas',
+    tipo: TipoIngesta
+  ): Promise<T[]> => {
+    const salida: T[] = [];
+    for (const { cuenta, metodo } of buzonesLegibles()) {
+      try {
+        if (metodo === 'graph' || metodo === 'imap') {
+          salida.push(...((await leido(cuenta))[parte] as T[]));
+        } else if (metodo === 'envio') {
+          salida.push(...(recibidoDe(cuenta, tipo) as T[]));
+        }
+      } catch (error) {
+        console.warn(
+          `[puente] tablero: sin ${parte} de "${cuenta.id}": ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+    return salida;
+  };
+
+  const siHay = async <T>(
+    hay: unknown,
+    f: () => Promise<T[]>
+  ): Promise<T[]> => (hay ? f() : []);
+
+  const fuentes: Fuentes = {
+    pendientes: async () => {
+      const correo = await porBuzon<TaskItem>('pendientes', 'pendientes');
+      const odooTareas = await siHay(cfg().odoo, async () =>
+        actividadesComoPendientes(
+          (await odoo()).actividades,
+          (cfg().odoo as ConfiguracionOdoo).accountId
+        )
+      ).catch(() => [] as TaskItem[]);
+      return conNotas([
+        ...correo,
+        ...datos.personales.leer(),
+        ...pendientesOps(),
+        ...odooTareas
+      ]);
+    },
+    juntas: () => porBuzon<Meeting>('juntas', 'juntas'),
+    licencias: async () => [
+      ...(await porBuzon<LicenseUsage>('licencias', 'licencias')),
+      ...dominiosComoLicencias(datos.dominios.leer(), 'dominios'),
+      ...(await siHay(cfg().anthropic, () =>
+        cache.obtener('licencias:anthropic', ttl.licencias, () =>
+          licenciasAnthropic(exigir(cfg().anthropic, 'anthropic'))
+        )
+      ).catch(() => [])),
+      ...(await siHay(cfg().cursor, () =>
+        cache.obtener('licencias:cursor', ttl.licencias, () =>
+          licenciasCursor(exigir(cfg().cursor, 'cursor'))
+        )
+      ).catch(() => [])),
+      ...(await siHay(cfg().figma, () =>
+        cache.obtener('licencias:figma', ttl.licencias, () =>
+          licenciasFigma(exigir(cfg().figma, 'figma'))
+        )
+      ).catch(() => [])),
+      ...(cfg().vercel ? licenciasVercel(cfg().vercel as ConfiguracionVercel) : [])
+    ],
+    dominios: () => datos.dominios.leer(),
+    monitoreo: () =>
+      siHay(cfg().monitoreo, () =>
+        cache.obtener('monitoreo:destinos', ttl.monitoreo, () =>
+          destinosMonitoreados(exigir(cfg().monitoreo, 'monitoreo'))
+        )
+      ),
+    despliegues: () =>
+      siHay(cfg().vercel, () =>
+        cache.obtener('vercel:despliegues', ttl.despliegues, () =>
+          desplieguesVercel(exigir(cfg().vercel, 'vercel'))
+        )
+      ),
+    repos: () =>
+      siHay(cfg().github, () =>
+        cache.obtener('github:repos', ttl.repos, () =>
+          reposGithub(exigir(cfg().github, 'github'))
+        )
+      ),
+    equipo: equipoCompleto
+  };
+
+  ia = registrarRutasIa(router, {
+    cfg,
+    datos,
+    exigirAdmin: (contexto) => exigirAdmin(contexto, cfg(), acceso),
+    sesionDe: (contexto) => acceso.sesionDe(tokenDe(contexto)),
+    olvidarCache: () => cache.olvidar(),
+    fuentes,
+    pendientesDeCorreo: () =>
+      conNotas(Object.values(datos.registroCorreo.leer()).flat()),
+    asignar: asignarPendiente,
+    dominios: () => datos.dominios.leer()
+  });
+
+  // Releer los buzones cada tanto, sin que nadie abra el portal: asi los
+  // pendientes nuevos se registran (y la IA los clasifica) a su hora.
+  programables.push(
+    {
+      nombre: 'buzones',
+      cadaMinutos: configInicial.refrescoCorreoMinutos,
+      correr: async () => {
+        for (const { cuenta, metodo } of buzonesLegibles()) {
+          if (metodo !== 'graph' && metodo !== 'imap') {
+            continue;
+          }
+          cache.olvidar(`correo:${cuenta.id}`);
+          try {
+            const lectura = await leido(cuenta);
+            console.log(
+              `[puente] buzón "${cuenta.id}": ${lectura.leidos} correos, ${lectura.pendientes.length} pendientes registrados`
+            );
+          } catch (error) {
+            console.warn(
+              `[puente] buzón "${cuenta.id}" no se pudo releer: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        }
+      }
+    },
+    ...ia.programables
+  );
 
   // --- Lo que se recibe en lugar de ir a buscarlo ---
 

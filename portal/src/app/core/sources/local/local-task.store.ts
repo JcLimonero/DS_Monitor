@@ -11,6 +11,8 @@ export interface NewLocalTask {
   priority: TaskPriority;
   dueDate?: string;
   project?: string;
+  company?: string;
+  description?: string;
 }
 
 /**
@@ -74,6 +76,8 @@ export class LocalTaskStore implements TaskSource {
       accountId: this.accountId,
       origin: 'local',
       project: input.project?.trim() || undefined,
+      company: input.company?.trim() || undefined,
+      description: input.description?.trim() || undefined,
       tags: [],
       updatedAt: now
     };
@@ -98,6 +102,11 @@ export class LocalTaskStore implements TaskSource {
 
   remove(id: string): void {
     this.commit(this.tasksSignal().filter((task) => task.id !== id));
+  }
+
+  /** La siguiente lectura vuelve al servidor (algo cambió allá: una anotación). */
+  invalidar(): void {
+    this.cargado = false;
   }
 
   private commit(tasks: TaskItem[]): void {

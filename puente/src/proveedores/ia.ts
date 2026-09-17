@@ -1,6 +1,13 @@
 import type { ConfiguracionIa } from '../config/entorno.js';
+import {
+  CONTEXTO_EMPRESAS,
+  EMPRESAS,
+  comoJson,
+  fechaDe,
+  preguntar,
+  texto1
+} from '../ia/modelo.js';
 import type { TaskItem, TaskPriority } from '../nucleo/contrato.js';
-import { ErrorProveedor } from '../nucleo/errores.js';
 import type { CandidatoIa } from './correo.js';
 import { descripcionDeCorreo } from './correo.js';
 
@@ -9,23 +16,24 @@ import { descripcionDeCorreo } from './correo.js';
  *
  * Las reglas de `correo.ts` reconocen lo previsible (recibos, avisos de
  * vencimiento). Todo lo demas que llega —un cliente que pide algo, un
- * proveedor que espera respuesta, un colega que delega— lo lee un modelo por
- * OpenRouter y decide si es un pendiente, para que empresa, con que prioridad
- * y para cuando. Cada correo se analiza una sola vez: el resultado se guarda
- * por identificador y solo se mandan los nuevos.
- *
- * Va por la API de OpenRouter (compatible con el formato de chat de OpenAI)
- * para poder cambiar de modelo sin tocar codigo; el modelo por omision es
- * Claude Haiku 4.5, que para clasificar rinde igual que uno grande y cuesta
- * una fraccion.
+ * proveedor que espera respuesta, un colega que delega— lo lee el modelo y
+ * decide si es un pendiente, para que empresa, con que prioridad y para
+ * cuando; y si el correo parece un prospecto o una queja de un cliente, lo
+ * propone para el CRM. Cada correo se analiza una sola vez: el resultado se
+ * guarda por identificador y solo se mandan los nuevos.
  */
 
-export const EMPRESAS = [
-  'Itech Dev',
-  'Dealer Solutions',
-  'NexusQTech',
-  'OperativAI'
-] as const;
+export { EMPRESAS };
+
+export interface SugerenciaCrm {
+  tipo: 'oportunidad' | 'queja';
+  /** Nombre corto para la oportunidad o el caso. */
+  nombre: string;
+  /** Persona o empresa que escribe. */
+  contacto?: string;
+  correo?: string;
+  resumen: string;
+}
 
 export interface Clasificacion {
   id: string;
@@ -38,22 +46,21 @@ export interface Clasificacion {
   empresa?: string;
   /** Por que lo considero pendiente, en una frase. */
   motivo?: string;
+  crm?: SugerenciaCrm;
   analizadoEn: string;
 }
 
-const PROMPT = `Eres el asistente de operaciones de un grupo con cuatro empresas: Itech Dev (desarrollo de software), Dealer Solutions (software para agencias automotrices), NexusQTech (integraciones y tecnología para grupos automotrices) y OperativAI (agentes de IA).
+const PROMPT = `${CONTEXTO_EMPRESAS}
 
 Te doy correos recibidos (remitente, destinatarios, asunto, fecha y un extracto). Para cada uno decide si genera un PENDIENTE para quien recibe el correo: algo que hay que hacer, responder, pagar, revisar, aprobar o entregar. NO son pendientes: publicidad, boletines, notificaciones automáticas informativas, confirmaciones de algo ya hecho, conversaciones que no piden nada.
 
+Además, si el correo lo escribe un cliente o prospecto (no un proveedor ni un colega) y pide una cotización, información de un producto, una demostración, o se queja de un servicio, propón un registro para el CRM.
+
 Responde SOLO con JSON válido, sin texto alrededor, con esta forma:
-{"correos":[{"id":"...","esPendiente":true,"titulo":"verbo + objeto, máx. 80 caracteres","resumen":"1 o 2 frases: qué piden, quién y contexto","prioridad":"baja|media|alta|urgente","venceEn":"YYYY-MM-DD o null","empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null","motivo":"por qué es pendiente"}]}
+{"correos":[{"id":"...","esPendiente":true,"titulo":"verbo + objeto, máx. 80 caracteres","resumen":"1 o 2 frases: qué piden, quién y contexto","prioridad":"baja|media|alta|urgente","venceEn":"YYYY-MM-DD o null","empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null","motivo":"por qué es pendiente","crm":null}]}
 
-Para los que NO son pendientes basta {"id":"...","esPendiente":false}. Deduce la empresa por el dominio del remitente o destinatario, el proyecto o los productos mencionados; si no está claro, null. La prioridad es urgente si hay dinero o servicio en riesgo o vence en menos de 2 días; alta si piden respuesta esta semana; media por omisión; baja si es opcional.`;
-
-interface RespuestaChat {
-  choices?: { message?: { content?: string } }[];
-  error?: { message?: string };
-}
+"crm" es null casi siempre; cuando aplica: {"tipo":"oportunidad|queja","nombre":"máx. 60 caracteres","contacto":"quién escribe","correo":"su dirección","resumen":"1 frase"}.
+Para los que NO son pendientes basta {"id":"...","esPendiente":false,"crm":null}. Deduce la empresa por el dominio del remitente o destinatario, el proyecto o los productos mencionados; si no está claro, null. La prioridad es urgente si hay dinero o servicio en riesgo o vence en menos de 2 días; alta si piden respuesta esta semana; media por omisión; baja si es opcional.`;
 
 /** Clasifica un lote de correos. Devuelve una entrada por cada id enviado. */
 export async function clasificarCorreos(
@@ -72,38 +79,19 @@ export async function clasificarCorreos(
     fecha: c.encabezado.fecha.slice(0, 10),
     extracto: c.texto.replace(/\s+/g, ' ').trim().slice(0, 400)
   }));
-  const respuesta = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${config.apiKey}`,
-      'content-type': 'application/json',
-      'http-referer': 'https://ds-monitor-nine.vercel.app',
-      'x-title': 'DS Monitor'
-    },
-    body: JSON.stringify({
-      model: config.modelo,
-      temperature: 0,
-      max_tokens: 4000,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: PROMPT },
-        {
-          role: 'user',
-          content: `Hoy es ${ahora.toISOString().slice(0, 10)}. Correos:\n${JSON.stringify(entrada)}`
-        }
-      ]
-    })
+  const texto = await preguntar(config, {
+    sistema: PROMPT,
+    usuario: `Hoy es ${ahora.toISOString().slice(0, 10)}. Correos:\n${JSON.stringify(entrada)}`,
+    json: true,
+    maxTokens: 4000
   });
-  const datos = (await respuesta.json().catch(() => ({}))) as RespuestaChat;
-  if (!respuesta.ok) {
-    throw new ErrorProveedor(
-      'openrouter',
-      `respondió ${respuesta.status}: ${(datos.error?.message ?? '').slice(0, 200)}`
-    );
-  }
-  const texto = datos.choices?.[0]?.message?.content ?? '';
-  const parseado = interpretar(texto);
-  const porId = new Map(parseado.map((c) => [c.id, c]));
+  const parseado = comoJson<{ correos?: Partial<Clasificacion>[] }>(texto);
+  const porId = new Map(
+    (Array.isArray(parseado.correos) ? parseado.correos : []).map((c) => [
+      c.id,
+      c
+    ])
+  );
   return correos.map((c) => {
     const r = porId.get(c.clave);
     return {
@@ -114,36 +102,40 @@ export async function clasificarCorreos(
       prioridad: (['baja', 'media', 'alta', 'urgente'] as const).find(
         (p) => p === r?.prioridad
       ),
-      venceEn:
-        typeof r?.venceEn === 'string' && /^\d{4}-\d{2}-\d{2}/.test(r.venceEn)
-          ? new Date(`${r.venceEn.slice(0, 10)}T12:00:00Z`).toISOString()
-          : undefined,
+      venceEn: fechaDe(r?.venceEn),
       empresa: EMPRESAS.find((e) => e === r?.empresa),
       motivo: texto1(r?.motivo),
+      crm: sugerenciaCrm(r?.crm, c),
       analizadoEn: ahora.toISOString()
     };
   });
 }
 
-/** Saca el JSON aunque el modelo lo envuelva en texto o en ``` */
-function interpretar(texto: string): Partial<Clasificacion>[] {
-  const inicio = texto.indexOf('{');
-  const fin = texto.lastIndexOf('}');
-  if (inicio === -1 || fin === -1) {
-    throw new ErrorProveedor('openrouter', 'no devolvió JSON');
+function sugerenciaCrm(
+  crudo: unknown,
+  candidato: CandidatoIa
+): SugerenciaCrm | undefined {
+  const s = (crudo ?? undefined) as Partial<SugerenciaCrm> | undefined;
+  if (!s || typeof s !== 'object') {
+    return undefined;
   }
-  try {
-    const obj = JSON.parse(texto.slice(inicio, fin + 1)) as {
-      correos?: Partial<Clasificacion>[];
-    };
-    return Array.isArray(obj.correos) ? obj.correos : [];
-  } catch {
-    throw new ErrorProveedor('openrouter', 'el JSON que devolvió no se pudo leer');
+  const tipo = (['oportunidad', 'queja'] as const).find((t) => t === s.tipo);
+  const nombre = texto1(s.nombre);
+  if (!tipo || !nombre) {
+    return undefined;
   }
-}
-
-function texto1(valor: unknown): string | undefined {
-  return typeof valor === 'string' && valor.trim() ? valor.trim() : undefined;
+  return {
+    tipo,
+    nombre: nombre.slice(0, 60),
+    contacto: texto1(s.contacto),
+    correo:
+      texto1(s.correo) ??
+      /<([^>]+)>/.exec(candidato.encabezado.remitente)?.[1] ??
+      (candidato.encabezado.remitente.includes('@')
+        ? candidato.encabezado.remitente
+        : undefined),
+    resumen: texto1(s.resumen) ?? ''
+  };
 }
 
 /** De una clasificacion positiva a un pendiente del portal. */
@@ -153,11 +145,8 @@ export function pendienteDeClasificacion(
   accountId: string
 ): TaskItem {
   const { encabezado } = candidato;
-  // El id sale de la clave (fecha, remitente, asunto), no del UID: el UID
-  // cambia si el correo se mueve de carpeta y en Graph es solo un contador.
-  const id = `${accountId}-ia-${huella(candidato.clave)}`;
   return {
-    id,
+    id: idDeClasificacion(clasificacion, accountId),
     title: clasificacion.titulo ?? encabezado.asunto,
     description: [
       clasificacion.resumen,
@@ -179,8 +168,19 @@ export function pendienteDeClasificacion(
   };
 }
 
+/**
+ * El id sale de la clave (fecha, remitente, asunto), no del UID: el UID
+ * cambia si el correo se mueve de carpeta y en Graph es solo un contador.
+ */
+export function idDeClasificacion(
+  clasificacion: { id: string },
+  accountId: string
+): string {
+  return `${accountId}-ia-${huella(clasificacion.id)}`;
+}
+
 /** Un numero corto y estable a partir de un texto (FNV-1a). */
-function huella(texto: string): string {
+export function huella(texto: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < texto.length; i++) {
     h ^= texto.charCodeAt(i);

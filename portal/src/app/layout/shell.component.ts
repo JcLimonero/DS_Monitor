@@ -1,3 +1,4 @@
+import { IaService } from '../core/ia/ia.service';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -54,6 +55,12 @@ export class ShellComponent {
   readonly store = inject(PortalStore);
   readonly sesion = inject(SesionService);
   readonly nav = NAV;
+
+  constructor() {
+    // Una sola vez: si el puente tiene IA, para que las pantallas enseñen o
+    // escondan sus botones.
+    inject(IaService).estado().subscribe({ error: () => undefined });
+  }
 
   /** Menu lateral en pantallas chicas. En escritorio siempre esta visible. */
   readonly menuOpen = signal(false);

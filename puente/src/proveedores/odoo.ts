@@ -347,3 +347,48 @@ export function prioridadPorVencimiento(
 
 /** Se exporta solo para que las pruebas puedan leerlo sin red. */
 export const _internos = { idRelacion };
+
+/** Lo que hace falta para abrir un lead u oportunidad desde el portal. */
+export interface NuevoLead {
+  nombre: string;
+  tipo: 'oportunidad' | 'queja';
+  contacto?: string;
+  correo?: string;
+  descripcion?: string;
+}
+
+/**
+ * Crea un `crm.lead` en Odoo. Las oportunidades entran como tal; las quejas
+ * entran como lead (sin etapa de venta) con el prefijo "Queja:", para que el
+ * equipo comercial las vea y las convierta o las cierre.
+ */
+export async function crearLead(
+  config: ConfiguracionOdoo,
+  lead: NuevoLead
+): Promise<{ id: number; url: string }> {
+  const uid = await autenticar(config);
+  const id = await llamar<number>(config, {
+    service: 'object',
+    method: 'execute_kw',
+    args: [
+      config.db,
+      uid,
+      config.apiKey,
+      'crm.lead',
+      'create',
+      [
+        {
+          name: lead.tipo === 'queja' ? `Queja: ${lead.nombre}` : lead.nombre,
+          type: lead.tipo === 'oportunidad' ? 'opportunity' : 'lead',
+          contact_name: lead.contacto,
+          email_from: lead.correo,
+          description: lead.descripcion
+        }
+      ]
+    ]
+  });
+  return {
+    id,
+    url: `${config.url.replace(/\/+$/, '')}/web#id=${id}&model=crm.lead&view_type=form`
+  };
+}

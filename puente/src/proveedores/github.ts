@@ -1,6 +1,7 @@
 import type { ConfiguracionGithub } from '../config/entorno.js';
 import type {
   RepoCheckState,
+  RepoCommit,
   RepoPullRequest,
   RepoReviewState,
   RepoStatus
@@ -304,4 +305,35 @@ export async function reposGithub(
         a.pushedAt ?? a.lastCommit?.at ?? ''
       ) || a.name.localeCompare(b.name)
   );
+}
+
+/** Los commits de un repositorio desde una fecha, para el resumen semanal. */
+export async function commitsDesde(
+  config: ConfiguracionGithub,
+  repo: string,
+  desde: Date,
+  cuantos = 100
+): Promise<RepoCommit[]> {
+  const commits = await pedirJson<CommitGithub[]>(
+    'github',
+    conParametros(`${BASE}/repos/${repo}/commits`, {
+      since: desde.toISOString(),
+      per_page: String(cuantos)
+    }),
+    { encabezados: encabezados(config) }
+  );
+  return commits
+    .filter((c) => c.sha && c.commit?.author?.date)
+    .map((c) => ({
+      sha: c.sha as string,
+      message: c.commit?.message?.split('\n')[0]?.slice(0, 120),
+      author: c.commit?.author?.name
+        ? {
+            id: c.author?.login ?? c.commit.author.name,
+            name: c.commit.author.name
+          }
+        : undefined,
+      at: c.commit?.author?.date as string,
+      url: c.html_url
+    }));
 }

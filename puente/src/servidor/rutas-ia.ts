@@ -1,0 +1,656 @@
+import { enviarPorEmailJs, type Sesion } from '../acceso/acceso.js';
+import type { Configuracion } from '../config/entorno.js';
+import type { Dominio } from '../datos/dominios.js';
+import { acuerdosDeJunta, type Acuerdo } from '../ia/acuerdos.js';
+import {
+  detectarAlertas,
+  redactarAlertas,
+  registrarCostos,
+  type Alerta,
+  type HistorialCostos
+} from '../ia/alertas.js';
+import {
+  diagnosticar,
+  evidenciaDeDespliegue,
+  evidenciaDeSitio,
+  idDeIncidente,
+  type Diagnostico
+} from '../ia/diagnostico.js';
+import { consumo } from '../ia/modelo.js';
+import {
+  aplicarVeredictos,
+  clasificarPendientes,
+  type VeredictoPendiente
+} from '../ia/pendientes.js';
+import { resumirRepos, semanaIso, type ResumenRepos } from '../ia/repos.js';
+import { resumirDia, type ResumenDia } from '../ia/resumen.js';
+import { borradorDeRespuesta } from '../ia/respuesta.js';
+import {
+  correoDeSemana,
+  redactarAperturas,
+  semanaDeCadaQuien,
+  type SemanaPersona
+} from '../ia/semana.js';
+import { armarTablero, type Fuentes, type Tablero } from '../ia/tablero.js';
+import type {
+  Deployment,
+  LicenseUsage,
+  Meeting,
+  MonitorTarget,
+  Person,
+  RepoStatus,
+  TaskItem
+} from '../nucleo/contrato.js';
+import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
+import type { AlmacenJson } from '../datos/almacen-json.js';
+import type { Anotaciones } from '../pendientes/anotaciones.js';
+import type { Clasificacion } from '../proveedores/ia.js';
+import { huella } from '../proveedores/ia.js';
+import { crearLead } from '../proveedores/odoo.js';
+import type { Contexto, Router } from './router.js';
+
+/**
+ * Las rutas de inteligencia artificial, todas bajo /ia.
+ *
+ * Cada una hace una sola llamada al modelo y guarda el resultado, de modo que
+ * volver a pedirla no cuesta: el resumen del dia se genera una vez por dia,
+ * el de repositorios una vez por semana, un diagnostico una vez por
+ * incidente, los acuerdos una vez por junta. Sin API key todo responde que
+ * la IA no esta activa, y el resto del puente sigue igual.
+ */
+
+/** Lo que estas rutas guardan en disco. */
+export interface DatosIa {
+  iaResumen: AlmacenJson<ResumenDia | null>;
+  iaAlertas: AlmacenJson<Record<string, string>>;
+  costosHistorial: AlmacenJson<HistorialCostos>;
+  iaAcuerdos: AlmacenJson<Record<string, Acuerdo[]>>;
+  iaCrm: AlmacenJson<
+    Record<
+      string,
+      { estado: 'creada' | 'descartada'; url?: string; en: string }
+    >
+  >;
+  iaDiagnosticos: AlmacenJson<Record<string, Diagnostico>>;
+  iaRepos: AlmacenJson<ResumenRepos | null>;
+  iaSemana: AlmacenJson<{
+    semana?: string;
+    enviadoEn?: string;
+    enviados?: string[];
+  }>;
+  iaPendientes: AlmacenJson<Record<string, VeredictoPendiente>>;
+}
+
+/** Lo que `rutas.ts` presta: configuracion, guardas y fuentes. */
+export interface DependenciasIa {
+  cfg: () => Configuracion;
+  datos: DatosIa & {
+    anotaciones: AlmacenJson<Anotaciones>;
+    iaCorreo: AlmacenJson<Record<string, Clasificacion>>;
+    personales: AlmacenJson<TaskItem[]>;
+  };
+  exigirAdmin: (contexto: Contexto) => void;
+  sesionDe: (contexto: Contexto) => Sesion | undefined;
+  olvidarCache: () => void;
+  fuentes: Fuentes;
+  /** Todos los pendientes de correo registrados, para buscar uno por id. */
+  pendientesDeCorreo: () => TaskItem[];
+  asignar: (
+    id: string,
+    quien: string,
+    tarea: Partial<TaskItem>,
+    sesion: Sesion | undefined
+  ) => Promise<string | undefined>;
+  dominios: () => Dominio[];
+}
+
+const HORAS_RESUMEN = 6;
+const MAXIMO_DIAGNOSTICOS = 60;
+const MAXIMO_POR_LOTE = 40;
+
+export interface Programable {
+  nombre: string;
+  cadaMinutos: number;
+  correr: () => Promise<void>;
+}
+
+export interface ServiciosIa {
+  /** Lo que corre solo, a intervalos. */
+  programables: Programable[];
+  /** Pone empresa y prioridad a pendientes que llegan sin ellas. */
+  conVeredictos: (tareas: TaskItem[]) => Promise<TaskItem[]>;
+}
+
+export function registrarRutasIa(
+  router: Router,
+  d: DependenciasIa
+): ServiciosIa {
+  const ia = () => d.cfg().ia;
+  const exigirIa = () => {
+    const config = ia();
+    if (!config) {
+      throw new ErrorConfiguracion(
+        'La inteligencia artificial no está configurada: captura la API key de OpenRouter en Equipo → Configuración.'
+      );
+    }
+    return config;
+  };
+  const urlPortal = () => d.cfg().urlPublica.replace(/\/api\/portal$/, '');
+
+  router.get('/ia/estado', async () => {
+    const config = ia();
+    return {
+      activa: !!config,
+      modelo: config?.modelo,
+      consumo
+    };
+  });
+
+  // --- Resumen del dia ---
+
+  const alertasActuales = async (ahora: Date): Promise<Alerta[]> => {
+    const [licencias, dominios] = await Promise.all([
+      d.fuentes.licencias().catch(() => [] as LicenseUsage[]),
+      Promise.resolve(d.dominios())
+    ]);
+    const historial = registrarCostos(
+      d.datos.costosHistorial.leer(),
+      licencias,
+      ahora
+    );
+    await d.datos.costosHistorial.escribir(historial);
+    const alertas = detectarAlertas(licencias, dominios, historial, ahora);
+    // El texto redactado se guarda por id: las alertas cambian poco.
+    const textos = d.datos.iaAlertas.leer();
+    const sinTexto = alertas.filter((a) => !textos[a.id]);
+    if (ia() && sinTexto.length > 0) {
+      try {
+        const redactadas = await redactarAlertas(ia(), sinTexto);
+        const nuevos = { ...textos };
+        for (const a of redactadas) {
+          if (a.texto) {
+            nuevos[a.id] = a.texto;
+          }
+        }
+        // Se conservan solo las vigentes, para que no crezca.
+        const vigentes = new Set(alertas.map((a) => a.id));
+        await d.datos.iaAlertas.escribir(
+          Object.fromEntries(
+            Object.entries(nuevos).filter(([id]) => vigentes.has(id))
+          )
+        );
+      } catch (error) {
+        console.warn(
+          `[puente] la IA no pudo redactar alertas: ${(error as Error).message}`
+        );
+      }
+    }
+    const conTexto = d.datos.iaAlertas.leer();
+    return alertas.map((a) => ({ ...a, texto: conTexto[a.id] }));
+  };
+
+  router.get('/ia/alertas', async () => alertasActuales(new Date()));
+
+  const generarResumen = async (ahora = new Date()): Promise<ResumenDia> => {
+    const config = exigirIa();
+    const tablero = await armarTablero(d.fuentes, ahora);
+    const alertas = await alertasActuales(ahora);
+    const resumen = await resumirDia(config, tablero, alertas, ahora);
+    await d.datos.iaResumen.escribir(resumen);
+    return resumen;
+  };
+
+  const resumenVigente = (ahora: Date): ResumenDia | undefined => {
+    const r = d.datos.iaResumen.leer();
+    if (!r) {
+      return undefined;
+    }
+    const edadHoras = (ahora.getTime() - Date.parse(r.generadoEn)) / 3_600_000;
+    return edadHoras < HORAS_RESUMEN ? r : undefined;
+  };
+
+  router.get('/ia/resumen', async () => {
+    if (!ia()) {
+      return { disponible: false };
+    }
+    const ahora = new Date();
+    const vigente = resumenVigente(ahora);
+    return {
+      disponible: true,
+      resumen: vigente ?? (await generarResumen(ahora))
+    };
+  });
+
+  router.post('/ia/resumen/generar', async (contexto) => {
+    d.exigirAdmin(contexto);
+    return { disponible: true, resumen: await generarResumen() };
+  });
+
+  // --- Acuerdos de una junta ---
+
+  router.post('/ia/acuerdos', async (contexto) => {
+    d.exigirAdmin(contexto);
+    const config = exigirIa();
+    const { junta } = (contexto.cuerpo ?? {}) as { junta?: Meeting };
+    if (
+      !junta ||
+      typeof junta.id !== 'string' ||
+      typeof junta.title !== 'string'
+    ) {
+      throw new ErrorPuente('Falta la junta.', 400);
+    }
+    const clave = `${junta.id}:${huella(junta.notes ?? '')}`;
+    const guardados = d.datos.iaAcuerdos.leer();
+    if (guardados[clave]) {
+      return { acuerdos: guardados[clave], notas: !!junta.notes };
+    }
+    const equipo = await d.fuentes.equipo();
+    const acuerdos = await acuerdosDeJunta(config, junta, equipo);
+    const recorte = Object.entries(guardados).slice(-200);
+    await d.datos.iaAcuerdos.escribir({
+      ...Object.fromEntries(recorte),
+      [clave]: acuerdos
+    });
+    return { acuerdos, notas: !!junta.notes };
+  });
+
+  router.post('/ia/acuerdos/aceptar', async (contexto) => {
+    d.exigirAdmin(contexto);
+    const cuerpo = (contexto.cuerpo ?? {}) as {
+      acuerdos?: Acuerdo[];
+      junta?: string;
+    };
+    const acuerdos = Array.isArray(cuerpo.acuerdos) ? cuerpo.acuerdos : [];
+    if (acuerdos.length === 0) {
+      throw new ErrorPuente('No hay acuerdos que agregar.', 400);
+    }
+    const ahora = new Date().toISOString();
+    const sesion = d.sesionDe(contexto);
+    const nuevos: TaskItem[] = acuerdos
+      .filter((a) => typeof a.titulo === 'string' && a.titulo.trim())
+      .map((a, i) => ({
+        id: `local-acuerdo-${Date.now()}-${i}`,
+        title: a.titulo.trim().slice(0, 120),
+        description: [
+          a.descripcion,
+          cuerpo.junta ? `Acuerdo de la junta: ${cuerpo.junta}` : undefined
+        ]
+          .filter((x) => x)
+          .join('\n'),
+        status: 'pendiente',
+        priority: a.prioridad ?? 'media',
+        dueDate: a.venceEn,
+        accountId: 'mios',
+        origin: 'local',
+        project: a.empresa ?? 'Acuerdos',
+        company: a.empresa,
+        tags: ['acuerdo', 'ia'],
+        updatedAt: ahora
+      }));
+    await d.datos.personales.escribir([
+      ...d.datos.personales.leer(),
+      ...nuevos
+    ]);
+    const avisos: string[] = [];
+    for (const [i, a] of acuerdos.entries()) {
+      const tarea = nuevos[i];
+      const quien = a.persona?.email ?? a.persona?.id;
+      if (tarea && quien) {
+        const aviso = await d.asignar(tarea.id, quien, tarea, sesion);
+        if (aviso) {
+          avisos.push(`${tarea.title}: ${aviso}`);
+        }
+      }
+    }
+    d.olvidarCache();
+    return { agregados: nuevos.length, avisos };
+  });
+
+  // --- Borrador de respuesta a un correo ---
+
+  router.post('/ia/respuesta', async (contexto) => {
+    d.exigirAdmin(contexto);
+    const config = exigirIa();
+    const { id, instrucciones } = (contexto.cuerpo ?? {}) as {
+      id?: string;
+      instrucciones?: string;
+    };
+    const tarea = d.pendientesDeCorreo().find((t) => t.id === id);
+    if (!tarea) {
+      throw new ErrorPuente(
+        'Ese pendiente no viene del correo o ya no está.',
+        404
+      );
+    }
+    const sesion = d.sesionDe(contexto);
+    const equipo = await d.fuentes.equipo();
+    const yo = equipo.find(
+      (p) => p.email?.toLowerCase() === sesion?.correo.toLowerCase()
+    );
+    const firma = yo?.name ?? sesion?.correo ?? 'el equipo';
+    return borradorDeRespuesta(config, tarea, firma, instrucciones);
+  });
+
+  // --- Sugerencias para el CRM (salen del clasificador de correo) ---
+
+  const sugerenciasCrm = () => {
+    const estados = d.datos.iaCrm.leer();
+    return Object.values(d.datos.iaCorreo.leer())
+      .filter((c) => c.crm && !estados[c.id])
+      .sort((a, b) => b.analizadoEn.localeCompare(a.analizadoEn))
+      .map((c) => ({
+        id: c.id,
+        ...(c.crm as NonNullable<Clasificacion['crm']>),
+        empresa: c.empresa,
+        analizadoEn: c.analizadoEn
+      }));
+  };
+
+  router.get('/ia/crm/sugerencias', async () => sugerenciasCrm());
+
+  router.post('/ia/crm/sugerencias/crear', async (contexto) => {
+    d.exigirAdmin(contexto);
+    const { id } = (contexto.cuerpo ?? {}) as { id?: string };
+    const s = sugerenciasCrm().find((x) => x.id === id);
+    if (!s) {
+      throw new ErrorPuente('Esa sugerencia ya no está.', 404);
+    }
+    const odoo = d.cfg().odoo;
+    if (!odoo) {
+      throw new ErrorConfiguracion(
+        'Para crear en el CRM hace falta la conexión con Odoo (CRM → Configuración).'
+      );
+    }
+    const creado = await crearLead(odoo, {
+      nombre: s.nombre,
+      tipo: s.tipo,
+      contacto: s.contacto,
+      correo: s.correo,
+      descripcion: `${s.resumen}\n\nDetectado por DS Monitor en el correo${s.empresa ? ` (${s.empresa})` : ''}.`
+    });
+    await d.datos.iaCrm.escribir({
+      ...d.datos.iaCrm.leer(),
+      [s.id]: {
+        estado: 'creada',
+        url: creado.url,
+        en: new Date().toISOString()
+      }
+    });
+    d.olvidarCache();
+    return { ok: true, url: creado.url };
+  });
+
+  router.post('/ia/crm/sugerencias/descartar', async (contexto) => {
+    d.exigirAdmin(contexto);
+    const { id } = (contexto.cuerpo ?? {}) as { id?: string };
+    if (!id) {
+      throw new ErrorPuente('Falta el id.', 400);
+    }
+    await d.datos.iaCrm.escribir({
+      ...d.datos.iaCrm.leer(),
+      [id]: { estado: 'descartada', en: new Date().toISOString() }
+    });
+    return { ok: true };
+  });
+
+  // --- Diagnostico de caidas y despliegues fallidos ---
+
+  const diagnosticos = async (ahora: Date): Promise<Diagnostico[]> => {
+    const config = ia();
+    const [monitoreo, despliegues] = await Promise.all([
+      d.fuentes.monitoreo().catch(() => [] as MonitorTarget[]),
+      d.fuentes.despliegues().catch(() => [] as Deployment[])
+    ]);
+    const caidos = monitoreo.filter((m) => m.status === 'caido');
+    const fallidos = despliegues.filter(
+      (x) =>
+        x.state === 'error' &&
+        Date.parse(x.createdAt) > ahora.getTime() - 2 * 86_400_000
+    );
+    const guardados = d.datos.iaDiagnosticos.leer();
+    const salida: Diagnostico[] = [];
+    let cambio = false;
+    const incidentes: {
+      clase: 'sitio' | 'despliegue';
+      id: string;
+      objetivo: string;
+      evidencia: () => Promise<string>;
+    }[] = [
+      ...caidos.map((m) => ({
+        clase: 'sitio' as const,
+        id: idDeIncidente('sitio', m),
+        objetivo: `${m.name} (${m.url})`,
+        evidencia: () => evidenciaDeSitio(m)
+      })),
+      ...fallidos.map((x) => ({
+        clase: 'despliegue' as const,
+        id: idDeIncidente('despliegue', x),
+        objetivo: `${x.project}${x.branch ? ` · ${x.branch}` : ''}${x.commitMessage ? ` · "${x.commitMessage.slice(0, 80)}"` : ''}`,
+        evidencia: () => evidenciaDeDespliegue(d.cfg().vercel, x)
+      }))
+    ];
+    for (const inc of incidentes) {
+      const previo = guardados[inc.id];
+      if (previo) {
+        salida.push(previo);
+        continue;
+      }
+      if (!config) {
+        continue;
+      }
+      try {
+        const evidencia = await inc.evidencia();
+        const diag = await diagnosticar(
+          config,
+          inc.clase,
+          inc.objetivo,
+          evidencia,
+          inc.id,
+          ahora
+        );
+        guardados[inc.id] = diag;
+        salida.push(diag);
+        cambio = true;
+      } catch (error) {
+        console.warn(
+          `[puente] sin diagnóstico para ${inc.objetivo}: ${(error as Error).message}`
+        );
+      }
+    }
+    if (cambio) {
+      const recorte = Object.values(guardados)
+        .sort((a, b) => a.generadoEn.localeCompare(b.generadoEn))
+        .slice(-MAXIMO_DIAGNOSTICOS);
+      await d.datos.iaDiagnosticos.escribir(
+        Object.fromEntries(recorte.map((x) => [x.id, x]))
+      );
+    }
+    return salida;
+  };
+
+  router.get('/ia/diagnosticos', async () => diagnosticos(new Date()));
+
+  // --- La semana en los repositorios ---
+
+  const resumenRepos = async (forzar: boolean, ahora = new Date()) => {
+    const config = exigirIa();
+    const github = d.cfg().github;
+    if (!github) {
+      throw new ErrorConfiguracion(
+        'Falta la conexión con GitHub (Repos → Configuración).'
+      );
+    }
+    const guardado = d.datos.iaRepos.leer();
+    if (!forzar && guardado && guardado.semana === semanaIso(ahora)) {
+      return guardado;
+    }
+    const repos = await d.fuentes.repos().catch(() => [] as RepoStatus[]);
+    const resumen = await resumirRepos(config, github, repos, ahora);
+    await d.datos.iaRepos.escribir(resumen);
+    return resumen;
+  };
+
+  router.get('/ia/repos', async () => {
+    if (!ia()) {
+      return { disponible: false };
+    }
+    return { disponible: true, resumen: await resumenRepos(false) };
+  });
+
+  router.post('/ia/repos/generar', async (contexto) => {
+    d.exigirAdmin(contexto);
+    return { disponible: true, resumen: await resumenRepos(true) };
+  });
+
+  // --- Semana del equipo ---
+
+  const armarSemana = async (
+    redactar: boolean,
+    ahora = new Date()
+  ): Promise<SemanaPersona[]> => {
+    const tablero = await armarTablero(d.fuentes, ahora);
+    const semanas = semanaDeCadaQuien(
+      tablero,
+      d.datos.anotaciones.leer(),
+      ahora
+    );
+    return redactar ? redactarAperturas(ia(), semanas) : semanas;
+  };
+
+  const enviarSemana = async (
+    solo?: string,
+    ahora = new Date()
+  ): Promise<{ enviados: string[]; errores: string[] }> => {
+    const acceso = d.cfg().acceso;
+    if (!acceso) {
+      throw new ErrorConfiguracion(
+        'Para mandar el correo semanal hace falta el acceso (EmailJS) en Equipo → Configuración.'
+      );
+    }
+    const semanas = (await armarSemana(true, ahora)).filter(
+      (s) => !solo || s.persona.email?.toLowerCase() === solo.toLowerCase()
+    );
+    const enviados: string[] = [];
+    const errores: string[] = [];
+    for (const s of semanas) {
+      try {
+        await enviarPorEmailJs(acceso, s.persona.email as string, '', false, {
+          titulo: `Tu semana en DS Monitor · ${new Date(ahora).toLocaleDateString('es-MX', { dateStyle: 'long', timeZone: 'America/Mexico_City' })}`,
+          html: correoDeSemana(s, urlPortal())
+        });
+        enviados.push(s.persona.email as string);
+      } catch (error) {
+        errores.push(`${s.persona.email}: ${(error as Error).message}`);
+      }
+    }
+    if (!solo) {
+      await d.datos.iaSemana.escribir({
+        semana: semanaIso(ahora),
+        enviadoEn: ahora.toISOString(),
+        enviados
+      });
+    }
+    return { enviados, errores };
+  };
+
+  router.get('/ia/semana', async ({ parametros }) => ({
+    ultimoEnvio: d.datos.iaSemana.leer(),
+    personas: (await armarSemana(parametros.get('redactar') === '1')).map(
+      (s) => ({
+        persona: s.persona,
+        pendientes: s.pendientes.length,
+        vencidos: s.vencidos.length,
+        juntas: s.juntas.length,
+        apertura: s.apertura,
+        html: correoDeSemana(s, urlPortal())
+      })
+    )
+  }));
+
+  router.post('/ia/semana/enviar', async (contexto) => {
+    d.exigirAdmin(contexto);
+    const { solo } = (contexto.cuerpo ?? {}) as { solo?: string };
+    return enviarSemana(
+      typeof solo === 'string' && solo.trim() ? solo.trim() : undefined
+    );
+  });
+
+  // --- Empresa y prioridad para pendientes que llegan sin ellas ---
+  //
+  // No es una ruta: lo usan las rutas que sirven pendientes de Ops y los
+  // personales. Se clasifican solo los que no se han visto, hasta 40 por vez.
+
+  const conVeredictos = async (tareas: TaskItem[]): Promise<TaskItem[]> => {
+    const config = ia();
+    const vistos = d.datos.iaPendientes.leer();
+    if (config) {
+      const nuevos = tareas
+        .filter((t) => !vistos[t.id] && (!t.company || !t.priority))
+        .slice(0, MAXIMO_POR_LOTE);
+      if (nuevos.length > 0) {
+        try {
+          const veredictos = await clasificarPendientes(config, nuevos);
+          for (const v of veredictos) {
+            vistos[v.id] = v;
+          }
+          const ids = new Set(tareas.map((t) => t.id));
+          const limite = Date.now() - 120 * 86_400_000;
+          await d.datos.iaPendientes.escribir(
+            Object.fromEntries(
+              Object.entries(vistos).filter(
+                ([id, v]) => ids.has(id) || Date.parse(v.analizadoEn) > limite
+              )
+            )
+          );
+        } catch (error) {
+          console.warn(
+            `[puente] la IA no pudo clasificar pendientes: ${(error as Error).message}`
+          );
+        }
+      }
+    }
+    return aplicarVeredictos(tareas, vistos);
+  };
+
+  // --- Lo que corre solo ---
+
+  const semanaSiToca = async () => {
+    const ahora = new Date();
+    const local = new Date(
+      ahora.toLocaleString('en-US', { timeZone: 'America/Mexico_City' })
+    );
+    const esLunes = local.getDay() === 1;
+    const horaOk = local.getHours() >= 8;
+    const ultimo = d.datos.iaSemana.leer();
+    if (
+      !esLunes ||
+      !horaOk ||
+      ultimo.semana === semanaIso(ahora) ||
+      !d.cfg().acceso
+    ) {
+      return;
+    }
+    const r = await enviarSemana(undefined, ahora);
+    console.log(
+      `[puente] correo semanal: ${r.enviados.length} enviados${r.errores.length ? `, ${r.errores.length} con error` : ''}`
+    );
+  };
+
+  const resumenSiToca = async () => {
+    if (!ia()) {
+      return;
+    }
+    const ahora = new Date();
+    if (!resumenVigente(ahora)) {
+      await generarResumen(ahora);
+    }
+  };
+
+  return {
+    programables: [
+      { nombre: 'correo semanal', cadaMinutos: 15, correr: semanaSiToca },
+      { nombre: 'resumen del día', cadaMinutos: 30, correr: resumenSiToca }
+    ],
+    conVeredictos
+  };
+}

@@ -6,6 +6,7 @@ import {
   signal
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { EMPRESAS } from '../../core/ia/ia.models';
 import {
   TASK_PRIORITY_LABEL,
   TASK_PRIORITY_WEIGHT,
@@ -47,6 +48,8 @@ export class PersonalesComponent {
   readonly newPriority = signal<TaskPriority>('media');
   readonly newDueDate = signal('');
   readonly newProject = signal('');
+  readonly newCompany = signal('');
+  readonly empresas = EMPRESAS;
   readonly includeDone = signal(false);
 
   readonly canAdd = computed(() => this.newTitle().trim().length > 0);
@@ -84,7 +87,8 @@ export class PersonalesComponent {
       title: this.newTitle(),
       priority: this.newPriority(),
       dueDate: due ? new Date(`${due}T12:00:00`).toISOString() : undefined,
-      project: this.newProject() || undefined
+      project: this.newProject() || undefined,
+      company: this.newCompany() || undefined
     });
     this.newTitle.set('');
     this.newDueDate.set('');

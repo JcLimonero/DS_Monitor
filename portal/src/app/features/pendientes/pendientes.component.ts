@@ -14,6 +14,7 @@ import {
   TaskPriority,
   TaskStatus
 } from '../../core/models';
+import { EMPRESAS } from '../../core/ia/ia.models';
 import { CURRENT_USER } from '../../core/sources/demo/demo-people';
 import { LocalTaskStore } from '../../core/sources/local/local-task.store';
 import {
@@ -74,6 +75,8 @@ export class PendientesComponent {
   readonly owner = signal<OwnerFilter>('todos');
   readonly origin = signal<TaskOrigin | 'todos'>('todos');
   readonly priority = signal<TaskPriority | 'todas'>('todas');
+  readonly company = signal<string>('todas');
+  readonly empresas = EMPRESAS;
   readonly includeDone = signal(false);
 
   /** Alta rapida de un pendiente propio. */
@@ -98,6 +101,7 @@ export class PendientesComponent {
     const owner = this.owner();
     const origin = this.origin();
     const priority = this.priority();
+    const company = this.company();
     const includeDone = this.includeDone();
 
     return this.store.tasks().filter((task) => {
@@ -122,6 +126,13 @@ export class PendientesComponent {
         return false;
       }
       if (priority !== 'todas' && task.priority !== priority) {
+        return false;
+      }
+      if (
+        company === 'ninguna'
+          ? !!task.company
+          : company !== 'todas' && task.company !== company
+      ) {
         return false;
       }
       if (term) {
@@ -179,6 +190,7 @@ export class PendientesComponent {
     this.owner.set('todos');
     this.origin.set('todos');
     this.priority.set('todas');
+    this.company.set('todas');
     this.includeDone.set(false);
   }
 }

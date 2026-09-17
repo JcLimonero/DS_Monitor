@@ -1,3 +1,5 @@
+import { IaAlertasComponent } from '../ia/ia-alertas.component';
+import { IaResumenComponent } from '../ia/ia-resumen.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -50,6 +52,8 @@ const MONTO = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 });
   selector: 'pt-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    IaAlertasComponent,
+    IaResumenComponent,
     DayPipe,
     EmptyStateComponent,
     IconComponent,

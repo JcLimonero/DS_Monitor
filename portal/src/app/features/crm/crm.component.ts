@@ -1,3 +1,4 @@
+import { IaCrmComponent } from '../ia/ia-crm.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -26,6 +27,7 @@ import { IntegracionConfigComponent } from '../configuracion/integracion-config.
   selector: 'pt-crm',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    IaCrmComponent,
     DayPipe,
     EmptyStateComponent,
     IconComponent,
