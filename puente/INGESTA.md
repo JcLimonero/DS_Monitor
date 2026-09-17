@@ -18,12 +18,14 @@ Content-Type: application/json
 ```
 
 Tipos: `pendientes`, `juntas`, `monitoreo`, `crm`, `licencias`, `despliegues`,
-`repos`.
+`repos`, `equipo`.
 
 **El emisor se identifica por el token, nunca por el cuerpo.** Así nadie puede
 escribir en el buzón de otro cambiando un campo del JSON. Cada token trae de
 fábrica qué tipos puede mandar y con qué cuenta del portal se marcan sus datos;
-eso se configura en `INGESTA_CLIENTES` (ver `.env.example`).
+eso se configura en `INGESTA_CLIENTES` (ver `.env.example`) o, más cómodo, se
+crea desde la aplicación: en Pendientes y en Equipo hay un panel "API para
+alimentar…" que crea el emisor y enseña su token una sola vez.
 
 Todos los envíos van dentro del mismo sobre:
 
@@ -97,6 +99,21 @@ Solo `id` y `titulo` son obligatorios.
 `prioridad`: `baja` · `media` · `alta` · `urgente` (por omisión `media`)
 `origen`: `ops` (por omisión) · `correo`, cuando el pendiente se dedujo de un
 buzón; el portal lo agrupa con los demás del correo.
+
+### Equipo — `POST /ingesta/equipo`
+
+Las personas del equipo. Se mezclan con las capturadas en la aplicación (sin
+repetir, por correo o identificador) y salen en la vista Equipo.
+
+```json
+{
+  "version": 1,
+  "datos": [
+    { "nombre": "Ana Robles", "correo": "ana@example.com", "rol": "Frontend" },
+    { "id": "u-42", "nombre": "Bruno Casares", "rol": "Backend" }
+  ]
+}
+```
 
 ### Juntas — `POST /ingesta/juntas`
 
@@ -338,7 +355,8 @@ GET {base}/recibido/{emisor}/{recurso}
 
 | Tipo enviado | Recurso que lee el portal |
 | --- | --- |
-| `pendientes` | `/recibido/{emisor}/tasks` |
+| `pendientes` | `/recibido/{emisor}/tasks` (y todos juntos en `/ops/pendientes/tasks`) |
+| `equipo` | `/recibido/{emisor}/team` (y mezclado en `/equipo`) |
 | `juntas` | `/recibido/{emisor}/meetings` |
 | `monitoreo` | `/recibido/{emisor}/targets` |
 | `crm` | `/recibido/{emisor}/opportunities` y `/activities` |

@@ -1,13 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  isDevMode,
-  signal
-} from '@angular/core';
-import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { Directive, computed, inject, isDevMode, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   gatewayOverride,
@@ -48,10 +39,6 @@ import {
 } from '../../core/sources/gateway/puente-admin.service';
 import { PortalStore } from '../../core/state/portal.store';
 import { plural } from '../../core/util/text.util';
-import { AccountChipComponent } from '../../ui/account-chip.component';
-import { IconComponent } from '../../ui/icon.component';
-import { PageHeaderComponent } from '../../ui/page-header.component';
-import { DayPipe, RelativePipe } from '../../ui/portal.pipes';
 
 const KIND_LABEL: Record<SourceKind, string> = {
   odoo: 'Odoo',
@@ -84,21 +71,6 @@ const MODE_LABEL: Record<ConnectionMode, string> = {
   gateway: 'Datos reales',
   local: 'Solo en este navegador'
 };
-
-/** Las pestañas de Ajustes, por tema. */
-export type SettingsTab =
-  'correo' | 'licencias' | 'dominios' | 'equipo' | 'integraciones' | 'puente';
-
-export const TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'correo', label: 'Correo' },
-  { id: 'licencias', label: 'Licencias' },
-  { id: 'dominios', label: 'Dominios' },
-  { id: 'equipo', label: 'Equipo' },
-  { id: 'integraciones', label: 'Integraciones' },
-  { id: 'puente', label: 'Avanzado' }
-];
-
-const TAB_KEY = 'ds-monitor.ajustes.tab';
 
 interface ConnectionRow {
   connection: SourceConnection;
@@ -140,22 +112,14 @@ interface LicenseDraft {
   renewsAt: string;
 }
 
-@Component({
-  selector: 'pt-ajustes',
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    AccountChipComponent,
-    DayPipe,
-    DecimalPipe,
-    FormsModule,
-    NgTemplateOutlet,
-    IconComponent,
-    PageHeaderComponent,
-    RelativePipe
-  ],
-  templateUrl: './ajustes.component.html'
-})
-export class AjustesComponent {
+/**
+ * Todo lo que se configura desde los módulos: buzones, integraciones,
+ * licencias, dominios, equipo, emisores de la API. No es un componente: cada
+ * panel (`features/configuracion/`) hereda de aquí y pone su plantilla. Así
+ * cada módulo trae su propia configuración sin duplicar la lógica.
+ */
+@Directive()
+export class ConfiguracionBase {
   private readonly store = inject(PortalStore);
   private readonly local = inject(LocalSettingsStore);
   private readonly route = inject(ActivatedRoute);
@@ -165,7 +129,6 @@ export class AjustesComponent {
   readonly config = inject(PORTAL_CONFIG);
   /** Lo técnico (raíz del backend, token) solo se enseña en desarrollo. */
   readonly desarrollo = isDevMode();
-  readonly tabs = TABS.filter((tab) => tab.id !== 'puente' || this.desarrollo);
   readonly providerLabel = LICENSE_PROVIDER_LABEL;
   readonly providers: LicenseProvider[] = [
     'otro',
@@ -180,8 +143,6 @@ export class AjustesComponent {
     { kind: 'microsoft', label: 'Microsoft 365 / Outlook' },
     { kind: 'imap', label: 'IMAP (Neubox, iCloud, otro)' }
   ];
-
-  readonly tab = signal<SettingsTab>(readTab());
 
   // --- Conexiones ---
 
@@ -283,7 +244,6 @@ export class AjustesComponent {
         correo,
         mensaje: params.get('mensaje') ?? ''
       });
-      this.selectTab('correo');
       void this.router.navigate([], { queryParams: {}, replaceUrl: true });
     }
     if (this.admin.disponible) {
@@ -410,13 +370,13 @@ export class AjustesComponent {
         [id]: {
           ok: false,
           mensaje:
-            'Primero configura la aplicación de Entra ID (client ID y secret) en la tarjeta "Microsoft (Entra ID)" de arriba y guárdala.'
+            'Primero configura la aplicación de Entra ID (client ID y secret) en la tarjeta "Microsoft (Entra ID)" de este módulo y guárdala.'
         }
       }));
       return;
     }
     this.ocupado.set(id);
-    const volver = `${location.origin}/ajustes`;
+    const volver = `${location.origin}/correo`;
     this.admin.iniciarOauth(id, volver).subscribe({
       next: ({ url }) => {
         location.assign(url);
@@ -511,13 +471,18 @@ export class AjustesComponent {
         if (nuevo.id === 'microsoft') {
           this.loadConnections();
         }
+        // Configurada: sus cuentas se encienden y pasan a datos reales.
         if (nuevo.configurada) {
           for (const row of this.otherRows()) {
-            if (
-              row.connection.kind === nuevo.kind &&
-              row.connection.mode !== 'gateway'
-            ) {
+            if (row.connection.kind !== nuevo.kind) {
+              continue;
+            }
+            if (row.connection.mode !== 'gateway') {
               this.local.setConnectionMode(row.connection.id, 'gateway');
+              this.needsReload.set(true);
+            }
+            if (!row.enabled) {
+              this.local.setAccountEnabled(row.connection.accountId, true);
               this.needsReload.set(true);
             }
           }
@@ -934,15 +899,6 @@ export class AjustesComponent {
 
   // --- Utilería de la vista ---
 
-  selectTab(tab: SettingsTab): void {
-    this.tab.set(tab);
-    try {
-      localStorage.setItem(TAB_KEY, tab);
-    } catch {
-      // Sin almacenamiento la pestaña simplemente no se recuerda.
-    }
-  }
-
   statusClass(status: SyncState['status'] | undefined): string {
     switch (status) {
       case 'lista':
@@ -988,15 +944,4 @@ function describeHttp(error: unknown): string {
     return 'No se pudo llegar al servidor.';
   }
   return http?.message ?? String(error);
-}
-
-function readTab(): SettingsTab {
-  try {
-    const saved = localStorage.getItem(TAB_KEY);
-    return TABS.some((tab) => tab.id === saved)
-      ? (saved as SettingsTab)
-      : 'correo';
-  } catch {
-    return 'correo';
-  }
 }

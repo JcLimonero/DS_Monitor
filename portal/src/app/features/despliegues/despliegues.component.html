@@ -126,6 +126,15 @@
     <pt-empty-state
       icon="despliegue"
       title="Sin despliegues que mostrar"
-      hint="Quita los filtros o revisa la conexión con Vercel en Ajustes." />
+      hint="Quita los filtros o conecta Vercel abajo, en Configuración." />
   </div>
 }
+
+<!-- Configuración de este módulo -->
+<details class="mt-6" open>
+  <summary
+    class="cursor-pointer text-xs font-bold uppercase tracking-wide text-ink-subtle">
+    Configuración
+  </summary>
+  <pt-integracion-config [kinds]="['vercel']" />
+</details>

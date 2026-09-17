@@ -14,10 +14,16 @@ import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 import { TaskCardComponent } from '../../ui/task-card.component';
 
+import { EquipoConfigComponent } from '../configuracion/equipo-config.component';
 @Component({
   selector: 'pt-equipo',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [EmptyStateComponent, PageHeaderComponent, TaskCardComponent],
+  imports: [
+    EmptyStateComponent,
+    PageHeaderComponent,
+    TaskCardComponent,
+    EquipoConfigComponent
+  ],
   templateUrl: './equipo.component.html'
 })
 export class EquipoComponent {

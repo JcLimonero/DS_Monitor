@@ -39,6 +39,7 @@ const ORIGIN_LABEL: Record<TaskOrigin, string> = {
   local: 'Propios'
 };
 
+import { EmisoresConfigComponent } from '../configuracion/emisores-config.component';
 @Component({
   selector: 'pt-pendientes',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -47,7 +48,8 @@ const ORIGIN_LABEL: Record<TaskOrigin, string> = {
     FormsModule,
     IconComponent,
     PageHeaderComponent,
-    TaskCardComponent
+    TaskCardComponent,
+    EmisoresConfigComponent
   ],
   templateUrl: './pendientes.component.html'
 })

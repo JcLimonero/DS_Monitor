@@ -13,7 +13,8 @@ import {
   validarDominio,
   type Dominio
 } from '../datos/dominios.js';
-import type { Person } from '../nucleo/contrato.js';
+import type { Person, TaskItem } from '../nucleo/contrato.js';
+import type { ClienteIngesta } from '../config/entorno.js';
 import {
   AlmacenIntegraciones,
   Configurador
@@ -66,7 +67,8 @@ const CREDENCIAL_DE: Record<string, string> = {
   vercel: 'VERCEL_TOKEN',
   monitoreo: 'MONITOREO_DESTINOS',
   github: 'GITHUB_TOKEN',
-  odoo: 'ODOO_URL, ODOO_DB, ODOO_USUARIO y ODOO_API_KEY'
+  odoo: 'ODOO_URL, ODOO_DB, ODOO_USUARIO y ODOO_API_KEY',
+  ops: 'un emisor con tipo pendientes (Pendientes → API)'
 };
 
 function exigir<T>(valor: T | undefined, conexion: string): T {
@@ -91,7 +93,8 @@ export interface Estado {
 /** Qué conexiones están encendidas. Lo consume `/salud`. */
 export function estadoDeConexiones(
   config: Configuracion,
-  almacenCorreo = new AlmacenCorreo(config.directorioCorreo)
+  almacenCorreo = new AlmacenCorreo(config.directorioCorreo),
+  hayEmisoresOps: () => boolean = () => false
 ): Estado[] {
   const filas: [string, boolean, string[]][] = [
     ['anthropic', config.anthropic !== undefined, ['licenses']],
@@ -100,7 +103,14 @@ export function estadoDeConexiones(
     ['vercel', config.vercel !== undefined, ['deployments', 'licenses']],
     ['monitoreo', config.monitoreo !== undefined, ['monitors']],
     ['odoo', config.odoo !== undefined, ['crm']],
-    ['github', config.github !== undefined, ['repos']]
+    ['github', config.github !== undefined, ['repos']],
+    [
+      'ops',
+      config.clientesIngesta.some(
+        (c) => c.tipos.includes('pendientes') && !c.nombre.startsWith('correo-')
+      ) || hayEmisoresOps(),
+      ['tasks']
+    ]
   ];
 
   const fijas: Estado[] = filas.map(([conexion, configurada, provee]) => ({
@@ -111,7 +121,7 @@ export function estadoDeConexiones(
   }));
 
   // Cada buzon es una conexion aparte, para que se enciendan de uno en uno.
-  const correos: Estado[] = buzones(config, almacenCorreo).map((correo) => ({
+  const correos: Estado[] = buzones_(config, almacenCorreo).map((correo) => ({
     conexion: correo.id,
     configurada: correoListo(correo, config),
     provee: ['meetings', 'tasks', 'licenses'],
@@ -122,7 +132,7 @@ export function estadoDeConexiones(
 }
 
 /** Los buzones del entorno con lo capturado desde Ajustes encima. */
-function buzones(
+function buzones_(
   config: Configuracion,
   almacenCorreo: AlmacenCorreo
 ): ConfiguracionCorreo[] {
@@ -148,13 +158,25 @@ export interface Datos {
   equipo: AlmacenJson<Person[]>;
   dominios: AlmacenJson<Dominio[]>;
   sesiones: AlmacenJson<Sesion[]>;
+  /** Los pendientes personales: los que uno se apunta en el portal. */
+  personales: AlmacenJson<TaskItem[]>;
+  /** Emisores de la API de ingesta creados desde la aplicacion. */
+  emisores: AlmacenJson<ClienteIngesta[]>;
 }
 
 export function abrirDatos(directorio: string): Datos {
   return {
     equipo: new AlmacenJson<Person[]>(join(directorio, 'equipo.json'), []),
     dominios: new AlmacenJson<Dominio[]>(join(directorio, 'dominios.json'), []),
-    sesiones: new AlmacenJson<Sesion[]>(join(directorio, 'sesiones.json'), [])
+    sesiones: new AlmacenJson<Sesion[]>(join(directorio, 'sesiones.json'), []),
+    personales: new AlmacenJson<TaskItem[]>(
+      join(directorio, 'personales.json'),
+      []
+    ),
+    emisores: new AlmacenJson<ClienteIngesta[]>(
+      join(directorio, 'emisores.json'),
+      []
+    )
   };
 }
 
@@ -244,9 +266,7 @@ function exigirAdmin(
 }
 
 /** Rutas que el portal ya conoce pero que aun no tienen adaptador. */
-const PENDIENTES_DE_CONSTRUIR: [string, string][] = [
-  ['/ops/pendientes/tasks', 'Ops']
-];
+const PENDIENTES_DE_CONSTRUIR: [string, string][] = [];
 
 export function construirRutas(
   configInicial: Configuracion,
@@ -262,6 +282,12 @@ export function construirRutas(
   const router = new Router();
   const ttl = configInicial.cacheSegundos;
   const acceso = new Acceso(datos.sesiones);
+  const hayOps = () =>
+    datos.emisores
+      .leer()
+      .some(
+        (e) => e.tipos.includes('pendientes') && !e.nombre.startsWith('correo-')
+      );
   // Lo capturado desde Ajustes cambia la configuracion en caliente, asi que
   // las rutas la piden cada vez en lugar de quedarse con la del arranque.
   const cfg = (): Configuracion =>
@@ -271,7 +297,7 @@ export function construirRutas(
     ok: true,
     version: '0.1.0',
     ahora: new Date().toISOString(),
-    conexiones: estadoDeConexiones(cfg(), almacenCorreo)
+    conexiones: estadoDeConexiones(cfg(), almacenCorreo, hayOps)
   }));
 
   // --- Acceso: quien puede ver el portal ---
@@ -345,7 +371,110 @@ export function construirRutas(
 
   // --- Equipo: quienes son, para asignar y para la vista de equipo ---
 
-  router.get('/equipo', async () => datos.equipo.leer());
+  // El equipo es lo guardado en la aplicacion mas lo que manden por la API
+  // los emisores con tipo `equipo` (por correo o identificador, sin repetir).
+  router.get('/equipo', async () => {
+    const vistos = new Map<string, Person>();
+    const agregar = (p: Person) => {
+      const llave = (p.email ?? p.id).toLowerCase();
+      if (!vistos.has(llave)) {
+        vistos.set(llave, p);
+      }
+    };
+    datos.equipo.leer().forEach(agregar);
+    for (const emisor of todosLosEmisores()) {
+      if (emisor.tipos.includes('equipo')) {
+        (
+          almacen.leer<Person>('equipo', emisor.nombre)?.elementos ?? []
+        ).forEach(agregar);
+      }
+    }
+    return [...vistos.values()];
+  });
+
+  // --- Emisores: quien puede alimentar la API desde afuera ---
+  //
+  // Se crean desde la aplicacion. El token se enseña una sola vez, al crear;
+  // despues solo se ve el nombre y que tipos puede mandar.
+
+  const todosLosEmisores = (): ClienteIngesta[] => [
+    ...cfg().clientesIngesta,
+    ...datos.emisores.leer()
+  ];
+
+  router.get('/emisores', async () =>
+    todosLosEmisores().map((e) => ({
+      nombre: e.nombre,
+      tipos: e.tipos,
+      accountId: e.accountId,
+      vigenciaSegundos: e.vigenciaSegundos,
+      deEntorno: cfg().clientesIngesta.some((c) => c.nombre === e.nombre),
+      ultimoEnvio:
+        e.tipos
+          .map((t) => almacen.leer(t as TipoIngesta, e.nombre)?.recibidoEn)
+          .filter((x): x is string => !!x)
+          .sort()
+          .pop() ?? undefined
+    }))
+  );
+
+  router.post('/emisores/guardar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const cuerpo = (contexto.cuerpo ?? {}) as {
+      nombre?: string;
+      tipos?: string[];
+      accountId?: string;
+      vigenciaSegundos?: number;
+    };
+    const nombre = (cuerpo.nombre ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    if (!nombre) {
+      throw new ErrorPuente('El emisor necesita un nombre.', 400);
+    }
+    if (todosLosEmisores().some((e) => e.nombre === nombre)) {
+      throw new ErrorPuente(`Ya hay un emisor llamado "${nombre}".`, 400);
+    }
+    const tipos = (cuerpo.tipos ?? []).filter((t) =>
+      [
+        'pendientes',
+        'equipo',
+        'juntas',
+        'monitoreo',
+        'crm',
+        'licencias',
+        'despliegues',
+        'repos'
+      ].includes(t)
+    );
+    if (tipos.length === 0) {
+      throw new ErrorPuente(
+        'El emisor necesita al menos un tipo de envío.',
+        400
+      );
+    }
+    const emisor: ClienteIngesta = {
+      nombre,
+      token: randomBytes(24).toString('base64url'),
+      tipos,
+      accountId: (cuerpo.accountId ?? '').trim() || 'ops',
+      vigenciaSegundos: Number(cuerpo.vigenciaSegundos) || 0
+    };
+    await datos.emisores.escribir([...datos.emisores.leer(), emisor]);
+    // El token solo viaja aqui, una vez.
+    return { ...emisor, aviso: 'Guarda este token: no se vuelve a mostrar.' };
+  });
+
+  router.post('/emisores/borrar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { nombre } = (contexto.cuerpo ?? {}) as { nombre?: string };
+    await datos.emisores.escribir(
+      datos.emisores.leer().filter((e) => e.nombre !== nombre)
+    );
+    return { ok: true };
+  });
 
   router.post('/equipo/guardar', async (contexto) => {
     exigirAdmin(contexto, cfg(), acceso);
@@ -382,6 +511,52 @@ export function construirRutas(
       };
     });
     return datos.equipo.escribir(limpias);
+  });
+
+  // --- Pendientes personales: se guardan completos en cada cambio ---
+
+  router.get('/personales/tasks', async () => datos.personales.leer());
+
+  router.post('/personales/guardar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { pendientes } = (contexto.cuerpo ?? {}) as { pendientes?: unknown };
+    if (!Array.isArray(pendientes)) {
+      throw new ErrorPuente('"pendientes" debe ser una lista.', 400);
+    }
+    const ahora = new Date().toISOString();
+    const limpios: TaskItem[] = pendientes.map((cruda, i) => {
+      const t = (cruda ?? {}) as Record<string, unknown>;
+      const title = typeof t['title'] === 'string' ? t['title'].trim() : '';
+      if (!title) {
+        throw new ErrorPuente(`pendientes[${i}].title es obligatorio.`, 400);
+      }
+      const texto = (v: unknown) =>
+        typeof v === 'string' && v.trim() ? v.trim() : undefined;
+      return {
+        id: texto(t['id']) ?? `local-${i}-${Date.now()}`,
+        title,
+        description: texto(t['description']),
+        status:
+          (['pendiente', 'en_progreso', 'bloqueado', 'hecho'] as const).find(
+            (e) => e === t['status']
+          ) ?? 'pendiente',
+        priority:
+          (['baja', 'media', 'alta', 'urgente'] as const).find(
+            (p) => p === t['priority']
+          ) ?? 'media',
+        dueDate: texto(t['dueDate']),
+        accountId: 'mios',
+        origin: 'local',
+        project: texto(t['project']),
+        tags: Array.isArray(t['tags'])
+          ? (t['tags'] as unknown[]).filter(
+              (x): x is string => typeof x === 'string'
+            )
+          : [],
+        updatedAt: texto(t['updatedAt']) ?? ahora
+      };
+    });
+    return datos.personales.escribir(limpios);
   });
 
   // --- Dominios: registro, vencimiento y costo de renovacion ---
@@ -806,7 +981,7 @@ export function construirRutas(
       throw new ErrorPuente(`No hay una integración "${id}".`, 404);
     }
     const guardadas = integraciones?.almacen.variablesDe(id) ?? {};
-    const estado = estadoDeConexiones(cfg(), almacenCorreo).find(
+    const estado = estadoDeConexiones(cfg(), almacenCorreo, hayOps).find(
       (e) => e.conexion === id
     );
     // Acceso y la aplicacion de Microsoft no son conexiones del portal: su
@@ -904,9 +1079,26 @@ export function construirRutas(
     }
   });
 
+  // --- Ops: los pendientes que mandan por la API los emisores del equipo ---
+  //
+  // No hay un tablero de Ops que consultar: Ops es lo que otros sistemas nos
+  // empujan con su token (POST /ingesta/pendientes). Aqui se juntan todos los
+  // emisores de pendientes que no son un buzon de correo.
+
+  router.get('/ops/pendientes/tasks', async () => {
+    const buzones = new Set(buzones_(cfg(), almacenCorreo).map((c) => c.id));
+    return todosLosEmisores()
+      .filter((e) => e.tipos.includes('pendientes') && !buzones.has(e.nombre))
+      .flatMap(
+        (e) => almacen.leer<TaskItem>('pendientes', e.nombre)?.elementos ?? []
+      );
+  });
+
   // --- Lo que se recibe en lugar de ir a buscarlo ---
 
-  registrarRutasIngesta(router, configInicial, almacen);
+  registrarRutasIngesta(router, configInicial, almacen, () =>
+    datos.emisores.leer()
+  );
 
   return router;
 }

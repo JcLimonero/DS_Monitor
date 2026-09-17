@@ -1,11 +1,9 @@
-import { Injectable, computed, signal } from '@angular/core';
-import { Observable, of } from 'rxjs';
-import { TaskItem, TaskPriority } from '../../models';
-import { demoLocalTasks } from '../demo/demo-tasks';
-import { SourceKind } from '../../models';
+import { HttpClient } from '@angular/common/http';
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { Observable, of, tap } from 'rxjs';
+import { PORTAL_CONFIG } from '../../config/portal-config.token';
+import { SourceKind, TaskItem, TaskPriority } from '../../models';
 import { TaskSource } from '../source.contracts';
-
-const STORAGE_KEY = 'portal.pendientes-locales.v1';
 
 /** Datos que pide el formulario de alta rapida. */
 export interface NewLocalTask {
@@ -16,11 +14,12 @@ export interface NewLocalTask {
 }
 
 /**
- * Pendientes capturados en el portal mismo.
+ * Pendientes personales: los que uno se apunta en el portal mismo.
  *
- * Viven en localStorage porque todavía no hay backend; cuando lo haya, esta
- * clase es lo único que cambia: el resto del portal la consume como cualquier
- * otra `TaskSource`.
+ * Viven en el servidor (`/personales`), para que el monitor de la oficina y
+ * la computadora vean lo mismo. Cada cambio manda la lista completa: son
+ * decenas de renglones, no miles. Sin servidor (desarrollo sin backend) la
+ * lista vive solo en memoria y arranca vacía: aquí no hay datos inventados.
  */
 @Injectable({ providedIn: 'root' })
 export class LocalTaskStore implements TaskSource {
@@ -29,16 +28,39 @@ export class LocalTaskStore implements TaskSource {
   readonly kind: SourceKind = 'local';
   readonly demo = false;
 
+  private readonly http = inject(HttpClient);
+  private readonly config = inject(PORTAL_CONFIG);
   private readonly accountId = 'mios';
-  private readonly tasksSignal = signal<TaskItem[]>(this.load());
+  private readonly tasksSignal = signal<TaskItem[]>([]);
+  /** Ya se leyó del servidor: de ahí en adelante manda la copia local. */
+  private cargado = false;
 
   readonly tasks = this.tasksSignal.asReadonly();
   readonly openCount = computed(
     () => this.tasksSignal().filter((t) => t.status !== 'hecho').length
   );
+  /** Qué pasó con el último guardado, para que la vista lo diga si falló. */
+  readonly error = signal<string | undefined>(undefined);
+
+  private get remoto(): boolean {
+    return !!this.config.gatewayUrl;
+  }
 
   fetchTasks(): Observable<TaskItem[]> {
-    return of(this.tasksSignal());
+    // Después de la primera lectura se sirve la copia en memoria: si no, un
+    // refresco justo después de agregar traería la lista vieja del servidor
+    // antes de que termine el guardado.
+    if (!this.remoto || this.cargado) {
+      return of(this.tasksSignal());
+    }
+    return this.http
+      .get<TaskItem[]>(`${this.config.gatewayUrl}/personales/tasks`)
+      .pipe(
+        tap((tasks) => {
+          this.tasksSignal.set(tasks);
+          this.cargado = true;
+        })
+      );
   }
 
   add(input: NewLocalTask): TaskItem {
@@ -80,25 +102,27 @@ export class LocalTaskStore implements TaskSource {
 
   private commit(tasks: TaskItem[]): void {
     this.tasksSignal.set(tasks);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-    } catch {
-      // Modo privado o almacenamiento lleno: la sesión sigue, solo no persiste.
+    if (!this.remoto) {
+      return;
     }
-  }
-
-  private load(): TaskItem[] {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed: unknown = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          return parsed as TaskItem[];
+    this.http
+      .post<TaskItem[]>(`${this.config.gatewayUrl}/personales/guardar`, {
+        pendientes: tasks
+      })
+      .subscribe({
+        next: (guardados) => {
+          this.tasksSignal.set(guardados);
+          this.error.set(undefined);
+        },
+        error: (error: unknown) => {
+          const http = error as {
+            error?: { error?: string };
+            message?: string;
+          };
+          this.error.set(
+            http?.error?.error ?? http?.message ?? 'No se pudo guardar.'
+          );
         }
-      }
-    } catch {
-      // Si lo guardado quedó corrupto se arranca con la semilla de ejemplo.
-    }
-    return demoLocalTasks(this.accountId);
+      });
   }
 }

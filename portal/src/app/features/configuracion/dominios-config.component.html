@@ -1,0 +1,211 @@
+<section class="card card-pad mt-4">
+  <h2 class="text-sm font-semibold text-ink">Dominios registrados</h2>
+  <p class="mt-1 max-w-3xl text-sm text-ink-muted">
+    Cuándo vence cada dominio y cuánto cuesta renovarlo. Se guardan en el
+    aplicación y salen en Licencias como renovaciones anuales, con aviso cuando
+    se acerca la fecha.
+  </p>
+  @if (!admin.disponible) {
+    <p class="mt-3 text-xs text-ink-muted">
+      Los dominios se editan en la aplicación publicada.
+    </p>
+  } @else {
+    <div class="mt-3 overflow-x-auto">
+      <table class="w-full min-w-[900px] text-xs">
+        <thead class="text-left text-ink-subtle">
+          <tr>
+            <th class="py-1 pr-2 font-medium">Dominio</th>
+            <th class="py-1 pr-2 font-medium">Registrador</th>
+            <th class="py-1 pr-2 font-medium">Vence</th>
+            <th class="py-1 pr-2 font-medium">Días</th>
+            <th class="py-1 pr-2 font-medium">Costo</th>
+            <th class="py-1 pr-2 font-medium">Moneda</th>
+            <th class="py-1 pr-2 font-medium">Auto</th>
+            <th class="py-1 pr-2 font-medium">Notas</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (d of dominiosDraft(); track $index) {
+            <tr class="border-t border-line">
+              <td class="py-1 pr-2">
+                <input
+                  class="field w-56 font-mono"
+                  type="text"
+                  [name]="'dom-nombre-' + $index"
+                  [ngModel]="d.nombre"
+                  (ngModelChange)="updateDominio($index, { nombre: $event })" />
+              </td>
+              <td class="py-1 pr-2">
+                <input
+                  class="field w-28"
+                  type="text"
+                  [name]="'dom-reg-' + $index"
+                  [ngModel]="d.registrador"
+                  (ngModelChange)="
+                    updateDominio($index, { registrador: $event })
+                  " />
+              </td>
+              <td class="py-1 pr-2">
+                <input
+                  class="field w-36"
+                  type="date"
+                  [name]="'dom-vence-' + $index"
+                  [ngModel]="fechaCorta(d.venceEn)"
+                  (ngModelChange)="
+                    updateDominio($index, { venceEn: $event })
+                  " />
+              </td>
+              <td
+                class="py-1 pr-2 whitespace-nowrap font-semibold tabular-nums"
+                [class.text-rose-600]="diasPara(d.venceEn) < 0"
+                [class.text-amber-600]="
+                  diasPara(d.venceEn) >= 0 && diasPara(d.venceEn) <= 45
+                "
+                [class.text-emerald-600]="diasPara(d.venceEn) > 45">
+                {{
+                  d.venceEn
+                    ? diasPara(d.venceEn) < 0
+                      ? "vencido hace " + -diasPara(d.venceEn)
+                      : diasPara(d.venceEn)
+                    : ""
+                }}
+              </td>
+              <td class="py-1 pr-2">
+                <input
+                  class="field w-24"
+                  type="number"
+                  step="0.01"
+                  [name]="'dom-costo-' + $index"
+                  [ngModel]="d.costo"
+                  (ngModelChange)="updateDominio($index, { costo: $event })" />
+              </td>
+              <td class="py-1 pr-2">
+                <input
+                  class="field w-16"
+                  type="text"
+                  [name]="'dom-moneda-' + $index"
+                  [ngModel]="d.moneda"
+                  (ngModelChange)="updateDominio($index, { moneda: $event })" />
+              </td>
+              <td class="py-1 pr-2 text-center">
+                <input
+                  type="checkbox"
+                  [checked]="d.automatico"
+                  (change)="
+                    updateDominio($index, { automatico: !d.automatico })
+                  " />
+              </td>
+              <td class="py-1 pr-2">
+                <input
+                  class="field"
+                  type="text"
+                  [name]="'dom-notas-' + $index"
+                  [ngModel]="d.notas"
+                  (ngModelChange)="updateDominio($index, { notas: $event })" />
+              </td>
+              <td class="py-1">
+                <button
+                  type="button"
+                  class="btn px-2 py-1"
+                  title="Quitar"
+                  (click)="removeDominio($index)">
+                  <pt-icon name="basura" class="h-4 w-4" />
+                </button>
+              </td>
+            </tr>
+          }
+          <tr class="border-t border-line bg-surface-muted">
+            <td class="py-1 pr-2">
+              <input
+                class="field font-mono"
+                type="text"
+                name="dom-nuevo-nombre"
+                placeholder="nuevo.com.mx"
+                [ngModel]="nuevoDominio().nombre"
+                (ngModelChange)="updateNuevoDominio({ nombre: $event })" />
+            </td>
+            <td class="py-1 pr-2">
+              <input
+                class="field w-28"
+                type="text"
+                name="dom-nuevo-reg"
+                [ngModel]="nuevoDominio().registrador"
+                (ngModelChange)="updateNuevoDominio({ registrador: $event })" />
+            </td>
+            <td class="py-1 pr-2">
+              <input
+                class="field w-36"
+                type="date"
+                name="dom-nuevo-vence"
+                [ngModel]="nuevoDominio().venceEn"
+                (ngModelChange)="updateNuevoDominio({ venceEn: $event })" />
+            </td>
+            <td></td>
+            <td class="py-1 pr-2">
+              <input
+                class="field w-24"
+                type="number"
+                step="0.01"
+                name="dom-nuevo-costo"
+                [ngModel]="nuevoDominio().costo"
+                (ngModelChange)="updateNuevoDominio({ costo: $event })" />
+            </td>
+            <td class="py-1 pr-2">
+              <input
+                class="field w-16"
+                type="text"
+                name="dom-nuevo-moneda"
+                [ngModel]="nuevoDominio().moneda"
+                (ngModelChange)="updateNuevoDominio({ moneda: $event })" />
+            </td>
+            <td class="py-1 pr-2 text-center">
+              <input
+                type="checkbox"
+                [checked]="nuevoDominio().automatico"
+                (change)="
+                  updateNuevoDominio({
+                    automatico: !nuevoDominio().automatico
+                  })
+                " />
+            </td>
+            <td class="py-1 pr-2">
+              <input
+                class="field"
+                type="text"
+                name="dom-nuevo-notas"
+                [ngModel]="nuevoDominio().notas"
+                (ngModelChange)="updateNuevoDominio({ notas: $event })" />
+            </td>
+            <td class="py-1">
+              <button
+                type="button"
+                class="btn px-2 py-1"
+                title="Agregar"
+                (click)="addDominio()">
+                <pt-icon name="mas" class="h-4 w-4" />
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-3 flex flex-wrap items-center gap-3">
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="ocupado() === 'dominios'"
+        (click)="saveDominios()">
+        Guardar dominios
+      </button>
+      @if (dominiosMensaje(); as m) {
+        <span
+          class="text-xs"
+          [class.text-emerald-700]="m.ok"
+          [class.text-rose-700]="!m.ok"
+          >{{ m.mensaje }}</span
+        >
+      }
+    </div>
+  }
+</section>

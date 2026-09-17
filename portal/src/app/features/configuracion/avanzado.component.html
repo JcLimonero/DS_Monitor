@@ -1,0 +1,87 @@
+<section class="card card-pad mt-4">
+  <h2 class="text-sm font-semibold text-ink">Backend (solo desarrollo)</h2>
+  <p class="mt-1 max-w-3xl text-sm text-ink-muted">
+    El portal no habla directo con Odoo, Google ni Microsoft: ninguno abre CORS
+    para una aplicación de página única, y meter sus credenciales en el
+    navegador las dejaria a la vista de cualquiera. En medio va un servicio
+    propio, el puente, que guarda las credenciales y devuelve los datos ya
+    traducidos a los modelos del portal.
+  </p>
+  <p class="mt-2 text-sm">
+    <span class="text-ink-muted">Raíz configurada:</span>
+    <code
+      class="ml-1 rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs text-ink">
+      {{ gatewayLabel() }}
+    </code>
+    @if (gatewayOverride()) {
+      <span class="ml-2 text-xs text-ink-muted"
+        >(elegida en este navegador)</span
+      >
+    }
+  </p>
+  <form
+    class="mt-3 flex flex-wrap items-center gap-2"
+    (ngSubmit)="useGateway()">
+    <label class="text-xs text-ink-muted" for="puente-url">
+      Usar otro puente desde este navegador
+    </label>
+    <input
+      id="puente-url"
+      name="puente-url"
+      type="url"
+      class="field w-72 font-mono text-xs"
+      placeholder="http://localhost:8787"
+      [ngModel]="gatewayInput()"
+      (ngModelChange)="gatewayInput.set($event)" />
+    <button type="submit" class="btn">Usar y recargar</button>
+    @if (gatewayOverride()) {
+      <button type="button" class="btn" (click)="resetGateway()">
+        Volver al del entorno
+      </button>
+    }
+  </form>
+  @if (demoCount() > 0) {
+    <p
+      class="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+      <pt-icon name="alerta" class="mt-0.5 h-4 w-4 shrink-0" />
+      Mientras una conexión siga en demostración, lo que ves en esa sección son
+      datos inventados.
+    </p>
+  }
+</section>
+
+<section class="card card-pad mt-4">
+  <h2 class="text-sm font-semibold text-ink">Token de administración</h2>
+  <p class="mt-1 max-w-3xl text-sm text-ink-muted">
+    Para guardar credenciales de buzones, probarlas y conectar cuentas de
+    Microsoft desde aquí, el puente pide el token de
+    <code class="font-mono text-xs">PUENTE_ADMIN_TOKEN</code>. Se guarda en este
+    navegador y viaja solo al puente.
+  </p>
+  <form class="mt-3 flex flex-wrap items-center gap-2" (ngSubmit)="saveToken()">
+    <input
+      name="token-admin"
+      type="password"
+      autocomplete="off"
+      class="field w-96 font-mono text-xs"
+      placeholder="PUENTE_ADMIN_TOKEN"
+      [ngModel]="tokenInput()"
+      (ngModelChange)="tokenInput.set($event)" />
+    <button type="submit" class="btn">Guardar token</button>
+    @if (admin.token()) {
+      <span class="text-xs text-ink-muted">Hay un token guardado.</span>
+    }
+  </form>
+</section>
+
+<section class="card card-pad mt-4">
+  <h2 class="text-sm font-semibold text-ink">
+    Lo que se guarda en este navegador
+  </h2>
+  <p class="mt-1 max-w-3xl text-sm text-ink-muted">
+    La raíz del puente, los buzones agregados, qué cuentas están encendidas, las
+    correcciones de licencias y las licencias capturadas a mano viven en el
+    almacenamiento local de este navegador. Otro navegador (el del monitor de la
+    oficina, por ejemplo) no las ve hasta que haya un backend para preferencias.
+  </p>
+</section>

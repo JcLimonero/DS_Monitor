@@ -21,7 +21,8 @@ export type TipoIngesta =
   | 'crm'
   | 'licencias'
   | 'despliegues'
-  | 'repos';
+  | 'repos'
+  | 'equipo';
 
 export const TIPOS_INGESTA: TipoIngesta[] = [
   'pendientes',
@@ -30,7 +31,8 @@ export const TIPOS_INGESTA: TipoIngesta[] = [
   'crm',
   'licencias',
   'despliegues',
-  'repos'
+  'repos',
+  'equipo'
 ];
 
 /**

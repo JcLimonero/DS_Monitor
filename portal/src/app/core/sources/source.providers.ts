@@ -71,17 +71,16 @@ function labelOf(config: PortalConfig, connection: SourceConnection): string {
 }
 
 /**
- * Una conexión corre contra el puente solo si así se pidio y además hay una
- * raíz a donde pegarle. Sin `gatewayUrl` cae a demo en vez de fallar en cada
- * petición, que es lo útil mientras el puente no existe.
+ * Con backend configurado, toda conexión con ruta va al backend: lo que no
+ * esté conectado responde con su error y Ajustes dice qué falta, en lugar de
+ * mostrar datos inventados. La demostración solo existe cuando no hay backend
+ * (desarrollo sin servidor).
  */
 function useGateway(
   config: PortalConfig,
   connection: SourceConnection
 ): boolean {
-  return (
-    connection.mode === 'gateway' && !!config.gatewayUrl && !!connection.path
-  );
+  return !!config.gatewayUrl && !!connection.path;
 }
 
 function buildTaskSources(

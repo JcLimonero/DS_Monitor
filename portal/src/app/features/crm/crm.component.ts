@@ -21,6 +21,7 @@ import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 import { DayPipe, MoneyPipe, RelativePipe } from '../../ui/portal.pipes';
 
+import { IntegracionConfigComponent } from '../configuracion/integracion-config.component';
 @Component({
   selector: 'pt-crm',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -30,7 +31,8 @@ import { DayPipe, MoneyPipe, RelativePipe } from '../../ui/portal.pipes';
     IconComponent,
     MoneyPipe,
     PageHeaderComponent,
-    RelativePipe
+    RelativePipe,
+    IntegracionConfigComponent
   ],
   templateUrl: './crm.component.html'
 })

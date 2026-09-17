@@ -22,7 +22,7 @@ import { TaskCardComponent } from '../../ui/task-card.component';
 
 /**
  * Los pendientes personales: lo que uno se apunta para sí, aparte de lo que
- * viene de Odoo, de Ops o del correo. Viven en este navegador.
+ * viene de Odoo, de Ops o del correo. Se guardan en la aplicación.
  */
 @Component({
   selector: 'pt-personales',
@@ -50,6 +50,7 @@ export class PersonalesComponent {
   readonly includeDone = signal(false);
 
   readonly canAdd = computed(() => this.newTitle().trim().length > 0);
+  readonly saveError = this.local.error;
 
   readonly open = computed<TaskItem[]>(() =>
     [...this.local.tasks()]

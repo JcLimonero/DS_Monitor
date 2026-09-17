@@ -105,6 +105,15 @@
     <pt-empty-state
       icon="monitoreo"
       title="Sin destinos que mostrar"
-      hint="Quita los filtros o agrega destinos a la fuente de monitoreo." />
+      hint="Quita los filtros o agrega destinos abajo, en Configuración." />
   </div>
 }
+
+<!-- Configuración de este módulo -->
+<details class="mt-6" open>
+  <summary
+    class="cursor-pointer text-xs font-bold uppercase tracking-wide text-ink-subtle">
+    Configuración
+  </summary>
+  <pt-integracion-config [kinds]="['monitor']" />
+</details>

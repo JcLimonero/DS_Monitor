@@ -91,7 +91,9 @@ const datos = abrirDatos(config.directorioDatos);
 await Promise.all([
   datos.equipo.cargar(),
   datos.dominios.cargar(),
-  datos.sesiones.cargar()
+  datos.sesiones.cargar(),
+  datos.personales.cargar(),
+  datos.emisores.cargar()
 ]);
 
 const servidor = createServer(

@@ -123,6 +123,15 @@
     <pt-empty-state
       icon="rama"
       title="Sin repositorios"
-      hint="Configura GitHub en el puente, o mándale el estado desde tu CI." />
+      hint="Conecta GitHub abajo, en Configuración." />
   </div>
 }
+
+<!-- Configuración de este módulo -->
+<details class="mt-6" open>
+  <summary
+    class="cursor-pointer text-xs font-bold uppercase tracking-wide text-ink-subtle">
+    Configuración
+  </summary>
+  <pt-integracion-config [kinds]="['github']" />
+</details>

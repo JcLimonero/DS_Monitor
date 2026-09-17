@@ -15,6 +15,7 @@ import {
 import { environment } from '../environments/environment';
 import { sesionInterceptor } from './core/acceso/sesion.interceptor';
 import { withGatewayOverride } from './core/config/gateway-override';
+import { provideCuentasConfiguradas } from './core/config/configuradas';
 import {
   readLocalSettings,
   withLocalSettings
@@ -40,6 +41,7 @@ export const appConfig: ApplicationConfig = {
       withInMemoryScrolling({ scrollPositionRestoration: 'top' })
     ),
     provideHttpClient(withFetch(), withInterceptors([sesionInterceptor])),
+    provideCuentasConfiguradas(portal),
     { provide: PORTAL_CONFIG, useValue: portal },
     providePortalSources(portal)
   ]

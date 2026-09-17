@@ -138,6 +138,16 @@
     <pt-empty-state
       icon="licencia"
       title="Sin licencias configuradas"
-      hint="Agrega las suscripciones en la configuración del portal." />
+      hint="Las licencias llegan del correo y de los dominios; también se capturan abajo, en Configuración." />
   </div>
 }
+
+<!-- Configuración de este módulo -->
+<details class="mt-6" open>
+  <summary
+    class="cursor-pointer text-xs font-bold uppercase tracking-wide text-ink-subtle">
+    Configuración
+  </summary>
+  <pt-licencias-config />
+  <pt-integracion-config [kinds]="['anthropic', 'cursor', 'figma']" />
+</details>

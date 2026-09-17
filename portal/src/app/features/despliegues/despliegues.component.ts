@@ -48,6 +48,7 @@ const CLASE_PLATAFORMA: Record<PlatformIndicator, string> = {
   desconocido: 'text-ink-subtle'
 };
 
+import { IntegracionConfigComponent } from '../configuracion/integracion-config.component';
 @Component({
   selector: 'pt-despliegues',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -58,7 +59,8 @@ const CLASE_PLATAFORMA: Record<PlatformIndicator, string> = {
     IconComponent,
     PageHeaderComponent,
     RelativePipe,
-    TimePipe
+    TimePipe,
+    IntegracionConfigComponent
   ],
   templateUrl: './despliegues.component.html'
 })

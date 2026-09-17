@@ -8,6 +8,7 @@ import {
   MAXIMO_HISTORIAL,
   normalizarCrm,
   normalizarDespliegues,
+  normalizarEquipo,
   normalizarJuntas,
   normalizarLicencias,
   normalizarPendientes,
@@ -28,6 +29,7 @@ import { validarSobre } from './validar.js';
 
 /** Que recurso del portal alimenta cada tipo de envio. */
 const RECURSOS_POR_TIPO: Record<TipoIngesta, string[]> = {
+  equipo: ['team'],
   pendientes: ['tasks'],
   juntas: ['meetings'],
   monitoreo: ['targets'],
@@ -169,13 +171,20 @@ export function enPalabras(segundos: number): string {
 export function registrarRutasIngesta(
   router: Router,
   config: Configuracion,
-  almacen: AlmacenIngesta
+  almacen: AlmacenIngesta,
+  /** Los emisores creados desde la aplicacion, ademas de los del entorno. */
+  emisores: () => ClienteIngesta[] = () => []
 ): void {
+  const clientes = (): ClienteIngesta[] => [
+    ...config.clientesIngesta,
+    ...emisores()
+  ];
+
   // --- Recibir ---
 
   for (const tipo of TIPOS_INGESTA) {
     router.post(`/ingesta/${tipo}`, async (contexto) => {
-      const cliente = autenticar(contexto, config.clientesIngesta, tipo);
+      const cliente = autenticar(contexto, clientes(), tipo);
       const { modo, generadoEn, datos } = validarSobre(contexto.cuerpo, tipo);
       const ahora = new Date();
 
@@ -231,24 +240,26 @@ export function registrarRutasIngesta(
       }
 
       const elementos =
-        tipo === 'pendientes'
-          ? normalizarPendientes(
-              datos,
-              cliente.nombre,
-              cliente.accountId,
-              ahora
-            )
-          : tipo === 'juntas'
-            ? normalizarJuntas(datos, cliente.nombre, cliente.accountId)
-            : tipo === 'licencias'
-              ? normalizarLicencias(datos, cliente.accountId, ahora)
-              : tipo === 'despliegues'
-                ? normalizarDespliegues(
-                    datos,
-                    cliente.nombre,
-                    cliente.accountId
-                  )
-                : normalizarRepos(datos, cliente.accountId, ahora);
+        tipo === 'equipo'
+          ? normalizarEquipo(datos)
+          : tipo === 'pendientes'
+            ? normalizarPendientes(
+                datos,
+                cliente.nombre,
+                cliente.accountId,
+                ahora
+              )
+            : tipo === 'juntas'
+              ? normalizarJuntas(datos, cliente.nombre, cliente.accountId)
+              : tipo === 'licencias'
+                ? normalizarLicencias(datos, cliente.accountId, ahora)
+                : tipo === 'despliegues'
+                  ? normalizarDespliegues(
+                      datos,
+                      cliente.nombre,
+                      cliente.accountId
+                    )
+                  : normalizarRepos(datos, cliente.accountId, ahora);
 
       const resultado = await almacen.guardar(
         tipo,
@@ -269,9 +280,10 @@ export function registrarRutasIngesta(
   // --- Devolver lo recibido ---
   //
   // Se registra una ruta por cada combinacion de origen y recurso que los
-  // clientes configurados pueden alimentar. Registrarlas explicitamente hace
-  // que la prueba de costura las vea, en lugar de una ruta comodin que
-  // aceptaria cualquier cosa y escondería los huecos.
+  // clientes del entorno pueden alimentar. Registrarlas explicitamente hace
+  // que la prueba de costura las vea. Los emisores creados desde la
+  // aplicacion no existen al arrancar: a esos los atiende la ruta generica de
+  // abajo.
   for (const cliente of config.clientesIngesta) {
     if (!origenValido(cliente.nombre)) {
       console.warn(
@@ -293,17 +305,34 @@ export function registrarRutasIngesta(
     }
   }
 
+  router.get('/recibido/:emisor/:recurso', async ({ segmentos }) => {
+    const nombre = segmentos[1] as string;
+    const recurso = segmentos[2] as string;
+    const cliente = emisores().find((c) => c.nombre === nombre);
+    const tipo = (Object.keys(RECURSOS_POR_TIPO) as TipoIngesta[]).find((t) =>
+      RECURSOS_POR_TIPO[t].includes(recurso)
+    );
+    if (!cliente || !tipo || !cliente.tipos.includes(tipo)) {
+      throw new ErrorPuente(
+        `No hay nada en /recibido/${nombre}/${recurso}`,
+        404
+      );
+    }
+    const origen =
+      tipo === 'crm'
+        ? `${nombre}__${recurso === 'opportunities' ? 'oportunidades' : 'actividades'}`
+        : nombre;
+    return servirRecibido(almacen, cliente, tipo, origen);
+  });
+
   // --- Diagnostico ---
 
   router.get('/ingesta/estado', async () => {
     const vigencias = new Map(
-      config.clientesIngesta.map((cliente) => [
-        cliente.nombre,
-        cliente.vigenciaSegundos
-      ])
+      clientes().map((cliente) => [cliente.nombre, cliente.vigenciaSegundos])
     );
     // Las dos mitades del CRM comparten la vigencia de su emisor.
-    for (const cliente of config.clientesIngesta) {
+    for (const cliente of clientes()) {
       vigencias.set(
         `${cliente.nombre}__oportunidades`,
         cliente.vigenciaSegundos
@@ -312,7 +341,7 @@ export function registrarRutasIngesta(
     }
 
     return {
-      emisores: config.clientesIngesta.map((cliente) => ({
+      emisores: clientes().map((cliente) => ({
         nombre: cliente.nombre,
         tipos: cliente.tipos,
         accountId: cliente.accountId,

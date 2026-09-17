@@ -32,6 +32,8 @@ const CANTIDAD = new Intl.NumberFormat('es-MX', {
 });
 const DINERO = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 });
 
+import { IntegracionConfigComponent } from '../configuracion/integracion-config.component';
+import { LicenciasConfigComponent } from '../configuracion/licencias-config.component';
 @Component({
   selector: 'pt-licencias',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -41,7 +43,9 @@ const DINERO = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 });
     EmptyStateComponent,
     IconComponent,
     PageHeaderComponent,
-    RelativePipe
+    RelativePipe,
+    IntegracionConfigComponent,
+    LicenciasConfigComponent
   ],
   templateUrl: './licencias.component.html'
 })

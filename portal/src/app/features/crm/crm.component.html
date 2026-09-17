@@ -183,6 +183,15 @@
     <pt-empty-state
       icon="crm"
       title="Sin datos del CRM"
-      hint="La fuente de Odoo no devolvió oportunidades. Revisa Ajustes." />
+      hint="Conecta Odoo abajo, en Configuración." />
   </div>
 }
+
+<!-- Configuración de este módulo -->
+<details class="mt-6" open>
+  <summary
+    class="cursor-pointer text-xs font-bold uppercase tracking-wide text-ink-subtle">
+    Configuración
+  </summary>
+  <pt-integracion-config [kinds]="['odoo']" />
+</details>

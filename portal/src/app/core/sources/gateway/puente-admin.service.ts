@@ -78,6 +78,16 @@ export interface EstadoIntegracion {
   campos: CampoIntegracion[];
 }
 
+/** Quien puede mandar datos por la API. El token nunca viene en la lista. */
+export interface Emisor {
+  nombre: string;
+  tipos: string[];
+  accountId: string;
+  vigenciaSegundos: number;
+  deEntorno: boolean;
+  ultimoEnvio?: string;
+}
+
 const TOKEN_KEY = 'ds-monitor.puente-token';
 
 /**
@@ -187,6 +197,38 @@ export class PuenteAdminService {
       { dominios },
       { headers: this.headers() }
     );
+  }
+
+  emisores(): Observable<Emisor[]> {
+    return this.http.get<Emisor[]>(this.url('/emisores'));
+  }
+
+  /** Devuelve el emisor con su token: es la única vez que se ve. */
+  crearEmisor(datos: {
+    nombre: string;
+    tipos: string[];
+    accountId?: string;
+    vigenciaSegundos?: number;
+  }): Observable<Emisor & { token: string; aviso: string }> {
+    return this.http.post<Emisor & { token: string; aviso: string }>(
+      this.url('/emisores/guardar'),
+      datos,
+      { headers: this.headers() }
+    );
+  }
+
+  borrarEmisor(nombre: string): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(
+      this.url('/emisores/borrar'),
+      { nombre },
+      { headers: this.headers() }
+    );
+  }
+
+  /** La raíz pública de la API, para enseñar cómo mandar datos. */
+  get apiUrl(): string {
+    const base = this.config.gatewayUrl;
+    return base.startsWith('http') ? base : `${location.origin}${base}`;
   }
 
   private url(path: string): string {

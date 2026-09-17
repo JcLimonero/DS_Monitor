@@ -22,7 +22,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { path: '/panel', label: 'Panel', icon: 'panel' },
   { path: '/pendientes', label: 'Pendientes', icon: 'tareas' },
-  { path: '/personales', label: 'Personales', icon: 'bandeja' },
+  { path: '/personales', label: 'Personales', icon: 'ok' },
   { path: '/agenda', label: 'Agenda', icon: 'agenda' },
   { path: '/monitoreo', label: 'Monitoreo', icon: 'monitoreo' },
   { path: '/crm', label: 'CRM Odoo', icon: 'crm' },
@@ -30,7 +30,8 @@ const NAV: NavItem[] = [
   { path: '/repos', label: 'Repositorios', icon: 'rama' },
   { path: '/licencias', label: 'Licencias', icon: 'licencia' },
   { path: '/equipo', label: 'Equipo', icon: 'equipo' },
-  { path: '/ajustes', label: 'Ajustes', icon: 'ajustes' }
+  { path: '/correo', label: 'Correo', icon: 'bandeja' },
+  { path: '/dominios', label: 'Dominios', icon: 'lugar' }
 ];
 
 /** Armazon de la aplicacion: barra lateral, encabezado y el area de trabajo. */

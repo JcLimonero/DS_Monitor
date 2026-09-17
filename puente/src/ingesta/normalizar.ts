@@ -78,6 +78,19 @@ function idConOrigen(origen: string, id: string): string {
   return `${origen}-${id}`;
 }
 
+// --- Equipo ---
+
+/** Una lista de personas tal cual: nombre, correo y rol. */
+export function normalizarEquipo(datos: unknown): Person[] {
+  return listaDeObjetos(datos, '"datos"').map((crudo, indice) => {
+    const quien = persona(crudo, `datos[${indice}]`);
+    if (!quien) {
+      throw new Error(`datos[${indice}] es obligatorio`);
+    }
+    return quien;
+  });
+}
+
 // --- Pendientes ---
 
 const ESTADOS_TAREA = [

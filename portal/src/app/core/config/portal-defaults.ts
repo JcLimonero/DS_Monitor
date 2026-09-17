@@ -18,7 +18,7 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       detail: 'Odoo CRM de Itech',
       kind: 'odoo',
       color: 'violet',
-      enabled: true
+      enabled: false
     },
     // --- Buzones de correo ---
     //
@@ -97,7 +97,7 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       detail: 'Tablero de pendientes del equipo de desarrollo',
       kind: 'ops',
       color: 'amber',
-      enabled: true
+      enabled: false
     },
     {
       id: 'plataformas',
@@ -105,12 +105,12 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       detail: 'Sitios y servicios desplegados',
       kind: 'monitor',
       color: 'rose',
-      enabled: true
+      enabled: false
     },
-    // Las integraciones de Claude, Cursor y Figma arrancan apagadas: hoy no
-    // hay Admin API keys y sus datos de demostración (asientos de equipo)
-    // no corresponden a lo contratado, que es lo que llega por correo. Se
-    // encienden desde Ajustes cuando haya credenciales en el puente.
+    // Las integraciones que necesitan credencial (Odoo, Ops, monitoreo,
+    // Vercel, Claude, Cursor, Figma) arrancan apagadas: la aplicación no
+    // muestra datos inventados. Se encienden solas al configurarlas en
+    // Ajustes → Integraciones.
     {
       id: 'claude',
       label: 'Claude',
@@ -141,7 +141,7 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       detail: 'Despliegues y consumo de la plataforma',
       kind: 'vercel',
       color: 'teal',
-      enabled: true
+      enabled: false
     },
     {
       id: 'github',

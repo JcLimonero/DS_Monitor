@@ -40,6 +40,7 @@ const CLASE_APROBACION: Record<RepoReviewState, string> = {
   sin_revisar: 'text-ink-muted'
 };
 
+import { IntegracionConfigComponent } from '../configuracion/integracion-config.component';
 @Component({
   selector: 'pt-repos',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -47,7 +48,8 @@ const CLASE_APROBACION: Record<RepoReviewState, string> = {
     EmptyStateComponent,
     IconComponent,
     PageHeaderComponent,
-    RelativePipe
+    RelativePipe,
+    IntegracionConfigComponent
   ],
   templateUrl: './repos.component.html'
 })
