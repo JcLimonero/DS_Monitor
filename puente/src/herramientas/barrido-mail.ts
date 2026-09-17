@@ -257,8 +257,9 @@ async function enviar(
   });
   const cuerpo = await respuesta.text();
   if (!respuesta.ok) {
+    // Un 502 del proxy llega como una pagina HTML entera; con el inicio basta.
     throw new Error(
-      `${tipo}: el puente respondió ${respuesta.status} · ${cuerpo}`
+      `${tipo}: el puente respondió ${respuesta.status} · ${cuerpo.replace(/\s+/g, ' ').slice(0, 160)}`
     );
   }
   return cuerpo;
