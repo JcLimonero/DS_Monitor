@@ -157,28 +157,24 @@ export async function enviarPorEmailJs(
       user_id: config.publicKey,
       accessToken: config.privateKey,
       template_params: {
-        // La plantilla de contacto de las landings (from_name, email,
-        // to_email, empresa, cargo, area_interes, comentarios, origen...).
-        // El titulo va en todo lo que la plantilla pueda usar como asunto, y
-        // el codigo en todo lo que pueda usar como cuerpo.
+        // La plantilla "General_Contact Us" de Total One: {{title}} es el
+        // asunto, {{{html_content}}} el cuerpo, {{to_email}} el destinatario,
+        // {{name}} el remitente y {{email}} el Responder a. Los demas nombres
+        // van por si la plantilla cambia a la de las landings.
         title: 'Access Monitor',
         subject: 'Access Monitor',
-        origen: 'Access Monitor',
-        area_interes: 'Access Monitor',
+        html_content:
+          `<p>Tu código de acceso a <strong>DS Monitor</strong> es</p>` +
+          `<p style="font-size:28px;letter-spacing:6px;font-family:monospace"><strong>${codigo}</strong></p>` +
+          `<p>Vence en ${CODIGO_MINUTOS} minutos. Si no pediste entrar, ignora este correo.</p>`,
         to_email: correo,
         email: correo,
-        from_email: correo,
         reply_to: correo,
-        to_name: correo,
+        cc_email: '',
         name: 'DS Monitor',
         from_name: 'DS Monitor',
-        empresa: 'DS Monitor',
-        cargo: `Código de acceso: ${codigo}`,
-        telefono: 'No aplica',
-        num_agencias: 'No aplica',
-        fecha_preferida: `Vence en ${CODIGO_MINUTOS} minutos`,
-        giro: 'Acceso al monitor',
-        equipo: 'DS Monitor',
+        origen: 'Access Monitor',
+        area_interes: 'Access Monitor',
         comentarios: mensaje,
         message: mensaje,
         code: codigo

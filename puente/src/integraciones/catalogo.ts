@@ -357,7 +357,7 @@ INTEGRACIONES.push({
       tipo: 'texto',
       obligatoria: true,
       ayuda:
-        'La plantilla de contacto de las landings: "Access Monitor" va en origen y area_interes, y el código en comentarios (también en message y code).'
+        'La plantilla "General_Contact Us" de Total One: {{title}} lleva "Access Monitor" y {{{html_content}}} el código. Los nombres de las landings también van, por si se cambia.'
     },
     {
       variable: 'EMAILJS_PUBLIC_KEY',
