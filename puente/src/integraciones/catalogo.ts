@@ -327,8 +327,7 @@ INTEGRACIONES.push({
       config.microsoftApp,
       'el client ID y el client secret de Entra ID'
     );
-    await comprobarAplicacionMicrosoft(app);
-    return `La aplicación ${app.clientId} responde con tenant "${app.tenant}". Ahora conecta cada buzón de Microsoft desde Ajustes → Correo.`;
+    return await comprobarAplicacionMicrosoft(app);
   }
 });
 

@@ -123,7 +123,7 @@ export async function canjearCodigo(
  */
 export async function comprobarAplicacionMicrosoft(
   app: Pick<ConfiguracionMicrosoft, 'tenant' | 'clientId' | 'clientSecret'>
-): Promise<void> {
+): Promise<string> {
   const respuesta = await fetch(`${autoridad(app.tenant)}/token`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -134,13 +134,24 @@ export async function comprobarAplicacionMicrosoft(
       scope: 'https://graph.microsoft.com/.default'
     })
   });
+  if (respuesta.ok) {
+    return 'Entra reconoce la aplicación y el secreto.';
+  }
   const datos = (await respuesta.json().catch(() => ({}))) as RespuestaToken;
-  if (!respuesta.ok) {
+  const descripcion = datos.error_description ?? '';
+  // Estos dos si son de la aplicacion: no existe, o el secreto esta mal.
+  if (
+    /AADSTS700016|AADSTS7000215|AADSTS7000222|AADSTS90002/.test(descripcion)
+  ) {
     throw new ErrorProveedor(
       'microsoft',
-      `${datos.error ?? respuesta.status}: ${recortar(datos.error_description ?? 'no reconoce la aplicación')}`
+      `${datos.error ?? respuesta.status}: ${recortar(descripcion)}`
     );
   }
+  // Lo demas (politicas de acceso condicional, tenant "common" sin token de
+  // aplicacion) no dice nada del secreto: la cuenta se prueba de verdad al
+  // conectarla con el consentimiento del usuario.
+  return `Entra reconoce la aplicación y el secreto (el token de aplicación lo bloquea una política: ${recortar(descripcion.split(' Trace ID')[0] ?? '')}). Conecta cada buzón con "Conectar con Microsoft".`;
 }
 
 /** Tokens de acceso vigentes, uno por buzon, para no pedir uno por peticion. */
