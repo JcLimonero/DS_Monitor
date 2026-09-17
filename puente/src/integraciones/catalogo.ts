@@ -357,7 +357,7 @@ INTEGRACIONES.push({
       tipo: 'texto',
       obligatoria: true,
       ayuda:
-        'La plantilla de siempre: el correo lleva título "Access Monitor" y el código va en {{message}} y en {{code}}.'
+        'La plantilla de contacto de las landings: "Access Monitor" va en origen y area_interes, y el código en comentarios (también en message y code).'
     },
     {
       variable: 'EMAILJS_PUBLIC_KEY',
