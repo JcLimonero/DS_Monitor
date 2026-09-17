@@ -84,7 +84,7 @@ function describe(error: unknown): string {
     return http.error.error;
   }
   if (http?.status === 0) {
-    return 'No se pudo llegar al puente.';
+    return 'No se pudo llegar al servidor.';
   }
   return http?.message ?? String(error);
 }

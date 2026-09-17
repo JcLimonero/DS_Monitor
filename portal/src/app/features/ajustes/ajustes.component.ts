@@ -3,9 +3,10 @@ import {
   Component,
   computed,
   inject,
+  isDevMode,
   signal
 } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
@@ -78,59 +79,9 @@ const CAPABILITY_LABEL: Record<SourceConnection['provides'][number], string> = {
   repos: 'Repositorios'
 };
 
-/** Qué hace falta del lado del puente para que la conexión deje de ser demo. */
-const REQUIREMENTS: Record<SourceKind, string> = {
-  odoo:
-    'Usuario de Odoo con permiso de lectura sobre crm.lead y mail.activity, más la URL de la ' +
-    'instancia y la base de datos. El puente se autentica por JSON-RPC.',
-  google:
-    'Una contraseña de aplicación de la cuenta de Google (Seguridad → Verificación en dos pasos → ' +
-    'Contraseñas de aplicaciones) en CORREO_CONTRASENA_<ID> del puente. El puente entra por IMAP a ' +
-    'imap.gmail.com, lee las invitaciones con archivo de calendario, los correos que piden una ' +
-    'acción y los recibos de suscripciones.',
-  microsoft:
-    'Se entra por Microsoft Graph con la aplicación de Entra ID (una sola para todos los buzones; ' +
-    'se configura en Integraciones → Microsoft) y el consentimiento de la cuenta: botón "Conectar ' +
-    'con Microsoft". De ahí salen los correos y el calendario completo. Mientras no esté conectada, ' +
-    'el buzón lo alimenta el barrido de Mail.app de la Mac (npm run barrido en puente/).',
-  imap:
-    'Servidor, usuario y contraseña del buzón en CORREO_CUENTAS y CORREO_CONTRASENA_<ID> del ' +
-    'puente. Neubox acepta la contraseña del buzón; iCloud pide una contraseña específica de ' +
-    'aplicación (appleid.apple.com → Iniciar sesión y seguridad).',
-  ops: 'Credencial de lectura del tablero de Ops y el identificador del equipo de desarrollo.',
-  dominios:
-    'Nada que conectar: los dominios se capturan en la pestaña Dominios y el puente los guarda.',
-  monitor:
-    'La lista de destinos a vigilar. El puente hace las revisiones: desde el navegador no se ' +
-    'puede por CORS, y además cada quien mediría su propia red.',
-  local: 'Nada: estos pendientes se capturan y se guardan en el navegador.',
-  anthropic:
-    'Una Admin API key de la organización (sk-ant-admin...). El puente consulta ' +
-    '/v1/organizations/usage_report/messages para los tokens y /v1/organizations/cost_report ' +
-    'para el gasto; esos dos no están en los SDK, van por HTTP crudo. Los datos tardan hasta ' +
-    'cinco minutos en aparecer y no conviene sondear más de una vez por minuto.',
-  cursor:
-    'Una Team API key con permiso admin o usage. El puente consulta /teams/members, ' +
-    '/teams/daily-usage-data y /teams/spend en api.cursor.com. El límite es de veinte ' +
-    'peticiones por minuto por equipo.',
-  figma:
-    'Un token con acceso a la organización. Ojo: Figma NO publica facturación ni asientos ' +
-    'contratados por API. Se puede contar quién ocupa asiento con /v1/teams/{id}/members y, ' +
-    'en Enterprise, quién estuvo activo con /v1/activity_logs; el tope contratado y el costo ' +
-    'hay que capturarlos a mano.',
-  vercel:
-    'Un access token con acceso al equipo. El puente consulta /v6/deployments para los ' +
-    'despliegues y la página pública de estado de Vercel para los incidentes de la plataforma.',
-  github:
-    'Un token con lectura sobre los repositorios: permiso "repo" en uno clásico, o ' +
-    'contents:read, pull_requests:read y checks:read en uno de grano fino. También se puede ' +
-    'mandar el estado desde tu propio CI con POST /ingesta/repos, y así el puente no necesita ' +
-    'token de GitHub. Ver puente/INGESTA.md.'
-};
-
 const MODE_LABEL: Record<ConnectionMode, string> = {
   demo: 'Demostración',
-  gateway: 'A través del puente',
+  gateway: 'Datos reales',
   local: 'Solo en este navegador'
 };
 
@@ -144,7 +95,7 @@ export const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'dominios', label: 'Dominios' },
   { id: 'equipo', label: 'Equipo' },
   { id: 'integraciones', label: 'Integraciones' },
-  { id: 'puente', label: 'Puente' }
+  { id: 'puente', label: 'Avanzado' }
 ];
 
 const TAB_KEY = 'ds-monitor.ajustes.tab';
@@ -156,7 +107,6 @@ interface ConnectionRow {
   kindLabel: string;
   modeLabel: string;
   capabilities: string[];
-  requirement: string;
   enabled: boolean;
   /** True si la cuenta se agregó desde Ajustes y se puede quitar. */
   added: boolean;
@@ -198,6 +148,7 @@ interface LicenseDraft {
     DayPipe,
     DecimalPipe,
     FormsModule,
+    NgTemplateOutlet,
     IconComponent,
     PageHeaderComponent,
     RelativePipe
@@ -212,7 +163,9 @@ export class AjustesComponent {
   readonly admin = inject(PuenteAdminService);
 
   readonly config = inject(PORTAL_CONFIG);
-  readonly tabs = TABS;
+  /** Lo técnico (raíz del backend, token) solo se enseña en desarrollo. */
+  readonly desarrollo = isDevMode();
+  readonly tabs = TABS.filter((tab) => tab.id !== 'puente' || this.desarrollo);
   readonly providerLabel = LICENSE_PROVIDER_LABEL;
   readonly providers: LicenseProvider[] = [
     'otro',
@@ -248,7 +201,6 @@ export class AjustesComponent {
         capabilities: connection.provides.map(
           (capability) => CAPABILITY_LABEL[capability]
         ),
-        requirement: REQUIREMENTS[connection.kind],
         enabled: account?.enabled ?? true,
         added,
         puenteLine:
@@ -414,7 +366,7 @@ export class AjustesComponent {
           this.conexiones.update((c) => ({ ...c, [id]: { estado } }));
           this.pruebas.update((p) => ({
             ...p,
-            [id]: { ok: true, mensaje: 'Guardado en el puente.' }
+            [id]: { ok: true, mensaje: 'Guardado.' }
           }));
           this.conexionEditando.set(undefined);
           this.ocupado.set(undefined);
@@ -452,6 +404,17 @@ export class AjustesComponent {
 
   connectMicrosoft(row: ConnectionRow): void {
     const id = row.connection.accountId;
+    if (!this.estadoDe(id)?.conAplicacion) {
+      this.pruebas.update((p) => ({
+        ...p,
+        [id]: {
+          ok: false,
+          mensaje:
+            'Primero configura la aplicación de Entra ID (client ID y secret) en la tarjeta "Microsoft (Entra ID)" de arriba y guárdala.'
+        }
+      }));
+      return;
+    }
     this.ocupado.set(id);
     const volver = `${location.origin}/ajustes`;
     this.admin.iniciarOauth(id, volver).subscribe({
@@ -538,12 +501,16 @@ export class AjustesComponent {
         );
         this.pruebasIntegracion.update((p) => ({
           ...p,
-          [estado.id]: { ok: true, mensaje: 'Guardado en el puente.' }
+          [estado.id]: { ok: true, mensaje: 'Guardado.' }
         }));
         this.integracionEditando.set(undefined);
         this.ocupado.set(undefined);
         // Ya configurada en el puente: las conexiones de esa integración pasan
         // a datos reales, que es para lo que se capturó la credencial.
+        // La aplicación de Microsoft cambia lo que cada buzón puede hacer.
+        if (nuevo.id === 'microsoft') {
+          this.loadConnections();
+        }
         if (nuevo.configurada) {
           for (const row of this.otherRows()) {
             if (
@@ -587,12 +554,22 @@ export class AjustesComponent {
     });
   }
 
+  /** La aplicación de Entra ID, que se muestra en Correo si hay buzones de Microsoft. */
+  readonly microsoftApp = computed(() =>
+    this.mailRows().some((row) => row.connection.kind === 'microsoft')
+      ? (this.integraciones() ?? []).find((i) => i.id === 'microsoft')
+      : undefined
+  );
+
   /** Integraciones del puente que no corresponden a ninguna conexión (Acceso). */
   readonly integracionesSueltas = computed(() => {
     const kinds = new Set(
       this.otherRows().map((row) => row.connection.kind as string)
     );
-    return (this.integraciones() ?? []).filter((i) => !kinds.has(i.kind));
+    return (this.integraciones() ?? []).filter(
+      (i) =>
+        !kinds.has(i.kind) && !(i.id === 'microsoft' && this.microsoftApp())
+    );
   });
 
   // --- Equipo ---
@@ -655,7 +632,7 @@ export class AjustesComponent {
         this.equipoDraft.set(personas.map((p) => ({ ...p })));
         this.equipoMensaje.set({
           ok: true,
-          mensaje: 'Equipo guardado en el puente.'
+          mensaje: 'Equipo guardado.'
         });
         this.ocupado.set(undefined);
       },
@@ -748,7 +725,7 @@ export class AjustesComponent {
         this.dominiosDraft.set(guardados.map((d) => ({ ...d })));
         this.dominiosMensaje.set({
           ok: true,
-          mensaje: 'Dominios guardados en el puente.'
+          mensaje: 'Dominios guardados.'
         });
         this.ocupado.set(undefined);
         this.store.refreshLicenses();
@@ -1008,7 +985,7 @@ function describeHttp(error: unknown): string {
     return http.error.error;
   }
   if (http?.status === 0) {
-    return 'No se pudo llegar al puente.';
+    return 'No se pudo llegar al servidor.';
   }
   return http?.message ?? String(error);
 }

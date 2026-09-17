@@ -189,7 +189,7 @@ function faltanteDe(correo: ConfiguracionCorreo): string {
     ? correo.microsoft
       ? 'conectar la cuenta con Microsoft desde Ajustes → Correo'
       : 'la aplicación de Entra ID (Ajustes → Integraciones → Microsoft) y conectar la cuenta'
-    : `la contraseña del buzón (Ajustes → Correo o ${variableContrasena(correo.id)})`;
+    : 'la contraseña del buzón (Ajustes → Correo → Editar conexión)';
 }
 
 /** El token de administracion, para las rutas que editan buzones. */
@@ -531,10 +531,7 @@ export function construirRutas(
       cfg().microsoftApp
     );
     if (!cuenta) {
-      throw new ErrorPuente(
-        `No hay un buzón "${id}" en el puente: ni en CORREO_CUENTAS ni guardado desde Ajustes.`,
-        404
-      );
+      throw new ErrorPuente(`No hay un buzón "${id}" configurado.`, 404);
     }
     return cuenta;
   };

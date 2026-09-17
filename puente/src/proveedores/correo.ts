@@ -327,7 +327,7 @@ export async function leerCorreo(
   }
   if (!config.contrasena) {
     throw new ErrorConfiguracion(
-      `El buzón "${config.id}" no tiene contraseña: falta ${variableContrasena(config.id)} en el entorno del puente.`
+      `El buzón "${config.id}" no tiene contraseña: ponla en Ajustes → Correo → Editar conexión (o en ${variableContrasena(config.id)}).`
     );
   }
 

@@ -58,16 +58,17 @@
 
 <!-- ============================ Correo ============================ -->
 @if (tab() === "correo") {
+  @if (microsoftApp(); as app) {
+    <ng-container
+      *ngTemplateOutlet="tarjetaIntegracion; context: { estado: app }" />
+  }
   <section class="card card-pad mt-4">
     <h2 class="text-sm font-semibold text-ink">Agregar un buzón</h2>
     <p class="mt-1 max-w-3xl text-sm text-ink-muted">
       De cada buzón salen las juntas (invitaciones con archivo de calendario),
       los pendientes (correos que piden una acción) y las licencias (recibos de
-      suscripciones). Aquí se registra para el portal; para que el puente lo lea
-      hay que pegar la línea que aparece abajo en
-      <code class="font-mono text-xs">CORREO_CUENTAS</code> y poner su
-      contraseña en
-      <code class="font-mono text-xs">CORREO_CONTRASENA_&lt;ID&gt;</code>.
+      suscripciones). Después de agregarlo, usa "Editar conexión" para poner su
+      servidor y contraseña (o conectarlo con Microsoft).
     </p>
     <form
       class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
@@ -176,10 +177,6 @@
 
         <dl class="mt-3 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
           <div class="flex gap-2">
-            <dt class="text-ink-subtle">Ruta en el puente</dt>
-            <dd class="font-mono text-ink">{{ row.connection.path }}</dd>
-          </div>
-          <div class="flex gap-2">
             <dt class="text-ink-subtle">Última sincronización</dt>
             <dd class="text-ink">
               {{
@@ -189,12 +186,12 @@
           </div>
         </dl>
 
-        <!-- Conexión según el puente -->
+        <!-- Conexión del buzón -->
         @if (admin.disponible) {
           <div class="mt-3 rounded-lg bg-surface-muted p-3 text-xs">
             @if (conexionDe(row.connection.accountId); as conexion) {
               @if ("cargando" in conexion) {
-                <p class="text-ink-muted">Preguntando al puente…</p>
+                <p class="text-ink-muted">Consultando…</p>
               } @else if ("error" in conexion) {
                 <p class="text-rose-700 dark:text-rose-300">
                   {{ conexion.error }}
@@ -229,15 +226,7 @@
                       <button
                         type="button"
                         class="btn btn-primary"
-                        [disabled]="
-                          ocupado() === row.connection.accountId ||
-                          !conexion.estado.conAplicacion
-                        "
-                        [title]="
-                          conexion.estado.conAplicacion
-                            ? ''
-                            : 'Primero configura la aplicación de Entra ID en Integraciones → Microsoft'
-                        "
+                        [disabled]="ocupado() === row.connection.accountId"
                         (click)="connectMicrosoft(row)">
                         {{
                           conexion.estado.conectadaComo
@@ -261,7 +250,7 @@
                 </div>
               }
             } @else {
-              <p class="text-ink-muted">Sin respuesta del puente todavía.</p>
+              <p class="text-ink-muted">Sin respuesta todavía.</p>
             }
 
             @if (pruebas()[row.connection.accountId]; as prueba) {
@@ -354,8 +343,8 @@
                   </label>
                   <p class="text-ink-muted sm:col-span-2 lg:col-span-4">
                     Gmail e iCloud piden una contraseña de aplicación, no la
-                    normal. La contraseña viaja al puente y se queda ahí; el
-                    portal no la guarda.
+                    normal. La contraseña se guarda en el servidor, nunca en
+                    este; el portal no la guarda.
                   </p>
                 }
                 <div class="flex items-end gap-2 sm:col-span-2 lg:col-span-4">
@@ -363,7 +352,7 @@
                     type="submit"
                     class="btn btn-primary"
                     [disabled]="ocupado() === row.connection.accountId">
-                    Guardar en el puente
+                    Guardar
                   </button>
                   <button
                     type="button"
@@ -377,19 +366,7 @@
           </div>
         } @else {
           <p class="mt-3 text-xs text-ink-muted">
-            Para editar la conexión, apunta el portal a un puente (pestaña
-            Puente).
-          </p>
-        }
-
-        @if (row.puenteLine; as line) {
-          <p class="mt-3 text-xs text-ink-muted">
-            <span class="font-medium text-ink">Para el puente</span> (agregar a
-            <code class="font-mono">CORREO_CUENTAS</code>):
-            <code
-              class="mt-1 block rounded bg-surface-muted px-2 py-1 font-mono text-[11px] text-ink"
-              >{{ line }}</code
-            >
+            La conexión se edita en la aplicación publicada.
           </p>
         }
 
@@ -402,10 +379,6 @@
 
         <div
           class="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-          <p class="text-xs text-ink-muted">
-            <span class="font-medium text-ink">Para conectarla de verdad:</span>
-            {{ row.requirement }}
-          </p>
           <div class="flex shrink-0 items-center gap-2">
             <label class="flex items-center gap-2 text-xs text-ink">
               <input
@@ -757,12 +730,12 @@
     <h2 class="text-sm font-semibold text-ink">Dominios registrados</h2>
     <p class="mt-1 max-w-3xl text-sm text-ink-muted">
       Cuándo vence cada dominio y cuánto cuesta renovarlo. Se guardan en el
-      puente y salen en Licencias como renovaciones anuales, con aviso cuando se
-      acerca la fecha.
+      aplicación y salen en Licencias como renovaciones anuales, con aviso
+      cuando se acerca la fecha.
     </p>
     @if (!admin.disponible) {
       <p class="mt-3 text-xs text-ink-muted">
-        Apunta el portal a un puente (pestaña Puente) para editar los dominios.
+        Los dominios se editan en la aplicación publicada.
       </p>
     } @else {
       <div class="mt-3 overflow-x-auto">
@@ -961,7 +934,7 @@
           class="btn btn-primary"
           [disabled]="ocupado() === 'dominios'"
           (click)="saveDominios()">
-          Guardar dominios en el puente
+          Guardar dominios
         </button>
         @if (dominiosMensaje(); as m) {
           <span
@@ -987,8 +960,7 @@
     </p>
     @if (!admin.disponible) {
       <p class="mt-3 text-xs text-ink-muted">
-        Apunta el portal a un puente (pestaña Puente) para administrar el
-        equipo.
+        El equipo se administra en la aplicación publicada.
       </p>
     } @else {
       <ul class="mt-3 divide-y divide-line">
@@ -1057,7 +1029,7 @@
           class="btn btn-primary"
           [disabled]="ocupado() === 'equipo'"
           (click)="saveEquipo()">
-          Guardar equipo en el puente
+          Guardar equipo
         </button>
         @if (equipoMensaje(); as m) {
           <span
@@ -1077,8 +1049,8 @@
   <p class="mt-4 max-w-3xl text-sm text-ink-muted">
     Las integraciones que no son correo: CRM, tablero de Ops, monitoreo,
     despliegues, repositorios y las APIs de consumo. Las que están apagadas no
-    piden datos ni aparecen en las vistas; se encienden cuando el puente tenga
-    su credencial.
+    piden datos ni aparecen en las vistas; se encienden cuando tengan su
+    credencial.
   </p>
   <div class="mt-4 space-y-3">
     @for (row of otherRows(); track row.connection.id) {
@@ -1122,16 +1094,6 @@
 
         <dl class="mt-3 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
           <div class="flex gap-2">
-            <dt class="text-ink-subtle">Modo</dt>
-            <dd class="font-medium text-ink">{{ row.modeLabel }}</dd>
-          </div>
-          <div class="flex gap-2">
-            <dt class="text-ink-subtle">Ruta en el puente</dt>
-            <dd class="font-mono text-ink">
-              {{ row.connection.path ?? "no aplica" }}
-            </dd>
-          </div>
-          <div class="flex gap-2">
             <dt class="text-ink-subtle">Última sincronización</dt>
             <dd class="text-ink">
               {{
@@ -1139,22 +1101,16 @@
               }}
             </dd>
           </div>
-          <div class="flex gap-2">
-            <dt class="text-ink-subtle">Identificador</dt>
-            <dd class="font-mono text-ink">{{ row.connection.id }}</dd>
-          </div>
         </dl>
 
-        <!-- Configuración según el puente -->
+        <!-- Configuración de la integración -->
         @if (admin.disponible) {
           @if (integracionDe(row); as estado) {
             <div class="mt-3 rounded-lg bg-surface-muted p-3 text-xs">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <p class="text-ink">
                   <span class="font-medium">{{
-                    estado.configurada
-                      ? "Configurada en el puente"
-                      : "Sin configurar"
+                    estado.configurada ? "Configurada" : "Sin configurar"
                   }}</span>
                   @if (estado.faltante) {
                     <span class="text-ink-muted">
@@ -1271,7 +1227,7 @@
                       type="submit"
                       class="btn btn-primary"
                       [disabled]="ocupado() === estado.id">
-                      Guardar en el puente
+                      Guardar
                     </button>
                     <button
                       type="button"
@@ -1299,21 +1255,19 @@
 
         <div
           class="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-          <p class="text-xs text-ink-muted">
-            <span class="font-medium text-ink">Para conectarla de verdad:</span>
-            {{ row.requirement }}
-          </p>
           @if (row.connection.kind !== "local") {
             <div class="flex shrink-0 items-center gap-4">
-              <label class="flex items-center gap-2 text-xs text-ink">
-                <input
-                  type="checkbox"
-                  [checked]="row.connection.mode === 'gateway'"
-                  (change)="
-                    setConnectionMode(row, row.connection.mode !== 'gateway')
-                  " />
-                Datos reales del puente
-              </label>
+              @if (desarrollo) {
+                <label class="flex items-center gap-2 text-xs text-ink">
+                  <input
+                    type="checkbox"
+                    [checked]="row.connection.mode === 'gateway'"
+                    (change)="
+                      setConnectionMode(row, row.connection.mode !== 'gateway')
+                    " />
+                  Datos reales
+                </label>
+              }
               <label class="flex items-center gap-2 text-xs text-ink">
                 <input
                   type="checkbox"
@@ -1330,125 +1284,15 @@
     }
   </div>
   @for (estado of integracionesSueltas(); track estado.id) {
-    <section class="card card-pad mt-3">
-      <h2 class="text-sm font-semibold text-ink">{{ estado.etiqueta }}</h2>
-      @if (estado.id === "acceso") {
-        <p class="mt-0.5 text-xs text-ink-muted">
-          Entrar al portal con un código de seis dígitos que llega por correo
-          (EmailJS, asunto "Access Monitor"). Mientras no esté configurado, el
-          puente queda abierto.
-        </p>
-      }
-      <div class="mt-3 rounded-lg bg-surface-muted p-3 text-xs">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <p class="text-ink">
-            <span class="font-medium">{{
-              estado.configurada ? "Configurado en el puente" : "Sin configurar"
-            }}</span>
-          </p>
-          <div class="flex flex-wrap items-center gap-2">
-            @if (integracionEditando() !== estado.id) {
-              <button
-                type="button"
-                class="btn"
-                (click)="startIntegracionEdit(estado)">
-                Configurar
-              </button>
-            }
-            <button
-              type="button"
-              class="btn"
-              [disabled]="ocupado() === estado.id || !estado.configurada"
-              (click)="testIntegracion(estado)">
-              {{
-                estado.id === "acceso" ? "Mandar correo de prueba" : "Probar"
-              }}
-            </button>
-          </div>
-        </div>
-        @if (pruebasIntegracion()[estado.id]; as prueba) {
-          <p
-            class="mt-2 rounded px-2 py-1"
-            [class.bg-emerald-100]="prueba.ok"
-            [class.text-emerald-800]="prueba.ok"
-            [class.bg-rose-100]="!prueba.ok"
-            [class.text-rose-800]="!prueba.ok">
-            {{ prueba.mensaje }}
-          </p>
-        }
-        @if (integracionEditando() === estado.id) {
-          <form
-            class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
-            (ngSubmit)="saveIntegracion(estado)">
-            @for (campo of estado.campos; track campo.variable) {
-              <label [class.sm:col-span-2]="campo.tipo === 'lista'">
-                <span class="mb-1 block font-medium text-ink-muted">
-                  {{ campo.etiqueta }}
-                  @if (campo.obligatoria) {
-                    <span class="text-rose-600">*</span>
-                  }
-                  @if (campo.definida) {
-                    <span class="ml-1 font-normal text-ink-subtle"
-                      >·
-                      {{
-                        campo.origen === "entorno" ? "del entorno" : "guardada"
-                      }}</span
-                    >
-                  }
-                </span>
-                @if (campo.tipo === "secreto") {
-                  <input
-                    class="field"
-                    type="password"
-                    autocomplete="new-password"
-                    [name]="campo.variable"
-                    [placeholder]="
-                      campo.definida
-                        ? '(sin cambio si va vacío; un espacio lo borra)'
-                        : ''
-                    "
-                    [ngModel]="variablesDraft()[campo.variable]"
-                    (ngModelChange)="updateVariable(campo.variable, $event)" />
-                } @else {
-                  <input
-                    class="field"
-                    type="text"
-                    [name]="campo.variable"
-                    [ngModel]="variablesDraft()[campo.variable]"
-                    (ngModelChange)="updateVariable(campo.variable, $event)" />
-                }
-                @if (campo.ayuda) {
-                  <span class="mt-1 block text-ink-subtle">{{
-                    campo.ayuda
-                  }}</span>
-                }
-              </label>
-            }
-            <div class="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
-              <button
-                type="submit"
-                class="btn btn-primary"
-                [disabled]="ocupado() === estado.id">
-                Guardar en el puente
-              </button>
-              <button
-                type="button"
-                class="btn"
-                (click)="cancelIntegracionEdit()">
-                Cancelar
-              </button>
-            </div>
-          </form>
-        }
-      </div>
-    </section>
+    <ng-container
+      *ngTemplateOutlet="tarjetaIntegracion; context: { estado: estado }" />
   }
 }
 
 <!-- ============================ Puente ============================ -->
-@if (tab() === "puente") {
+@if (tab() === "puente" && desarrollo) {
   <section class="card card-pad mt-4">
-    <h2 class="text-sm font-semibold text-ink">Backend puente</h2>
+    <h2 class="text-sm font-semibold text-ink">Backend (solo desarrollo)</h2>
     <p class="mt-1 max-w-3xl text-sm text-ink-muted">
       El portal no habla directo con Odoo, Google ni Microsoft: ninguno abre
       CORS para una aplicación de página única, y meter sus credenciales en el
@@ -1538,3 +1382,114 @@
     </p>
   </section>
 }
+
+<!-- Tarjeta de una integración sin conexión propia (Acceso, aplicación de Microsoft) -->
+<ng-template #tarjetaIntegracion let-estado="estado">
+  <section class="card card-pad mt-4">
+    <h2 class="text-sm font-semibold text-ink">{{ estado.etiqueta }}</h2>
+    @if (estado.id === "acceso") {
+      <p class="mt-0.5 text-xs text-ink-muted">
+        Entrar al portal con un código de seis dígitos que llega por correo
+        (EmailJS, asunto "Access Monitor"). Mientras no esté configurado, la
+        aplicación queda abierta.
+      </p>
+    }
+    <div class="mt-3 rounded-lg bg-surface-muted p-3 text-xs">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <p class="text-ink">
+          <span class="font-medium">{{
+            estado.configurada ? "Configurado" : "Sin configurar"
+          }}</span>
+        </p>
+        <div class="flex flex-wrap items-center gap-2">
+          @if (integracionEditando() !== estado.id) {
+            <button
+              type="button"
+              class="btn"
+              (click)="startIntegracionEdit(estado)">
+              Configurar
+            </button>
+          }
+          <button
+            type="button"
+            class="btn"
+            [disabled]="ocupado() === estado.id || !estado.configurada"
+            (click)="testIntegracion(estado)">
+            {{ estado.id === "acceso" ? "Mandar correo de prueba" : "Probar" }}
+          </button>
+        </div>
+      </div>
+      @if (pruebasIntegracion()[estado.id]; as prueba) {
+        <p
+          class="mt-2 rounded px-2 py-1"
+          [class.bg-emerald-100]="prueba.ok"
+          [class.text-emerald-800]="prueba.ok"
+          [class.bg-rose-100]="!prueba.ok"
+          [class.text-rose-800]="!prueba.ok">
+          {{ prueba.mensaje }}
+        </p>
+      }
+      @if (integracionEditando() === estado.id) {
+        <form
+          class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+          (ngSubmit)="saveIntegracion(estado)">
+          @for (campo of estado.campos; track campo.variable) {
+            <label [class.sm:col-span-2]="campo.tipo === 'lista'">
+              <span class="mb-1 block font-medium text-ink-muted">
+                {{ campo.etiqueta }}
+                @if (campo.obligatoria) {
+                  <span class="text-rose-600">*</span>
+                }
+                @if (campo.definida) {
+                  <span class="ml-1 font-normal text-ink-subtle"
+                    >·
+                    {{
+                      campo.origen === "entorno" ? "del entorno" : "guardada"
+                    }}</span
+                  >
+                }
+              </span>
+              @if (campo.tipo === "secreto") {
+                <input
+                  class="field"
+                  type="password"
+                  autocomplete="new-password"
+                  [name]="campo.variable"
+                  [placeholder]="
+                    campo.definida
+                      ? '(sin cambio si va vacío; un espacio lo borra)'
+                      : ''
+                  "
+                  [ngModel]="variablesDraft()[campo.variable]"
+                  (ngModelChange)="updateVariable(campo.variable, $event)" />
+              } @else {
+                <input
+                  class="field"
+                  type="text"
+                  [name]="campo.variable"
+                  [ngModel]="variablesDraft()[campo.variable]"
+                  (ngModelChange)="updateVariable(campo.variable, $event)" />
+              }
+              @if (campo.ayuda) {
+                <span class="mt-1 block text-ink-subtle">{{
+                  campo.ayuda
+                }}</span>
+              }
+            </label>
+          }
+          <div class="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
+            <button
+              type="submit"
+              class="btn btn-primary"
+              [disabled]="ocupado() === estado.id">
+              Guardar
+            </button>
+            <button type="button" class="btn" (click)="cancelIntegracionEdit()">
+              Cancelar
+            </button>
+          </div>
+        </form>
+      }
+    </div>
+  </section>
+</ng-template>
