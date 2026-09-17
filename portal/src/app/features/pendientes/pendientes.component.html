@@ -5,7 +5,7 @@
 </pt-page-header>
 
 <section class="card card-pad">
-  <h2 class="text-sm font-semibold text-ink">Nuevo pendiente propio</h2>
+  <h2 class="text-sm font-semibold text-ink">Nuevo pendiente</h2>
   <form class="mt-3 flex flex-wrap items-end gap-3" (ngSubmit)="addTask()">
     <label class="min-w-0 flex-1">
       <span class="mb-1 block text-xs font-medium text-ink-muted"
@@ -43,6 +43,19 @@
         [ngModel]="newDueDate()"
         (ngModelChange)="newDueDate.set($event)"
         name="fecha" />
+    </label>
+    <label>
+      <span class="mb-1 block text-xs font-medium text-ink-muted">Empresa</span>
+      <select
+        class="field"
+        [ngModel]="newCompany()"
+        (ngModelChange)="newCompany.set($event)"
+        name="empresa">
+        <option value="">Elige la empresa</option>
+        @for (empresa of empresas; track empresa) {
+          <option [value]="empresa">{{ empresa }}</option>
+        }
+      </select>
     </label>
     <button type="submit" class="btn btn-primary" [disabled]="!canAdd()">
       <pt-icon name="mas" class="h-4 w-4" />

@@ -655,6 +655,7 @@ export function construirRutas(
         origin: 'local',
         project: texto(t['project']),
         company: texto(t['company']),
+        personal: t['personal'] === true ? true : undefined,
         tags: Array.isArray(t['tags'])
           ? (t['tags'] as unknown[]).filter(
               (x): x is string => typeof x === 'string'
@@ -1525,9 +1526,11 @@ export function construirRutas(
           (cfg().odoo as ConfiguracionOdoo).accountId
         )
       ).catch(() => [] as TaskItem[]);
+      // Lo personal no es del negocio: no entra al resumen ni al correo del
+      // equipo.
       return conNotas([
         ...correo,
-        ...datos.personales.leer(),
+        ...datos.personales.leer().filter((t) => !t.personal),
         ...pendientesOps(),
         ...odooTareas
       ]);

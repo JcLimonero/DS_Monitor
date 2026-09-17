@@ -21,6 +21,11 @@ export interface TaskItem {
   comments?: TaskComment[];
   /** Empresa a la que pertenece: Itech Dev, Dealer Solutions, NexusQTech, OperativAI. */
   company?: string;
+  /**
+   * Personal, no del negocio. Vive en Personales y no sale en el tablero, el
+   * carrusel ni los resúmenes del equipo.
+   */
+  personal?: boolean;
   status: TaskStatus;
   priority: TaskPriority;
   /** Fecha compromiso en ISO. Sin fecha significa que nadie la ha puesto. */

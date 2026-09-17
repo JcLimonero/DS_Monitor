@@ -83,6 +83,7 @@ export class PendientesComponent {
   readonly newTitle = signal('');
   readonly newPriority = signal<TaskPriority>('media');
   readonly newDueDate = signal('');
+  readonly newCompany = signal('');
 
   readonly people = computed(() => {
     const byId = new Map<string, string>();
@@ -166,7 +167,10 @@ export class PendientesComponent {
     ].join(' · ')
   );
 
-  readonly canAdd = computed(() => this.newTitle().trim().length > 0);
+  /** Del negocio siempre lleva empresa; lo personal se apunta en Personales. */
+  readonly canAdd = computed(
+    () => this.newTitle().trim().length > 0 && this.newCompany() !== ''
+  );
 
   addTask(): void {
     if (!this.canAdd()) {
@@ -178,7 +182,8 @@ export class PendientesComponent {
       priority: this.newPriority(),
       // El input de tipo date entrega "2026-03-12"; se ancla a mediodia para
       // que el pendiente caiga en ese día sin importar la zona horaria.
-      dueDate: due ? new Date(`${due}T12:00:00`).toISOString() : undefined
+      dueDate: due ? new Date(`${due}T12:00:00`).toISOString() : undefined,
+      company: this.newCompany()
     });
     this.newTitle.set('');
     this.newDueDate.set('');

@@ -10,6 +10,10 @@
 
 <section class="card card-pad">
   <h2 class="text-sm font-semibold text-ink">Apuntar uno nuevo</h2>
+  <p class="mt-0.5 text-xs text-ink-muted">
+    Solo lo que no es del negocio; esto no sale en el tablero ni en el
+    carrusel. Lo del trabajo se apunta en Pendientes, con su empresa.
+  </p>
   <form class="mt-3 flex flex-wrap items-end gap-3" (ngSubmit)="addTask()">
     <label class="min-w-0 flex-1">
       <span class="mb-1 block text-xs font-medium text-ink-muted"
@@ -59,21 +63,6 @@
         placeholder="Personal"
         [ngModel]="newProject()"
         (ngModelChange)="newProject.set($event)" />
-    </label>
-    <label>
-      <span class="mb-1 block text-xs font-medium text-ink-muted"
-        >Empresa</span
-      >
-      <select
-        class="field"
-        name="empresa"
-        [ngModel]="newCompany()"
-        (ngModelChange)="newCompany.set($event)">
-        <option value="">Sin empresa</option>
-        @for (empresa of empresas; track empresa) {
-          <option [value]="empresa">{{ empresa }}</option>
-        }
-      </select>
     </label>
     <button type="submit" class="btn btn-primary" [disabled]="!canAdd()">
       <pt-icon name="mas" class="h-4 w-4" />

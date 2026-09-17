@@ -131,8 +131,10 @@ export class PortalStore {
   }
 
   refreshTasks(): void {
+    // Lo personal no es del negocio: se queda en su módulo y no entra al
+    // tablero, al carrusel ni a los resúmenes.
     this.collect(this.taskSources, (source) => source.fetchTasks()).subscribe(
-      (tasks) => this.tasksSignal.set(tasks)
+      (tasks) => this.tasksSignal.set(tasks.filter((task) => !task.personal))
     );
   }
 

@@ -13,6 +13,8 @@ export interface NewLocalTask {
   project?: string;
   company?: string;
   description?: string;
+  /** Personal (no del negocio): solo se ve en Personales. */
+  personal?: boolean;
 }
 
 /**
@@ -77,6 +79,7 @@ export class LocalTaskStore implements TaskSource {
       origin: 'local',
       project: input.project?.trim() || undefined,
       company: input.company?.trim() || undefined,
+      personal: input.personal ? true : undefined,
       description: input.description?.trim() || undefined,
       tags: [],
       updatedAt: now

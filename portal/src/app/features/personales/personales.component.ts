@@ -6,7 +6,6 @@ import {
   signal
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { EMPRESAS } from '../../core/ia/ia.models';
 import {
   TASK_PRIORITY_LABEL,
   TASK_PRIORITY_WEIGHT,
@@ -22,8 +21,10 @@ import { PageHeaderComponent } from '../../ui/page-header.component';
 import { TaskCardComponent } from '../../ui/task-card.component';
 
 /**
- * Los pendientes personales: lo que uno se apunta para sí, aparte de lo que
- * viene de Odoo, de Ops o del correo. Se guardan en la aplicación.
+ * Los pendientes personales: lo que NO es del negocio (el dentista, el
+ * coche, la escuela). Se guardan en la aplicación, marcados como personales,
+ * y no salen en el tablero, el carrusel ni los resúmenes del equipo. Lo del
+ * negocio se apunta en Pendientes.
  */
 @Component({
   selector: 'pt-personales',
@@ -48,8 +49,6 @@ export class PersonalesComponent {
   readonly newPriority = signal<TaskPriority>('media');
   readonly newDueDate = signal('');
   readonly newProject = signal('');
-  readonly newCompany = signal('');
-  readonly empresas = EMPRESAS;
   readonly includeDone = signal(false);
 
   readonly canAdd = computed(() => this.newTitle().trim().length > 0);
@@ -57,7 +56,7 @@ export class PersonalesComponent {
 
   readonly open = computed<TaskItem[]>(() =>
     [...this.local.tasks()]
-      .filter((task) => task.status !== 'hecho')
+      .filter((task) => task.personal && task.status !== 'hecho')
       .sort(
         (a, b) =>
           TASK_PRIORITY_WEIGHT[a.priority] - TASK_PRIORITY_WEIGHT[b.priority] ||
@@ -67,7 +66,7 @@ export class PersonalesComponent {
 
   readonly done = computed<TaskItem[]>(() =>
     [...this.local.tasks()]
-      .filter((task) => task.status === 'hecho')
+      .filter((task) => task.personal && task.status === 'hecho')
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   );
 
@@ -88,7 +87,7 @@ export class PersonalesComponent {
       priority: this.newPriority(),
       dueDate: due ? new Date(`${due}T12:00:00`).toISOString() : undefined,
       project: this.newProject() || undefined,
-      company: this.newCompany() || undefined
+      personal: true
     });
     this.newTitle.set('');
     this.newDueDate.set('');
