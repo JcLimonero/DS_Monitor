@@ -133,7 +133,12 @@ function buzones(
   const porId = new Map(config.correos.map((c) => [c.id, c]));
   return [...ids]
     .map((id) =>
-      almacenCorreo.efectiva(id, porId.get(id), config.correoDiasAtras)
+      almacenCorreo.efectiva(
+        id,
+        porId.get(id),
+        config.correoDiasAtras,
+        config.microsoftApp
+      )
     )
     .filter((c): c is ConfiguracionCorreo => c !== undefined);
 }
@@ -182,8 +187,8 @@ function correoListo(
 function faltanteDe(correo: ConfiguracionCorreo): string {
   return correo.proveedor === 'microsoft'
     ? correo.microsoft
-      ? 'conectar la cuenta con Microsoft desde Ajustes'
-      : 'el client ID y el client secret de Entra ID (Ajustes → Correo) o el barrido de Mail.app'
+      ? 'conectar la cuenta con Microsoft desde Ajustes → Correo'
+      : 'la aplicación de Entra ID (Ajustes → Integraciones → Microsoft) y conectar la cuenta'
     : `la contraseña del buzón (Ajustes → Correo o ${variableContrasena(correo.id)})`;
 }
 
@@ -522,7 +527,8 @@ export function construirRutas(
     const cuenta = almacenCorreo.efectiva(
       id,
       cfg().correos.find((c) => c.id === id),
-      cfg().correoDiasAtras
+      cfg().correoDiasAtras,
+      cfg().microsoftApp
     );
     if (!cuenta) {
       throw new ErrorPuente(

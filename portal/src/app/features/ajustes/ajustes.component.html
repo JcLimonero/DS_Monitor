@@ -225,14 +225,19 @@
                         Editar conexión
                       </button>
                     }
-                    @if (
-                      row.connection.kind === "microsoft" &&
-                      conexion.estado.conAplicacion
-                    ) {
+                    @if (row.connection.kind === "microsoft") {
                       <button
                         type="button"
                         class="btn btn-primary"
-                        [disabled]="ocupado() === row.connection.accountId"
+                        [disabled]="
+                          ocupado() === row.connection.accountId ||
+                          !conexion.estado.conAplicacion
+                        "
+                        [title]="
+                          conexion.estado.conAplicacion
+                            ? ''
+                            : 'Primero configura la aplicación de Entra ID en Integraciones → Microsoft'
+                        "
                         (click)="connectMicrosoft(row)">
                         {{
                           conexion.estado.conectadaComo
@@ -299,41 +304,16 @@
                       [ngModel]="credDraft().tenant"
                       (ngModelChange)="updateCred({ tenant: $event })" />
                   </label>
-                  <label>
-                    <span class="mb-1 block font-medium text-ink-muted"
-                      >Client ID (Entra ID)</span
-                    >
-                    <input
-                      class="field font-mono"
-                      type="text"
-                      name="clientId"
-                      autocomplete="off"
-                      [ngModel]="credDraft().clientId"
-                      (ngModelChange)="updateCred({ clientId: $event })" />
-                  </label>
-                  <label>
-                    <span class="mb-1 block font-medium text-ink-muted"
-                      >Client secret</span
-                    >
-                    <input
-                      class="field"
-                      type="password"
-                      name="clientSecret"
-                      autocomplete="new-password"
-                      placeholder="(sin cambio si va vacío)"
-                      [ngModel]="credDraft().clientSecret"
-                      (ngModelChange)="updateCred({ clientSecret: $event })" />
-                  </label>
                   <p class="text-ink-muted sm:col-span-2 lg:col-span-4">
-                    En la aplicación de Entra ID: tipo de cuentas con cuentas
-                    personales incluidas, permisos delegados Mail.Read,
-                    Calendars.Read, User.Read y offline_access, y URI de
-                    redirección
+                    La aplicación de Entra ID es una sola para todos los buzones
+                    de Microsoft y se configura en Integraciones → Microsoft
+                    (client ID, secret y tenant). Aquí solo va el correo del
+                    buzón; el tenant se puede cambiar si esta cuenta pertenece a
+                    otro directorio. La URI de redirección registrada debe ser
                     <code class="font-mono">{{
                       estadoDe(row.connection.accountId)?.redirectUri
                     }}</code
-                    >. Después de guardar, "Conectar con Microsoft" abre el
-                    consentimiento.
+                    >. Después, "Conectar con Microsoft" abre el consentimiento.
                   </p>
                 } @else {
                   <label>

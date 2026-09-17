@@ -116,6 +116,33 @@ export async function canjearCodigo(
   };
 }
 
+/**
+ * Comprueba client ID, secret y tenant sin ningun usuario de por medio: pide
+ * un token de aplicacion. Que Graph lo entregue vacio de permisos no importa;
+ * lo que se prueba es que Entra reconozca la aplicacion y el secreto.
+ */
+export async function comprobarAplicacionMicrosoft(
+  app: Pick<ConfiguracionMicrosoft, 'tenant' | 'clientId' | 'clientSecret'>
+): Promise<void> {
+  const respuesta = await fetch(`${autoridad(app.tenant)}/token`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: app.clientId,
+      client_secret: app.clientSecret,
+      grant_type: 'client_credentials',
+      scope: 'https://graph.microsoft.com/.default'
+    })
+  });
+  const datos = (await respuesta.json().catch(() => ({}))) as RespuestaToken;
+  if (!respuesta.ok) {
+    throw new ErrorProveedor(
+      'microsoft',
+      `${datos.error ?? respuesta.status}: ${recortar(datos.error_description ?? 'no reconoce la aplicación')}`
+    );
+  }
+}
+
 /** Tokens de acceso vigentes, uno por buzon, para no pedir uno por peticion. */
 const accesos = new Map<string, { token: string; venceEn: number }>();
 

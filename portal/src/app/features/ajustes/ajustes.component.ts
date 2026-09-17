@@ -89,11 +89,10 @@ const REQUIREMENTS: Record<SourceKind, string> = {
     'imap.gmail.com, lee las invitaciones con archivo de calendario, los correos que piden una ' +
     'acción y los recibos de suscripciones.',
   microsoft:
-    'Microsoft ya no acepta IMAP con contraseña, ni en Microsoft 365 ni en Outlook.com. Hace falta ' +
-    'un registro de aplicación en Entra ID con Mail.Read y Calendars.Read; ese adaptador todavía no ' +
-    'está construido en el puente. Mientras tanto el buzón lo alimenta el barrido de Mail.app en la ' +
-    'Mac (npm run barrido en puente/), que manda licencias y pendientes por ingesta con un emisor ' +
-    'del mismo nombre en INGESTA_CLIENTES. Las juntas necesitan el adaptador OAuth.',
+    'Se entra por Microsoft Graph con la aplicación de Entra ID (una sola para todos los buzones; ' +
+    'se configura en Integraciones → Microsoft) y el consentimiento de la cuenta: botón "Conectar ' +
+    'con Microsoft". De ahí salen los correos y el calendario completo. Mientras no esté conectada, ' +
+    'el buzón lo alimenta el barrido de Mail.app de la Mac (npm run barrido en puente/).',
   imap:
     'Servidor, usuario y contraseña del buzón en CORREO_CUENTAS y CORREO_CONTRASENA_<ID> del ' +
     'puente. Neubox acepta la contraseña del buzón; iCloud pide una contraseña específica de ' +
@@ -397,7 +396,13 @@ export class AjustesComponent {
 
   saveConnection(row: ConnectionRow): void {
     const id = row.connection.accountId;
-    const draft = this.credDraft();
+    // La aplicación de Entra ID se configura una vez en Integraciones; por
+    // buzón solo viajan el correo y, si acaso, el tenant.
+    const {
+      clientId: _clientId,
+      clientSecret: _clientSecret,
+      ...draft
+    } = this.credDraft();
     this.ocupado.set(id);
     this.admin
       .guardar(id, {

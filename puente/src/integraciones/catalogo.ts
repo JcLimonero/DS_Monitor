@@ -7,6 +7,7 @@ import { destinosMonitoreados } from '../proveedores/monitoreo.js';
 import { crmOdoo } from '../proveedores/odoo.js';
 import { desplieguesVercel } from '../proveedores/vercel.js';
 import { enviarPorEmailJs } from '../acceso/acceso.js';
+import { comprobarAplicacionMicrosoft } from '../proveedores/microsoft.js';
 
 /**
  * Las integraciones que se configuran desde Ajustes.
@@ -294,6 +295,42 @@ export const INTEGRACIONES: Integracion[] = [
     }
   }
 ];
+
+INTEGRACIONES.push({
+  id: 'microsoft',
+  etiqueta: 'Microsoft (Entra ID)',
+  kind: 'microsoft',
+  campos: [
+    {
+      variable: 'MICROSOFT_CLIENT_ID',
+      etiqueta: 'Client ID (Id. de aplicación)',
+      tipo: 'texto',
+      obligatoria: true
+    },
+    {
+      variable: 'MICROSOFT_CLIENT_SECRET',
+      etiqueta: 'Client secret',
+      tipo: 'secreto',
+      obligatoria: true,
+      ayuda: 'El valor del secreto (no su ID), de Certificados y secretos.'
+    },
+    {
+      variable: 'MICROSOFT_TENANT',
+      etiqueta: 'Tenant',
+      tipo: 'texto',
+      ayuda:
+        '"common" acepta cuentas de trabajo y personales (Outlook.com). El Id. de directorio limita a una organización.'
+    }
+  ],
+  probar: async (config) => {
+    const app = exigir(
+      config.microsoftApp,
+      'el client ID y el client secret de Entra ID'
+    );
+    await comprobarAplicacionMicrosoft(app);
+    return `La aplicación ${app.clientId} responde con tenant "${app.tenant}". Ahora conecta cada buzón de Microsoft desde Ajustes → Correo.`;
+  }
+});
 
 INTEGRACIONES.push({
   id: 'acceso',

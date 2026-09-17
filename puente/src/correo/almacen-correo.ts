@@ -104,7 +104,11 @@ export class AlmacenCorreo {
   efectiva(
     id: string,
     base: ConfiguracionCorreo | undefined,
-    diasAtras: number
+    diasAtras: number,
+    appPorOmision?: Pick<
+      ConfiguracionMicrosoft,
+      'tenant' | 'clientId' | 'clientSecret'
+    >
   ): ConfiguracionCorreo | undefined {
     const guardado = this.guardadas.get(id);
     if (!base && !guardado) {
@@ -115,7 +119,13 @@ export class AlmacenCorreo {
     if (!proveedor || !usuario) {
       return base;
     }
-    const microsoft = mezclarMicrosoft(base?.microsoft, guardado?.microsoft);
+    const microsoft =
+      proveedor === 'microsoft'
+        ? mezclarMicrosoft(
+            base?.microsoft ?? appPorOmision,
+            guardado?.microsoft
+          )
+        : undefined;
     return {
       id,
       proveedor,
@@ -132,7 +142,7 @@ export class AlmacenCorreo {
 }
 
 function mezclarMicrosoft(
-  base: ConfiguracionMicrosoft | undefined,
+  base: Partial<ConfiguracionMicrosoft> | undefined,
   guardado: Partial<ConfiguracionMicrosoft> | undefined
 ): ConfiguracionMicrosoft | undefined {
   const clientId = guardado?.clientId ?? base?.clientId;

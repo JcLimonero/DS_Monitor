@@ -195,6 +195,11 @@ export interface Configuracion {
   adminToken?: string;
   /** Con esto configurado, el puente exige sesion (codigo por correo). */
   acceso?: ConfiguracionAcceso;
+  /**
+   * La aplicacion de Entra ID que usan todos los buzones de Microsoft que no
+   * traigan la suya. Es lo normal: una sola aplicacion para toda la empresa.
+   */
+  microsoftApp?: Omit<ConfiguracionMicrosoft, 'refreshToken' | 'conectadaComo'>;
   /** Donde viven el equipo, los dominios y las sesiones. */
   directorioDatos: string;
   /**
@@ -476,6 +481,14 @@ function leer(): Configuracion {
       texto('INTEGRACIONES_DIRECTORIO') ?? 'datos/integraciones',
     correoDiasAtras: numeroCon('CORREO_DIAS_ATRAS', 400),
     adminToken: texto('PUENTE_ADMIN_TOKEN'),
+    microsoftApp:
+      texto('MICROSOFT_CLIENT_ID') && texto('MICROSOFT_CLIENT_SECRET')
+        ? {
+            tenant: texto('MICROSOFT_TENANT') ?? 'common',
+            clientId: texto('MICROSOFT_CLIENT_ID') as string,
+            clientSecret: texto('MICROSOFT_CLIENT_SECRET') as string
+          }
+        : undefined,
     acceso:
       texto('EMAILJS_SERVICE_ID') &&
       texto('EMAILJS_TEMPLATE_ID') &&
