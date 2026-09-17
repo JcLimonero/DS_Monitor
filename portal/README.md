@@ -39,14 +39,10 @@ conexión de cada buzón (servidor y contraseña para IMAP; client ID, secret y 
 consentimiento de Microsoft para Graph), se prueba, y lo capturado se guarda en
 el puente, nunca en el navegador; hace falta el token de `PUENTE_ADMIN_TOKEN`
 en la pestaña Puente. Un buzón sin conexión lo alimenta el barrido de Mail.app
-(ver `puente/README.md`). Ajustes va por
-pestañas (Correo, Licencias, Integraciones, Puente) y desde ahí se configura
-cada integración con sus variables (GitHub, Claude, Cursor, Figma, Vercel,
-Odoo, monitoreo), se prueba, y la conexión pasa sola de demostración a datos
-reales; se agregan buzones, se encienden o apagan cuentas, se corrige el costo de una licencia que
-el recibo no trae, se ocultan las que no interesan y se capturan a mano las que
-no llegan por ninguna fuente; todo eso, igual que la raíz del puente, se guarda
-en el navegador (`core/config/local-settings.ts`).
+(ver `puente/README.md`). No hay una sección de Ajustes: cada módulo trae su propia configuración al
+pie, y Correo y Dominios son módulos propios. Lo configurado en el servidor
+enciende solo su cuenta al arrancar; lo que no está configurado no muestra
+nada, ni real ni inventado. En desarrollo hay además `/avanzado`.
 
 Hay además una sección de **Pendientes personales** (`/personales`, guardados
 en el navegador), la vista **Equipo** toma la lista que se administra en
