@@ -172,9 +172,45 @@ export class ConfiguracionBase {
     });
   });
 
-  readonly mailRows = computed(() =>
-    this.rows().filter((row) => isMailKind(row.connection.kind))
-  );
+  /** Los buzones, con los que faltan por conectar al principio. */
+  readonly mailRows = computed(() => {
+    const peso = (row: ConnectionRow) => {
+      const metodo = this.estadoDe(row.connection.accountId)?.metodo;
+      return metodo === 'graph' || metodo === 'imap'
+        ? 2
+        : metodo === 'envio'
+          ? 1
+          : 0;
+    };
+    return this.rows()
+      .filter((row) => isMailKind(row.connection.kind))
+      .sort((a, b) => peso(a) - peso(b));
+  });
+
+  /** Texto y color del distintivo de conexión de un buzón. */
+  conexionChip(row: ConnectionRow): { label: string; clase: string } {
+    const estado = this.estadoDe(row.connection.accountId);
+    switch (estado?.metodo) {
+      case 'graph':
+      case 'imap':
+        return {
+          label: 'Conectado',
+          clase:
+            'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+        };
+      case 'envio':
+        return {
+          label: 'Por barrido',
+          clase: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'
+        };
+      default:
+        return {
+          label: 'Por conectar',
+          clase:
+            'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
+        };
+    }
+  }
   readonly otherRows = computed(() =>
     this.rows().filter((row) => !isMailKind(row.connection.kind))
   );
@@ -203,8 +239,23 @@ export class ConfiguracionBase {
   }
 
   removeAccount(accountId: string): void {
-    this.local.removeAccount(accountId);
-    this.needsReload.set(true);
+    const terminar = () => {
+      this.local.removeAccount(accountId);
+      this.needsReload.set(true);
+    };
+    if (this.admin.disponible) {
+      this.admin.borrarBuzon(accountId).subscribe({
+        next: terminar,
+        error: (error: unknown) => {
+          this.pruebas.update((p) => ({
+            ...p,
+            [accountId]: { ok: false, mensaje: describeHttp(error) }
+          }));
+        }
+      });
+      return;
+    }
+    terminar();
   }
 
   /** Demostración o datos reales del puente, por conexión. Requiere recargar. */
@@ -365,12 +416,14 @@ export class ConfiguracionBase {
   connectMicrosoft(row: ConnectionRow): void {
     const id = row.connection.accountId;
     if (!this.estadoDe(id)?.conAplicacion) {
+      const google = row.connection.kind === 'google';
       this.pruebas.update((p) => ({
         ...p,
         [id]: {
           ok: false,
-          mensaje:
-            'Primero configura la aplicación de Entra ID (client ID y secret) en la tarjeta "Microsoft (Entra ID)" de este módulo y guárdala.'
+          mensaje: google
+            ? 'Primero configura la aplicación OAuth de Google (client ID y secret) en la tarjeta "Google (Gmail)" de este módulo y guárdala.'
+            : 'Primero configura la aplicación de Entra ID (client ID y secret) en la tarjeta "Microsoft (Entra ID)" de este módulo y guárdala.'
         }
       }));
       return;
@@ -468,7 +521,7 @@ export class ConfiguracionBase {
         // Ya configurada en el puente: las conexiones de esa integración pasan
         // a datos reales, que es para lo que se capturó la credencial.
         // La aplicación de Microsoft cambia lo que cada buzón puede hacer.
-        if (nuevo.id === 'microsoft') {
+        if (nuevo.id === 'microsoft' || nuevo.id === 'google') {
           this.loadConnections();
         }
         // Configurada: sus cuentas se encienden y pasan a datos reales.
@@ -523,6 +576,13 @@ export class ConfiguracionBase {
   readonly microsoftApp = computed(() =>
     this.mailRows().some((row) => row.connection.kind === 'microsoft')
       ? (this.integraciones() ?? []).find((i) => i.id === 'microsoft')
+      : undefined
+  );
+
+  /** La aplicación OAuth de Google, si hay buzones de Gmail. */
+  readonly googleApp = computed(() =>
+    this.mailRows().some((row) => row.connection.kind === 'google')
+      ? (this.integraciones() ?? []).find((i) => i.id === 'google')
       : undefined
   );
 

@@ -135,6 +135,14 @@ export class PuenteAdminService {
     );
   }
 
+  borrarBuzon(id: string): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(
+      this.url(`/correo/${id}/borrar`),
+      {},
+      { headers: this.headers() }
+    );
+  }
+
   probar(id: string): Observable<ResultadoPrueba> {
     return this.http.post<ResultadoPrueba>(
       this.url(`/correo/${id}/probar`),

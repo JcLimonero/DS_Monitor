@@ -28,7 +28,11 @@ const CANTIDAD = new Intl.NumberFormat('es-MX', {
 const MONTO = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 });
 
 /** Cuantas licencias caben en la rejilla sin apretarlas. */
-const RENGLONES = 6;
+/**
+ * Cuantas caben: tres columnas de renglones compactos. Con decenas de
+ * suscripciones y dominios, seis tarjetas grandes escondian el resto.
+ */
+const RENGLONES = 24;
 
 /** Consumo de las suscripciones: cuánto se lleva usado y qué renueva pronto. */
 @Component({
@@ -37,57 +41,45 @@ const RENGLONES = 6;
   imports: [IconComponent],
   host: { class: 'flex h-full flex-col gap-4' },
   template: `
-    <div class="grid min-h-0 flex-1 grid-cols-2 gap-4 xl:grid-cols-3">
+    <div
+      class="grid min-h-0 flex-1 auto-rows-min grid-cols-2 content-start gap-x-4 gap-y-2 overflow-hidden xl:grid-cols-3">
       @for (licencia of licencias(); track licencia.id) {
         <article
-          class="tv-card flex min-h-0 flex-col justify-center gap-4 px-5 py-4">
-          <div class="min-w-0">
-            <p class="truncate text-xl font-bold text-ink 2xl:text-2xl">
+          class="tv-card flex items-center gap-4 px-4 py-2.5"
+          [class.border-warn]="renuevaPronto(licencia)">
+          <div class="min-w-0 flex-1">
+            <p
+              class="truncate text-lg font-bold leading-tight text-ink 2xl:text-xl">
               {{ licencia.product }}
             </p>
-            <p class="truncate text-base text-ink-muted">
-              {{ proveedor(licencia) }}
-              @if (licencia.manual) {
-                · capturado a mano
+            <p
+              class="flex items-center gap-1.5 truncate text-sm 2xl:text-base"
+              [class]="claseRenovacion(licencia)">
+              @if (renuevaPronto(licencia)) {
+                <pt-icon name="alerta" class="h-4 w-4 shrink-0" />
               }
+              {{ renovacion(licencia) }}
             </p>
           </div>
-
-          <div>
-            <p class="flex items-baseline justify-between gap-3">
-              <span
-                class="text-2xl font-bold tabular-nums text-ink 2xl:text-3xl">
-                {{ consumo(licencia) }}
-              </span>
-              @if (licencia.limit) {
-                <span
-                  class="text-xl font-bold tabular-nums 2xl:text-2xl"
-                  [class]="claseTexto(licencia)">
-                  {{ porcentaje(licencia) }}%
-                </span>
-              }
+          <div class="shrink-0 text-right">
+            <p
+              class="text-lg font-bold tabular-nums leading-tight text-ink 2xl:text-xl">
+              {{
+                licencia.cost !== undefined || licencia.unit !== 'dinero'
+                  ? consumo(licencia)
+                  : '—'
+              }}
             </p>
             @if (licencia.limit) {
-              <span
-                class="mt-2 block h-2.5 overflow-hidden rounded-full bg-surface-muted">
-                <span
-                  class="block h-full rounded-full"
-                  [class]="claseBarra(licencia)"
-                  [style.width.%]="porcentaje(licencia)"></span>
-              </span>
+              <p class="text-sm tabular-nums" [class]="claseTexto(licencia)">
+                {{ porcentaje(licencia) }}% del tope
+              </p>
             } @else {
-              <p class="mt-2 text-base text-ink-subtle">sin tope contratado</p>
+              <p class="truncate text-sm text-ink-subtle">
+                {{ proveedor(licencia) }}
+              </p>
             }
           </div>
-
-          <p
-            class="flex items-center gap-2 text-lg 2xl:text-xl"
-            [class]="claseRenovacion(licencia)">
-            @if (renuevaPronto(licencia)) {
-              <pt-icon name="alerta" class="h-5 w-5" />
-            }
-            {{ renovacion(licencia) }}
-          </p>
         </article>
       }
     </div>
@@ -123,6 +115,7 @@ export class LicenciasSlideComponent {
       .sort(
         (a, b) =>
           Number(avisadas.has(b.id)) - Number(avisadas.has(a.id)) ||
+          (a.renewsAt ?? '9').localeCompare(b.renewsAt ?? '9') ||
           usagePercent(b) - usagePercent(a)
       )
       .slice(0, RENGLONES);

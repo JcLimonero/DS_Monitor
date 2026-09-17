@@ -38,6 +38,8 @@ export interface LocalSettings {
   accounts: Account[];
   /** Encendido/apagado por cuenta, encima del valor de fábrica. */
   accountEnabled: Record<string, boolean>;
+  /** Cuentas de fábrica que se borraron desde la aplicación. */
+  removedAccounts: string[];
   /**
    * Modo por conexión, encima del de fábrica: `gateway` cuando la integración
    * ya quedó configurada en el puente y se quieren datos reales en vez de la
@@ -54,6 +56,7 @@ export const EMPTY_SETTINGS: LocalSettings = {
   version: 1,
   accounts: [],
   accountEnabled: {},
+  removedAccounts: [],
   connectionMode: {},
   licenseEdits: {},
   manualLicenses: []
@@ -70,6 +73,9 @@ export function readLocalSettings(): LocalSettings {
       version: 1,
       accounts: Array.isArray(parsed.accounts) ? parsed.accounts : [],
       accountEnabled: parsed.accountEnabled ?? {},
+      removedAccounts: Array.isArray(parsed.removedAccounts)
+        ? parsed.removedAccounts
+        : [],
       connectionMode: parsed.connectionMode ?? {},
       licenseEdits: parsed.licenseEdits ?? {},
       manualLicenses: Array.isArray(parsed.manualLicenses)
@@ -120,16 +126,20 @@ export function withLocalSettings(
   config: PortalConfig,
   settings: LocalSettings
 ): PortalConfig {
+  const removed = new Set(settings.removedAccounts);
   const fromDefaults = new Set(config.accounts.map((account) => account.id));
   const added = settings.accounts.filter(
-    (account) => !fromDefaults.has(account.id)
+    (account) => !fromDefaults.has(account.id) && !removed.has(account.id)
   );
-  const accounts = [...config.accounts, ...added].map((account) => ({
+  const accounts = [
+    ...config.accounts.filter((account) => !removed.has(account.id)),
+    ...added
+  ].map((account) => ({
     ...account,
     enabled: settings.accountEnabled[account.id] ?? account.enabled
   }));
   const connections = [
-    ...config.connections,
+    ...config.connections.filter((c) => !removed.has(c.accountId)),
     ...added.filter((a) => isMailKind(a.kind)).map(mailConnection)
   ].map((connection) => {
     const mode = settings.connectionMode[connection.id];

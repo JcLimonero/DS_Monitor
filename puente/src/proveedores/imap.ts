@@ -24,6 +24,8 @@ export interface OpcionesImap {
   puerto: number;
   usuario: string;
   contrasena: string;
+  /** Con token de OAuth (Gmail) se entra por XOAUTH2 en vez de contraseña. */
+  accessToken?: string;
   tiempoLimiteMs?: number;
   /**
    * Como abrir la conexion. Por omision TLS al host y puerto; las pruebas
@@ -134,10 +136,14 @@ export class ClienteImap {
   }
 
   private async iniciarSesion(): Promise<void> {
-    const { usuario, contrasena } = this.opciones;
-    const respuesta = await this.comando(
-      `LOGIN ${citar(usuario)} ${citar(contrasena)}`
-    );
+    const { usuario, contrasena, accessToken } = this.opciones;
+    const respuesta = accessToken
+      ? await this.comando(
+          `AUTHENTICATE XOAUTH2 ${Buffer.from(
+            `user=${usuario}\x01auth=Bearer ${accessToken}\x01\x01`
+          ).toString('base64')}`
+        )
+      : await this.comando(`LOGIN ${citar(usuario)} ${citar(contrasena)}`);
     if (respuesta.estado !== 'OK') {
       throw this.error(
         `no acepto el usuario o la contraseña (${respuesta.texto.trim()})`

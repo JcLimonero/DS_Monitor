@@ -22,6 +22,13 @@ import {
 import { INTEGRACIONES, integracion } from '../integraciones/catalogo.js';
 import { ClienteImap } from '../proveedores/imap.js';
 import {
+  canjearCodigoGoogle,
+  olvidarAccesoGoogle,
+  quienSoyGoogle,
+  tokenDeAccesoGoogle,
+  urlDeAutorizacionGoogle
+} from '../proveedores/google.js';
+import {
   canjearCodigo,
   leerCorreoMicrosoft,
   olvidarAcceso,
@@ -147,7 +154,8 @@ function buzones_(
         id,
         porId.get(id),
         config.correoDiasAtras,
-        config.microsoftApp
+        config.microsoftApp,
+        config.googleApp
       )
     )
     .filter((c): c is ConfiguracionCorreo => c !== undefined);
@@ -190,7 +198,10 @@ export function metodoDe(
   if (correo.proveedor === 'microsoft' && correo.microsoft?.refreshToken) {
     return 'graph';
   }
-  if (correo.proveedor !== 'microsoft' && correo.contrasena !== '') {
+  if (
+    correo.proveedor !== 'microsoft' &&
+    (correo.contrasena !== '' || correo.google?.refreshToken)
+  ) {
     return 'imap';
   }
   if (config.clientesIngesta.some((c) => c.nombre === correo.id)) {
@@ -211,7 +222,9 @@ function faltanteDe(correo: ConfiguracionCorreo): string {
     ? correo.microsoft
       ? 'conectar la cuenta con Microsoft desde Ajustes → Correo'
       : 'la aplicación de Entra ID (Ajustes → Integraciones → Microsoft) y conectar la cuenta'
-    : 'la contraseña del buzón (Ajustes → Correo → Editar conexión)';
+    : correo.proveedor === 'google'
+      ? 'conectar la cuenta con Google (o poner una contraseña de aplicación) en Correo'
+      : 'la contraseña del buzón (Correo → Editar conexión)';
 }
 
 /** El token de administracion, para las rutas que editan buzones. */
@@ -703,7 +716,8 @@ export function construirRutas(
       id,
       cfg().correos.find((c) => c.id === id),
       cfg().correoDiasAtras,
-      cfg().microsoftApp
+      cfg().microsoftApp,
+      cfg().googleApp
     );
     if (!cuenta) {
       throw new ErrorPuente(`No hay un buzón "${id}" configurado.`, 404);
@@ -781,10 +795,14 @@ export function construirRutas(
     buzones: cuenta.buzones,
     metodo: metodoDe(cuenta, cfg()),
     conContrasena: cuenta.contrasena !== '',
-    conAplicacion: cuenta.microsoft !== undefined,
+    conAplicacion:
+      cuenta.proveedor === 'google'
+        ? cuenta.google !== undefined
+        : cuenta.microsoft !== undefined,
     tenant: cuenta.microsoft?.tenant,
-    clientId: cuenta.microsoft?.clientId,
-    conectadaComo: cuenta.microsoft?.conectadaComo,
+    clientId: cuenta.microsoft?.clientId ?? cuenta.google?.clientId,
+    conectadaComo:
+      cuenta.microsoft?.conectadaComo ?? cuenta.google?.conectadaComo,
     faltante:
       metodoDe(cuenta, cfg()) === 'ninguno' ? faltanteDe(cuenta) : undefined,
     redirectUri: `${cfg().urlPublica}/correo/oauth/callback`
@@ -831,6 +849,17 @@ export function construirRutas(
     return estadoDeBuzon(buzon(id));
   });
 
+  router.post('/correo/:id/borrar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const id = contexto.segmentos[1] as string;
+    buzon(id);
+    await almacenCorreo.borrar(id);
+    cache.olvidar(`correo:${id}`);
+    olvidarAcceso(id);
+    olvidarAccesoGoogle(id);
+    return { ok: true };
+  });
+
   router.post('/correo/:id/probar', async (contexto) => {
     exigirAdmin(contexto, cfg(), acceso);
     const cuenta = buzon(contexto.segmentos[1] as string);
@@ -848,14 +877,24 @@ export function construirRutas(
           mensaje: `Conectado por Microsoft Graph como ${quien}.`
         };
       }
-      if (!cuenta.contrasena) {
-        return { ok: false, mensaje: 'Falta la contraseña del buzón.' };
+      const accessToken = cuenta.google?.refreshToken
+        ? await tokenDeAccesoGoogle(cuenta.id, cuenta.google)
+        : undefined;
+      if (!cuenta.contrasena && !accessToken) {
+        return {
+          ok: false,
+          mensaje:
+            cuenta.proveedor === 'google'
+              ? 'Falta conectar la cuenta con Google (o una contraseña de aplicación).'
+              : 'Falta la contraseña del buzón.'
+        };
       }
       const cliente = await ClienteImap.conectar({
         host: cuenta.host,
         puerto: cuenta.puerto,
         usuario: cuenta.usuario,
         contrasena: cuenta.contrasena,
+        accessToken,
         tiempoLimiteMs: 15_000
       });
       try {
@@ -886,9 +925,13 @@ export function construirRutas(
   router.post('/correo/:id/oauth/inicio', async (contexto) => {
     exigirAdmin(contexto, cfg(), acceso);
     const cuenta = buzon(contexto.segmentos[1] as string);
-    if (!cuenta.microsoft) {
+    const app =
+      cuenta.proveedor === 'google' ? cuenta.google : cuenta.microsoft;
+    if (!app) {
       throw new ErrorConfiguracion(
-        `El buzón "${cuenta.id}" no tiene client ID y client secret: guárdalos primero.`
+        cuenta.proveedor === 'google'
+          ? 'Falta la aplicación OAuth de Google (client ID y secret): configúrala en Correo → Google.'
+          : 'Falta la aplicación de Entra ID (client ID y secret): configúrala en Correo → Microsoft.'
       );
     }
     const { volver } = (contexto.cuerpo ?? {}) as { volver?: string };
@@ -903,13 +946,22 @@ export function construirRutas(
       volver: volver || '/',
       vence: Date.now() + 10 * 60_000
     });
+    const redirectUri = `${cfg().urlPublica}/correo/oauth/callback`;
     return {
-      url: urlDeAutorizacion(
-        cuenta.microsoft,
-        `${cfg().urlPublica}/correo/oauth/callback`,
-        state,
-        cuenta.usuario
-      )
+      url:
+        cuenta.proveedor === 'google'
+          ? urlDeAutorizacionGoogle(
+              cuenta.google as NonNullable<typeof cuenta.google>,
+              redirectUri,
+              state,
+              cuenta.usuario
+            )
+          : urlDeAutorizacion(
+              cuenta.microsoft as NonNullable<typeof cuenta.microsoft>,
+              redirectUri,
+              state,
+              cuenta.usuario
+            )
     };
   });
 
@@ -940,14 +992,38 @@ export function construirRutas(
       );
     }
     const cuenta = buzon(pendiente.id);
-    if (!cuenta.microsoft) {
-      return regresar('error', 'La cuenta ya no tiene aplicación registrada.');
-    }
+    const redirectUri = `${cfg().urlPublica}/correo/oauth/callback`;
     try {
+      if (cuenta.proveedor === 'google') {
+        if (!cuenta.google) {
+          return regresar(
+            'error',
+            'La cuenta ya no tiene aplicación de Google.'
+          );
+        }
+        const tokens = await canjearCodigoGoogle(
+          cuenta.google,
+          parametros.get('code') ?? '',
+          redirectUri
+        );
+        const quien = await quienSoyGoogle(tokens.accessToken);
+        await almacenCorreo.guardar(cuenta.id, {
+          google: { refreshToken: tokens.refreshToken, conectadaComo: quien }
+        });
+        cache.olvidar(`correo:${cuenta.id}`);
+        olvidarAccesoGoogle(cuenta.id);
+        return regresar('ok', `Conectada como ${quien}`);
+      }
+      if (!cuenta.microsoft) {
+        return regresar(
+          'error',
+          'La cuenta ya no tiene aplicación registrada.'
+        );
+      }
       const tokens = await canjearCodigo(
         cuenta.microsoft,
         parametros.get('code') ?? '',
-        `${cfg().urlPublica}/correo/oauth/callback`
+        redirectUri
       );
       const quien = await quienSoy(
         cuenta.id,
@@ -991,7 +1067,9 @@ export function construirRutas(
         ? cfg().acceso !== undefined
         : id === 'microsoft'
           ? cfg().microsoftApp !== undefined
-          : (estado?.configurada ?? false);
+          : id === 'google'
+            ? cfg().googleApp !== undefined
+            : (estado?.configurada ?? false);
     return {
       id,
       etiqueta: definicion.etiqueta,

@@ -2,6 +2,10 @@
   <ng-container
     *ngTemplateOutlet="tarjetaIntegracion; context: { estado: app }" />
 }
+@if (googleApp(); as app) {
+  <ng-container
+    *ngTemplateOutlet="tarjetaIntegracion; context: { estado: app }" />
+}
 <section class="card card-pad mt-4">
   <h2 class="text-sm font-semibold text-ink">Agregar un buzón</h2>
   <p class="mt-1 max-w-3xl text-sm text-ink-muted">
@@ -94,6 +98,11 @@
               capability
             }}</span>
           }
+          @if (admin.disponible) {
+            <span class="chip" [class]="conexionChip(row).clase">
+              {{ conexionChip(row).label }}
+            </span>
+          }
           @if (row.enabled) {
             <span class="chip" [class]="statusClass(row.sync?.status)">
               {{ statusLabel(row.sync?.status) }}
@@ -158,7 +167,10 @@
                       Editar conexión
                     </button>
                   }
-                  @if (row.connection.kind === "microsoft") {
+                  @if (
+                    row.connection.kind === "microsoft" ||
+                    row.connection.kind === "google"
+                  ) {
                     <button
                       type="button"
                       class="btn btn-primary"
@@ -167,7 +179,9 @@
                       {{
                         conexion.estado.conectadaComo
                           ? "Volver a conectar"
-                          : "Conectar con Microsoft"
+                          : row.connection.kind === "google"
+                            ? "Conectar con Google"
+                            : "Conectar con Microsoft"
                       }}
                     </button>
                   }
@@ -325,15 +339,14 @@
               " />
             Encendida
           </label>
-          @if (row.added) {
-            <button
-              type="button"
-              class="btn"
-              (click)="removeAccount(row.connection.accountId)">
-              <pt-icon name="basura" class="h-4 w-4" />
-              Quitar
-            </button>
-          }
+          <button
+            type="button"
+            class="btn"
+            title="Quitar este buzón"
+            (click)="removeAccount(row.connection.accountId)">
+            <pt-icon name="basura" class="h-4 w-4" />
+            Quitar
+          </button>
         </div>
       </div>
     </section>

@@ -8,6 +8,7 @@ import type {
 } from '../nucleo/contrato.js';
 import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
 import { variableContrasena } from '../config/entorno.js';
+import { calendarioGoogle, tokenDeAccesoGoogle } from './google.js';
 import { ClienteImap, type EncabezadoCorreo } from './imap.js';
 import { extraerCalendario, juntasDeCalendario } from './ics.js';
 import { textoDe } from './mime.js';
@@ -325,9 +326,14 @@ export async function leerCorreo(
       501
     );
   }
-  if (!config.contrasena) {
+  // Gmail conectado con Google entra por XOAUTH2 con el token; lo demas, con
+  // su contraseña.
+  const accessToken = config.google?.refreshToken
+    ? await tokenDeAccesoGoogle(config.id, config.google)
+    : undefined;
+  if (!config.contrasena && !accessToken) {
     throw new ErrorConfiguracion(
-      `El buzón "${config.id}" no tiene contraseña: ponla en Ajustes → Correo → Editar conexión (o en ${variableContrasena(config.id)}).`
+      `El buzón "${config.id}" no tiene contraseña: ponla en Correo → Editar conexión (o en ${variableContrasena(config.id)}).`
     );
   }
 
@@ -335,7 +341,8 @@ export async function leerCorreo(
     host: config.host,
     puerto: config.puerto,
     usuario: config.usuario,
-    contrasena: config.contrasena
+    contrasena: config.contrasena,
+    accessToken
   });
   try {
     const encabezados: EncabezadoCorreo[] = [];
@@ -395,10 +402,16 @@ export async function leerCorreo(
       }
     }
 
+    // Con Google conectado se lee el calendario completo, que es mejor que
+    // las invitaciones sueltas del buzon.
+    const juntas = accessToken
+      ? await calendarioGoogle(accessToken, config.accountId, ahora)
+      : juntasDeCalendario(calendarios, config.accountId, config.usuario);
+
     return {
       licencias: evidencias.map((e) => e.licencia),
       pendientes: detectarPendientes(encabezados, config.accountId, ahora),
-      juntas: juntasDeCalendario(calendarios, config.accountId, config.usuario),
+      juntas,
       leidos: encabezados.length
     };
   } finally {

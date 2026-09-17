@@ -125,6 +125,15 @@ export interface ConfiguracionCorreo {
    * conectada.
    */
   microsoft?: ConfiguracionMicrosoft;
+  /** Para Gmail: el refresh token que quedo al conectar la cuenta con Google. */
+  google?: ConfiguracionGoogle;
+}
+
+export interface ConfiguracionGoogle {
+  clientId: string;
+  clientSecret: string;
+  refreshToken?: string;
+  conectadaComo?: string;
 }
 
 export interface ConfiguracionMicrosoft {
@@ -200,6 +209,8 @@ export interface Configuracion {
    * traigan la suya. Es lo normal: una sola aplicacion para toda la empresa.
    */
   microsoftApp?: Omit<ConfiguracionMicrosoft, 'refreshToken' | 'conectadaComo'>;
+  /** La aplicacion OAuth de Google que usan todos los buzones de Gmail. */
+  googleApp?: Omit<ConfiguracionGoogle, 'refreshToken' | 'conectadaComo'>;
   /** Donde viven el equipo, los dominios y las sesiones. */
   directorioDatos: string;
   /**
@@ -501,6 +512,13 @@ function leer(): Configuracion {
             publicKey: texto('EMAILJS_PUBLIC_KEY') as string,
             privateKey: texto('EMAILJS_PRIVATE_KEY') as string,
             correos: lista('ACCESO_CORREOS').map((c) => c.toLowerCase())
+          }
+        : undefined,
+    googleApp:
+      texto('GOOGLE_CLIENT_ID') && texto('GOOGLE_CLIENT_SECRET')
+        ? {
+            clientId: texto('GOOGLE_CLIENT_ID') as string,
+            clientSecret: texto('GOOGLE_CLIENT_SECRET') as string
           }
         : undefined,
     directorioDatos: texto('DATOS_DIRECTORIO') ?? 'datos',

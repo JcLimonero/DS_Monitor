@@ -332,6 +332,34 @@ INTEGRACIONES.push({
 });
 
 INTEGRACIONES.push({
+  id: 'google',
+  etiqueta: 'Google (Gmail)',
+  kind: 'google',
+  campos: [
+    {
+      variable: 'GOOGLE_CLIENT_ID',
+      etiqueta: 'Client ID',
+      tipo: 'texto',
+      obligatoria: true,
+      ayuda:
+        'Cliente OAuth "Aplicación web" en Google Cloud → APIs y servicios → Credenciales.'
+    },
+    {
+      variable: 'GOOGLE_CLIENT_SECRET',
+      etiqueta: 'Client secret',
+      tipo: 'secreto',
+      obligatoria: true,
+      ayuda:
+        'En el proyecto: habilitar Gmail API y Google Calendar API; en la pantalla de consentimiento, agregar el correo como usuario de prueba.'
+    }
+  ],
+  probar: async (config) => {
+    exigir(config.googleApp, 'el client ID y el client secret de Google');
+    return 'Aplicación guardada. Conecta cada buzón de Gmail con "Conectar con Google" en Correo.';
+  }
+});
+
+INTEGRACIONES.push({
   id: 'acceso',
   etiqueta: 'Acceso al portal',
   kind: 'acceso',

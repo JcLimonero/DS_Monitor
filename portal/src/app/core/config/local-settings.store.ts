@@ -73,12 +73,17 @@ export class LocalSettingsStore {
     return account;
   }
 
+  /** Quita una cuenta: si es de fábrica queda marcada como borrada. */
   removeAccount(accountId: string): void {
     const current = this.settingsSignal();
     const { [accountId]: _enabled, ...accountEnabled } = current.accountEnabled;
+    const agregada = current.accounts.some((a) => a.id === accountId);
     this.commit({
       ...current,
       accounts: current.accounts.filter((a) => a.id !== accountId),
+      removedAccounts: agregada
+        ? current.removedAccounts
+        : [...new Set([...current.removedAccounts, accountId])],
       accountEnabled
     });
   }
