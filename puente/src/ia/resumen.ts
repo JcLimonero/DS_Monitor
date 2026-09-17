@@ -74,6 +74,12 @@ export function contextoDelDia(
       (j) =>
         `${enHorario(j.start).split(', ').pop()} ${j.title}${j.attendees.length ? ` (${j.attendees.length} personas)` : ''}`
     ),
+    juntasSinHomologar: tablero.juntasSinHomologar
+      .slice(0, 5)
+      .map(
+        (u) =>
+          `${u.junta.title} (${diaLocal(u.junta.start)}) falta en ${u.faltaEn.join(', ')}`
+      ),
     sitiosCaidos: caidos.map((m) => m.name),
     desplieguesFallidos: fallidos.map((d) => d.project),
     dominiosPorVencer: dominios,

@@ -25,6 +25,7 @@ import {
   weightedPipeline
 } from '../../../core/state/portal.selectors';
 import { PortalStore } from '../../../core/state/portal.store';
+import { accountsOf } from '../../../core/util/meetings.util';
 import { plural } from '../../../core/util/text.util';
 import { IaService } from '../../../core/ia/ia.service';
 import { IconComponent } from '../../../ui/icon.component';
@@ -244,6 +245,19 @@ export class ResumenSlideComponent {
       });
     }
 
+    for (const { meeting, missingIn } of this.store
+      .unmirroredMeetings()
+      .slice(0, 3)) {
+      avisos.push({
+        id: `sin-homologar-${meeting.id}`,
+        texto: `Junta sin homologar: ${meeting.title}`,
+        detalle: `Falta en ${missingIn
+          .map((id) => this.store.accountOf(id)?.label ?? id)
+          .join(', ')}`,
+        grave: false
+      });
+    }
+
     for (const despliegue of failedDeployments(this.store.deployments())) {
       avisos.push({
         id: `despliegue-${despliegue.id}`,
@@ -291,6 +305,8 @@ export class ResumenSlideComponent {
   }
 
   cuenta(junta: Meeting): string {
-    return this.store.accountOf(junta.accountId)?.label ?? junta.accountId;
+    return accountsOf(junta)
+      .map((id) => this.store.accountOf(id)?.label ?? id)
+      .join(' · ');
   }
 }

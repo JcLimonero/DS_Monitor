@@ -1,3 +1,4 @@
+import { accountsOf } from '../../core/util/meetings.util';
 import { IaAcuerdosComponent } from '../ia/ia-acuerdos.component';
 import {
   ChangeDetectionStrategy,
@@ -20,7 +21,7 @@ import { AccountChipComponent } from '../../ui/account-chip.component';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
-import { TimePipe } from '../../ui/portal.pipes';
+import { DayPipe, TimePipe } from '../../ui/portal.pipes';
 
 interface DayGroup {
   key: string;
@@ -48,6 +49,7 @@ type RangeId = (typeof RANGES)[number]['id'];
     FormsModule,
     IconComponent,
     PageHeaderComponent,
+    DayPipe,
     TimePipe
   ],
   templateUrl: './agenda.component.html'
@@ -64,11 +66,20 @@ export class AgendaComponent {
 
   /** Cuentas que de verdad traen juntas, no todas las configuradas. */
   readonly calendarAccounts = computed(() => {
-    const ids = new Set(
-      this.store.meetings().map((meeting) => meeting.accountId)
-    );
+    const ids = new Set(this.store.calendarAccounts());
     return this.store.accounts.filter((account) => ids.has(account.id));
   });
+
+  /** Juntas que están en una cuenta y no en otra, para homologar. */
+  readonly unmirrored = computed(() => this.store.unmirroredMeetings());
+
+  accountLabel(id: string): string {
+    return this.store.accountOf(id)?.label ?? id;
+  }
+
+  accountsOf(meeting: Meeting): string[] {
+    return accountsOf(meeting);
+  }
 
   private readonly visible = computed<Meeting[]>(() => {
     const days = RANGES.find((option) => option.id === this.range())?.days ?? 7;
@@ -83,7 +94,8 @@ export class AgendaComponent {
         return start >= from && start < to;
       })
       .filter(
-        (meeting) => accountId === 'todas' || meeting.accountId === accountId
+        (meeting) =>
+          accountId === 'todas' || accountsOf(meeting).includes(accountId)
       )
       .filter(
         (meeting) => !this.hideCancelled() || meeting.status !== 'cancelada'

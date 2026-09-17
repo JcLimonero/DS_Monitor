@@ -1,3 +1,4 @@
+import { mergeMeetings, unmirroredMeetings } from '../util/meetings.util';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, catchError, forkJoin, map, of, tap } from 'rxjs';
 import {
@@ -55,7 +56,7 @@ export class PortalStore {
   private readonly repoSources = inject(REPO_SOURCES);
 
   private readonly tasksSignal = signal<TaskItem[]>([]);
-  private readonly meetingsSignal = signal<Meeting[]>([]);
+  private readonly rawMeetingsSignal = signal<Meeting[]>([]);
   private readonly targetsSignal = signal<MonitorTarget[]>([]);
   private readonly opportunitiesSignal = signal<CrmOpportunity[]>([]);
   private readonly activitiesSignal = signal<CrmActivity[]>([]);
@@ -67,7 +68,16 @@ export class PortalStore {
   private readonly lastRefreshSignal = signal<string | undefined>(undefined);
 
   readonly tasks = this.tasksSignal.asReadonly();
-  readonly meetings = this.meetingsSignal.asReadonly();
+  /** Las juntas ya homologadas: la misma junta en dos cuentas sale una vez. */
+  readonly meetings = computed(() => mergeMeetings(this.rawMeetingsSignal()));
+  /** Cuentas que traen calendario, para saber dónde falta una junta. */
+  readonly calendarAccounts = computed(() =>
+    [...new Set(this.rawMeetingsSignal().map((m) => m.accountId))].sort()
+  );
+  /** Juntas que están en una cuenta y no en otra. */
+  readonly unmirroredMeetings = computed(() =>
+    unmirroredMeetings(this.meetings(), this.calendarAccounts())
+  );
   readonly targets = this.targetsSignal.asReadonly();
   readonly opportunities = this.opportunitiesSignal.asReadonly();
   readonly activities = this.activitiesSignal.asReadonly();
@@ -134,7 +144,7 @@ export class PortalStore {
     };
     this.collect(this.calendarSources, (source) =>
       source.fetchMeetings(range)
-    ).subscribe((meetings) => this.meetingsSignal.set(meetings));
+    ).subscribe((meetings) => this.rawMeetingsSignal.set(meetings));
   }
 
   refreshTargets(): void {

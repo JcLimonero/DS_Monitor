@@ -69,6 +69,8 @@ export interface Meeting {
   location?: string;
   joinUrl?: string;
   notes?: string;
+  /** Otras cuentas donde aparece la misma junta (ver homologar). */
+  alsoIn?: string[];
 }
 
 // --- Monitoreo ---

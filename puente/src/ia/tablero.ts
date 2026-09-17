@@ -1,4 +1,5 @@
 import type { Dominio } from '../datos/dominios.js';
+import { homologarJuntas, juntasSinHomologar } from '../nucleo/juntas.js';
 import type {
   Deployment,
   LicenseUsage,
@@ -20,7 +21,10 @@ import type {
  */
 export interface Tablero {
   pendientes: TaskItem[];
+  /** Ya homologadas: la misma junta en dos cuentas sale una vez. */
   juntas: Meeting[];
+  /** Juntas que estan en una cuenta y faltan en otra. */
+  juntasSinHomologar: { junta: Meeting; faltaEn: string[] }[];
   licencias: LicenseUsage[];
   dominios: Dominio[];
   monitoreo: MonitorTarget[];
@@ -60,7 +64,7 @@ export async function armarTablero(
   };
   const [
     pendientes,
-    juntas,
+    juntasCrudas,
     licencias,
     dominios,
     monitoreo,
@@ -77,9 +81,12 @@ export async function armarTablero(
     con('repos', fuentes.repos, [] as RepoStatus[]),
     con('equipo', fuentes.equipo, [] as Person[])
   ]);
+  const juntas = homologarJuntas(juntasCrudas);
+  const cuentas = [...new Set(juntasCrudas.map((j) => j.accountId))];
   return {
     pendientes,
     juntas,
+    juntasSinHomologar: juntasSinHomologar(juntas, cuentas, ahora),
     licencias,
     dominios,
     monitoreo,

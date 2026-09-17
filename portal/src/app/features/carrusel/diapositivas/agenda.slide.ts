@@ -1,3 +1,4 @@
+import { accountsOf } from '../../../core/util/meetings.util';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -118,6 +119,8 @@ export class AgendaSlideComponent {
   }
 
   nombreCuenta(junta: Meeting): string {
-    return this.store.accountOf(junta.accountId)?.label ?? junta.accountId;
+    return accountsOf(junta)
+      .map((id) => this.store.accountOf(id)?.label ?? id)
+      .join(' · ');
   }
 }

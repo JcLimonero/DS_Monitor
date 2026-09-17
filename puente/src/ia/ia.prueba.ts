@@ -11,6 +11,7 @@ import { detectarAlertas, registrarCostos } from './alertas.js';
 import { aplicarVeredictos } from './pendientes.js';
 import { semanaIso } from './repos.js';
 import { semanaDeCadaQuien } from './semana.js';
+import { homologarJuntas, juntasSinHomologar } from '../nucleo/juntas.js';
 import {
   diaLocal,
   juntasDelDia,
@@ -223,6 +224,7 @@ describe('semana del equipo', () => {
           attendees: []
         }
       ],
+      juntasSinHomologar: [],
       licencias: [],
       dominios: [],
       monitoreo: [],
@@ -306,5 +308,32 @@ describe('veredictos y semanas', () => {
     assert.equal(semanaIso(new Date('2026-09-17T12:00:00Z')), '2026-W38');
     assert.equal(semanaIso(new Date('2026-01-01T12:00:00Z')), '2026-W01');
     assert.equal(semanaIso(new Date('2027-01-01T12:00:00Z')), '2026-W53');
+  });
+});
+
+describe('homologacion de juntas', () => {
+  it('funde la misma junta de dos cuentas y avisa de la que falta', () => {
+    const daily = { ...junta('a', '2026-09-18T13:00:00Z'), title: 'Daily' };
+    const copia = {
+      ...daily,
+      id: 'b',
+      title: 'DAILY ',
+      accountId: 'correo-itech'
+    };
+    const sola = { ...junta('c', '2026-09-18T15:00:00Z'), title: 'Reunion' };
+    const juntas = homologarJuntas([daily, copia, sola]);
+    assert.equal(juntas.length, 2);
+    assert.deepEqual(juntas[0]?.alsoIn, ['correo-itech']);
+    assert.equal(juntas[1]?.alsoIn, undefined);
+    const faltan = juntasSinHomologar(
+      juntas,
+      ['correo-nexus', 'correo-itech'],
+      AHORA
+    );
+    assert.deepEqual(
+      faltan.map((u) => [u.junta.id, u.faltaEn]),
+      [['c', ['correo-itech']]]
+    );
+    assert.equal(juntasSinHomologar(juntas, ['correo-nexus'], AHORA).length, 0);
   });
 });

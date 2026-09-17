@@ -17,6 +17,11 @@ export interface Meeting {
   /** Liga de la videollamada, cuando la junta la trae. */
   joinUrl?: string;
   notes?: string;
+  /**
+   * Otras cuentas donde aparece la misma junta. Al homologar, las copias se
+   * funden en una y aquí queda constancia de dónde más estaba.
+   */
+  alsoIn?: string[];
 }
 
 export const MEETING_STATUS_LABEL: Record<MeetingStatus, string> = {
