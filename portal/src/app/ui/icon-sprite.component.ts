@@ -165,6 +165,10 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
         <path d="M9 17.5c-1.2 1-1.6 2.3-1.5 3.5 1.2.1 2.5-.3 3.5-1.5" />
         <path d="M15 17.5c1.2 1 1.6 2.3 1.5 3.5-1.2.1-2.5-.3-3.5-1.5" />
       </symbol>
+      <symbol id="i-microfono" viewBox="0 0 24 24">
+        <rect x="9" y="3" width="6" height="11" rx="3" />
+        <path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8" />
+      </symbol>
       <symbol id="i-rama" viewBox="0 0 24 24">
         <circle cx="7" cy="5.5" r="2.5" />
         <circle cx="7" cy="18.5" r="2.5" />

@@ -54,6 +54,14 @@ export const routes: Routes = [
           )
       },
       {
+        path: 'dictado',
+        title: 'Dictar | DS Monitor',
+        loadComponent: () =>
+          import('./features/dictado/dictado.component').then(
+            (m) => m.DictadoComponent
+          )
+      },
+      {
         path: 'agenda',
         title: 'Agenda | DS Monitor',
         loadComponent: () =>

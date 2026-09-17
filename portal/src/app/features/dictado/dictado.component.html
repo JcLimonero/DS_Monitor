@@ -1,0 +1,186 @@
+<pt-page-header
+  title="Dictar"
+  subtitle="Di o escribe lo que hay que hacer; se convierte en pendientes con empresa, fecha y responsable" />
+
+<section class="card card-pad">
+  <div class="flex flex-wrap items-center gap-2">
+    @if (hayVoz) {
+      <button
+        type="button"
+        class="btn"
+        [class.btn-primary]="escuchando()"
+        (click)="alternarVoz()">
+        <pt-icon name="microfono" class="h-4 w-4" />
+        {{ escuchando() ? "Escuchando… (detener)" : "Dictar con voz" }}
+      </button>
+    } @else {
+      <span class="text-xs text-ink-muted">
+        Este navegador no reconoce voz (usa Chrome, Edge o Safari); escribe el
+        dictado.
+      </span>
+    }
+    <button type="button" class="btn" (click)="limpiar()">Limpiar</button>
+  </div>
+
+  <label class="mt-3 block">
+    <span class="mb-1 block text-xs font-medium text-ink-muted">Dictado</span>
+    <textarea
+      class="field min-h-32 w-full"
+      name="dictado"
+      placeholder="Por ejemplo: Junta con Felipe el lunes a las 12 en Italian Coffee de Galerías, es de OperativAI. Y que Efrén revise el alta de proveedores del portal de Vanguardia, urgente."
+      [ngModel]="texto()"
+      (ngModelChange)="texto.set($event)"></textarea>
+  </label>
+  @if (parcial(); as p) {
+    <p class="mt-1 text-sm italic text-ink-subtle">{{ p }}</p>
+  }
+
+  <div class="mt-3 flex flex-wrap items-center gap-2">
+    <button
+      type="button"
+      class="btn btn-primary"
+      [disabled]="!puedeProcesar()"
+      (click)="procesar()">
+      {{ procesando() ? "Interpretando…" : "Convertir en pendientes" }}
+    </button>
+    @if (conIa() === false) {
+      <span class="text-xs text-ink-muted">
+        Interpretado por reglas (sin IA activa): revisa fechas y empresa.
+      </span>
+    }
+  </div>
+
+  @if (error(); as e) {
+    <p class="mt-2 text-sm text-danger">{{ e }}</p>
+  }
+  @if (mensaje(); as m) {
+    <p class="mt-2 text-sm text-ink-muted">{{ m }}</p>
+  }
+</section>
+
+@if (propuestas(); as lista) {
+  @if (lista.length > 0) {
+    <section class="card card-pad mt-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-sm font-semibold text-ink">
+          Lo que entendí
+          <span class="chip bg-surface-muted text-ink-muted">{{ lista.length }}</span>
+        </h2>
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="guardando() || cuantasElegidas() === 0"
+          (click)="guardar()">
+          {{ guardando() ? "Guardando…" : "Agregar " + cuantasElegidas() + " a pendientes" }}
+        </button>
+      </div>
+
+      <ul class="mt-3 space-y-3">
+        @for (p of lista; track $index) {
+          <li
+            class="rounded-lg border border-line p-3"
+            [class.opacity-50]="!elegidas()[$index]">
+            <div class="flex items-start gap-3">
+              <input
+                type="checkbox"
+                class="mt-2 h-4 w-4 rounded border-line text-brand"
+                [ngModel]="elegidas()[$index]"
+                (ngModelChange)="elegir($index, $event)"
+                name="elegida-{{ $index }}" />
+              <div class="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <label class="sm:col-span-2 lg:col-span-3">
+                  <span class="mb-1 block text-xs font-medium text-ink-muted">Qué</span>
+                  <input
+                    class="field"
+                    type="text"
+                    [ngModel]="p.titulo"
+                    (ngModelChange)="cambiar($index, { titulo: $event })"
+                    name="titulo-{{ $index }}" />
+                </label>
+                <label>
+                  <span class="mb-1 block text-xs font-medium text-ink-muted">Tipo</span>
+                  <select
+                    class="field"
+                    [ngModel]="p.personal ? 'personal' : 'negocio'"
+                    (ngModelChange)="cambiar($index, { personal: $event === 'personal' })"
+                    name="tipo-{{ $index }}">
+                    <option value="negocio">Del negocio</option>
+                    <option value="personal">Personal</option>
+                  </select>
+                </label>
+                @if (!p.personal) {
+                  <label>
+                    <span class="mb-1 block text-xs font-medium text-ink-muted">Empresa</span>
+                    <select
+                      class="field"
+                      [ngModel]="p.empresa ?? ''"
+                      (ngModelChange)="cambiar($index, { empresa: $event || undefined })"
+                      name="empresa-{{ $index }}">
+                      <option value="">Sin empresa</option>
+                      @for (e of empresas; track e) {
+                        <option [value]="e">{{ e }}</option>
+                      }
+                    </select>
+                  </label>
+                }
+                <label>
+                  <span class="mb-1 block text-xs font-medium text-ink-muted">Prioridad</span>
+                  <select
+                    class="field"
+                    [ngModel]="p.prioridad"
+                    (ngModelChange)="cambiar($index, { prioridad: $event })"
+                    name="prioridad-{{ $index }}">
+                    @for (pr of priorities; track pr) {
+                      <option [value]="pr">{{ priorityLabel[pr] }}</option>
+                    }
+                  </select>
+                </label>
+                <label>
+                  <span class="mb-1 block text-xs font-medium text-ink-muted">Para cuándo</span>
+                  <input
+                    class="field"
+                    type="datetime-local"
+                    [ngModel]="fechaLocal(p.venceEn)"
+                    (ngModelChange)="ponerFecha($index, $event)"
+                    name="fecha-{{ $index }}" />
+                </label>
+                <label>
+                  <span class="mb-1 block text-xs font-medium text-ink-muted">Responsable</span>
+                  <select
+                    class="field"
+                    [ngModel]="p.persona?.email ?? p.persona?.id ?? ''"
+                    (ngModelChange)="asignar($index, $event)"
+                    name="responsable-{{ $index }}">
+                    <option value="">Nadie</option>
+                    @for (per of equipo(); track per.id) {
+                      <option [value]="per.email ?? per.id">{{ per.name }}</option>
+                    }
+                  </select>
+                  @if (p.responsable && !p.persona) {
+                    <span class="mt-1 block text-xs text-warn">
+                      "{{ p.responsable }}" no está en el equipo.
+                    </span>
+                  }
+                </label>
+                <label>
+                  <span class="mb-1 block text-xs font-medium text-ink-muted">Proyecto / cliente</span>
+                  <input
+                    class="field"
+                    type="text"
+                    [ngModel]="p.proyecto ?? ''"
+                    (ngModelChange)="cambiar($index, { proyecto: $event || undefined })"
+                    name="proyecto-{{ $index }}" />
+                </label>
+                @if (p.descripcion) {
+                  <p class="text-xs text-ink-muted sm:col-span-2 lg:col-span-3">
+                    {{ p.descripcion }}
+                  </p>
+                }
+              </div>
+            </div>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+}

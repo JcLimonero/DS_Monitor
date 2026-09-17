@@ -11,6 +11,7 @@ import {
   Diagnostico,
   EstadoIa,
   JuntaParaAcuerdos,
+  Propuesta,
   ResumenDia,
   ResumenRepos,
   SugerenciaCrm,
@@ -168,6 +169,24 @@ export class IaService {
     return this.http.post<{ enviados: string[]; errores: string[] }>(
       this.url('/ia/semana/enviar'),
       { solo },
+      { headers: this.headers() }
+    );
+  }
+
+  dictar(texto: string): Observable<{ propuestas: Propuesta[]; conIa: boolean }> {
+    return this.http.post<{ propuestas: Propuesta[]; conIa: boolean }>(
+      this.url('/ia/dictado'),
+      { texto },
+      { headers: this.headers() }
+    );
+  }
+
+  aceptarDictado(
+    propuestas: Propuesta[]
+  ): Observable<{ agregados: number; avisos: string[] }> {
+    return this.http.post<{ agregados: number; avisos: string[] }>(
+      this.url('/ia/dictado/aceptar'),
+      { propuestas },
       { headers: this.headers() }
     );
   }

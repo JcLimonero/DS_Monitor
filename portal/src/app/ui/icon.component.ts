@@ -32,7 +32,8 @@ export type IconName =
   | 'expandir'
   | 'licencia'
   | 'despliegue'
-  | 'rama';
+  | 'rama'
+  | 'microfono';
 
 @Component({
   selector: 'pt-icon',

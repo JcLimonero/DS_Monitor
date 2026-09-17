@@ -337,3 +337,39 @@ describe('homologacion de juntas', () => {
     assert.equal(juntasSinHomologar(juntas, ['correo-nexus'], AHORA).length, 0);
   });
 });
+
+describe('dictado por reglas', () => {
+  it('saca fecha, empresa, prioridad y responsable de una frase', async () => {
+    const { interpretarPorReglas } = await import('./dictado.js');
+    const equipo: Person[] = [{ id: 'efren', name: 'Efrén' }];
+    const [a, b] = interpretarPorReglas(
+      'Junta con Felipe el lunes a las 12 en Italian Coffee de Galerías, es de Operativ AI. Y que Efrén revise el alta de proveedores de Vanguardia, urgente',
+      equipo,
+      new Date('2026-09-17T15:00:00Z') // jueves
+    );
+    assert.equal(a?.empresa, 'OperativAI');
+    assert.equal(
+      a?.venceEn,
+      new Date('2026-09-21T12:00:00-06:00').toISOString()
+    );
+    assert.equal(a?.persona, undefined);
+    assert.equal(b?.persona?.id, 'efren');
+    assert.equal(b?.prioridad, 'urgente');
+    assert.equal(b?.proyecto, 'Vanguardia');
+    assert.equal(b?.personal, false);
+  });
+
+  it('el mismo dia de la semana apunta a la proxima semana, y "mañana a las 5 pm" a la tarde', async () => {
+    const { fechaDeFrase } = await import('./dictado.js');
+    const jueves = new Date('2026-09-17T15:00:00Z');
+    assert.equal(
+      fechaDeFrase('el jueves', jueves),
+      new Date('2026-09-24T12:00:00-06:00').toISOString()
+    );
+    assert.equal(
+      fechaDeFrase('manana a las 5 pm', jueves),
+      new Date('2026-09-18T17:00:00-06:00').toISOString()
+    );
+    assert.equal(fechaDeFrase('sin fecha', jueves), undefined);
+  });
+});

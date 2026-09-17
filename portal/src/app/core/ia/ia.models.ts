@@ -101,3 +101,17 @@ export const EMPRESAS = [
   'NexusQTech',
   'OperativAI'
 ] as const;
+
+/** Lo que el puente entendió de un dictado; se corrige antes de guardar. */
+export interface Propuesta {
+  titulo: string;
+  descripcion?: string;
+  personal: boolean;
+  empresa?: string;
+  prioridad: TaskPriority;
+  venceEn?: string;
+  responsable?: string;
+  persona?: Person;
+  proyecto?: string;
+  origen: 'ia' | 'reglas';
+}

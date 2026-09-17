@@ -2,6 +2,7 @@ import { enviarPorEmailJs, type Sesion } from '../acceso/acceso.js';
 import type { Configuracion } from '../config/entorno.js';
 import type { Dominio } from '../datos/dominios.js';
 import { acuerdosDeJunta, type Acuerdo } from '../ia/acuerdos.js';
+import { interpretarDictado, type Propuesta } from '../ia/dictado.js';
 import {
   detectarAlertas,
   redactarAlertas,
@@ -299,6 +300,95 @@ export function registrarRutasIa(
         const aviso = await d.asignar(tarea.id, quien, tarea, sesion);
         if (aviso) {
           avisos.push(`${tarea.title}: ${aviso}`);
+        }
+      }
+    }
+    d.olvidarCache();
+    return { agregados: nuevos.length, avisos };
+  });
+
+  // --- Dictado: texto libre → pendientes ---
+  //
+  // Funciona sin modelo (reglas) y mejor con el. Lo que devuelve son
+  // propuestas; guardarlas es otra llamada, con lo que la persona corrigio.
+
+  router.post('/ia/dictado', async (contexto) => {
+    d.exigirAdmin(contexto);
+    const { texto } = (contexto.cuerpo ?? {}) as { texto?: string };
+    if (typeof texto !== 'string' || !texto.trim()) {
+      throw new ErrorPuente('Falta el texto dictado.', 400);
+    }
+    const equipo = await d.fuentes.equipo();
+    const propuestas = await interpretarDictado(ia(), texto, equipo);
+    return { propuestas, conIa: !!ia() };
+  });
+
+  router.post('/ia/dictado/aceptar', async (contexto) => {
+    d.exigirAdmin(contexto);
+    const { propuestas } = (contexto.cuerpo ?? {}) as {
+      propuestas?: Propuesta[];
+    };
+    const lista = Array.isArray(propuestas) ? propuestas : [];
+    if (lista.length === 0) {
+      throw new ErrorPuente('No hay nada que agregar.', 400);
+    }
+    const ahora = new Date().toISOString();
+    const sesion = d.sesionDe(contexto);
+    const equipo = await d.fuentes.equipo();
+    const nuevos: TaskItem[] = lista
+      .filter((p) => typeof p.titulo === 'string' && p.titulo.trim())
+      .map((p, i) => ({
+        id: `local-dictado-${Date.now()}-${i}`,
+        title: p.titulo.trim().slice(0, 120),
+        description:
+          typeof p.descripcion === 'string' && p.descripcion.trim()
+            ? p.descripcion.trim()
+            : undefined,
+        status: 'pendiente',
+        priority:
+          (['baja', 'media', 'alta', 'urgente'] as const).find(
+            (x) => x === p.prioridad
+          ) ?? 'media',
+        dueDate:
+          typeof p.venceEn === 'string' && !Number.isNaN(Date.parse(p.venceEn))
+            ? p.venceEn
+            : undefined,
+        accountId: 'mios',
+        origin: 'local',
+        project:
+          typeof p.proyecto === 'string' && p.proyecto.trim()
+            ? p.proyecto.trim()
+            : undefined,
+        company: p.personal
+          ? undefined
+          : (typeof p.empresa === 'string' && p.empresa) || undefined,
+        personal: p.personal === true ? true : undefined,
+        tags: ['dictado'],
+        updatedAt: ahora
+      }));
+    await d.datos.personales.escribir([
+      ...nuevos,
+      ...d.datos.personales.leer()
+    ]);
+    const avisos: string[] = [];
+    for (const [i, p] of lista.entries()) {
+      const tarea = nuevos[i];
+      const quien =
+        p.persona?.email ??
+        p.persona?.id ??
+        (typeof p.responsable === 'string'
+          ? equipo.find(
+              (e) => e.name.toLowerCase() === p.responsable?.toLowerCase()
+            )?.id
+          : undefined);
+      if (tarea && quien) {
+        try {
+          const aviso = await d.asignar(tarea.id, quien, tarea, sesion);
+          if (aviso) {
+            avisos.push(`${tarea.title}: ${aviso}`);
+          }
+        } catch (error) {
+          avisos.push(`${tarea.title}: ${(error as Error).message}`);
         }
       }
     }

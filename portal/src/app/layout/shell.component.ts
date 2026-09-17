@@ -24,6 +24,7 @@ const NAV: NavItem[] = [
   { path: '/panel', label: 'Panel', icon: 'panel' },
   { path: '/pendientes', label: 'Pendientes', icon: 'tareas' },
   { path: '/personales', label: 'Personales', icon: 'ok' },
+  { path: '/dictado', label: 'Dictar', icon: 'microfono' },
   { path: '/agenda', label: 'Agenda', icon: 'agenda' },
   { path: '/monitoreo', label: 'Monitoreo', icon: 'monitoreo' },
   { path: '/crm', label: 'CRM Odoo', icon: 'crm' },
