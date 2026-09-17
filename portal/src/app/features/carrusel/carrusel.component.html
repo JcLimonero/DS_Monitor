@@ -21,10 +21,22 @@
         </span>
       }
 
-      <p
-        class="shrink-0 text-5xl font-bold tabular-nums leading-none text-ink 2xl:text-6xl">
-        {{ reloj() }}
-      </p>
+      <div class="flex shrink-0 items-end gap-6">
+        <p class="text-right">
+          <span class="tv-label block">GDL · MTY</span>
+          <span
+            class="block text-5xl font-bold tabular-nums leading-none text-ink 2xl:text-6xl">
+            {{ reloj() }}
+          </span>
+        </p>
+        <p class="text-right">
+          <span class="tv-label block">Laredo</span>
+          <span
+            class="block text-3xl font-bold tabular-nums leading-none text-ink-muted 2xl:text-4xl">
+            {{ relojLaredo() }}
+          </span>
+        </p>
+      </div>
     </div>
     <div class="regla-marca"></div>
   </header>

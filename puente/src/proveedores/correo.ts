@@ -254,7 +254,7 @@ const GENERICA_SUSCRIPCION =
 
 /** Marketing que usa las mismas palabras. Se descarta antes de cualquier regla. */
 const PUBLICIDAD =
-  /\d+\s?%|descuento|oferta|ahorra|promo|gratis|free trial|prueba gratis|last chance|[uú]ltima oportunidad|claim your|unlock|upgrade to/i;
+  /\d+\s?%|descuento|oferta|ahorra|promo|gratis|free trial|prueba gratis|last chance|[uú]ltima oportunidad|claim your|unlock|upgrade to|sorpresa|newsletter|webinar|black friday|buen fin|\bdeal\b|\bsale\b|te extra[nñ]amos/i;
 
 interface ReglaPendiente {
   asunto: RegExp;
@@ -617,6 +617,11 @@ const GENERICA: ReglaLicencia = {
   periodo: 'mensual'
 };
 
+/** Remitente de alguno de los proveedores de suscripciones o dominios. */
+function esProveedorConocido(remitente: string): boolean {
+  return REGLAS_LICENCIA.some((regla) => regla.remitente.test(remitente));
+}
+
 /** `Zoom <no-reply@zoom.us>` -> `Zoom`; `no-reply@zoom.us` -> `zoom.us`. */
 export function nombreDelRemitente(remitente: string): string {
   const conNombre = /^\s*"?([^"<]+?)"?\s*<[^>]+>/.exec(remitente);
@@ -649,6 +654,11 @@ export function detectarPendientes(
       r.asunto.test(encabezado.asunto)
     );
     if (!regla) {
+      continue;
+    }
+    // Solo cuenta si viene de un proveedor de suscripciones o dominios: un
+    // "vence hoy" de una tienda o una app es publicidad, no un pendiente.
+    if (!esProveedorConocido(encabezado.remitente)) {
       continue;
     }
     const llave = encabezado.asunto.toLowerCase().replace(/\d+/g, '#');

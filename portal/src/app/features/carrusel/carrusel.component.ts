@@ -96,12 +96,14 @@ export class CarruselComponent {
       this.ahora().getTime() - this.ultimoMovimiento() < CONTROLES_MS
   );
 
-  readonly reloj = computed(() =>
-    this.ahora().toLocaleTimeString('es-MX', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23'
-    })
+  /**
+   * Dos relojes: Guadalajara y Monterrey (misma zona, sin horario de verano)
+   * y Laredo, que sigue el horario de verano de Estados Unidos y por eso
+   * parte del año va una hora adelante.
+   */
+  readonly reloj = computed(() => horaEn(this.ahora(), 'America/Mexico_City'));
+  readonly relojLaredo = computed(() =>
+    horaEn(this.ahora(), 'America/Chicago')
   );
   readonly fecha = computed(() => formatLongDay(this.ahora()));
 
@@ -203,4 +205,13 @@ export class CarruselComponent {
         break;
     }
   }
+}
+
+function horaEn(fecha: Date, zona: string): string {
+  return fecha.toLocaleTimeString('es-MX', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone: zona
+  });
 }
