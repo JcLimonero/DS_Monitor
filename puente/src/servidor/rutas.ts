@@ -812,12 +812,20 @@ export function construirRutas(
     const estado = estadoDeConexiones(cfg(), almacenCorreo).find(
       (e) => e.conexion === id
     );
+    // Acceso y la aplicacion de Microsoft no son conexiones del portal: su
+    // estado sale de la configuracion misma.
+    const configurada =
+      id === 'acceso'
+        ? cfg().acceso !== undefined
+        : id === 'microsoft'
+          ? cfg().microsoftApp !== undefined
+          : (estado?.configurada ?? false);
     return {
       id,
       etiqueta: definicion.etiqueta,
       kind: definicion.kind,
-      configurada: estado?.configurada ?? false,
-      faltante: estado?.faltante,
+      configurada,
+      faltante: configurada ? undefined : estado?.faltante,
       editable: integraciones !== undefined,
       campos: definicion.campos.map((campo) => {
         const enEntorno = process.env[campo.variable];
