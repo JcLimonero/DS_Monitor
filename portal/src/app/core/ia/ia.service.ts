@@ -178,6 +178,7 @@ export class IaService {
     cambio: {
       comentario?: string;
       hecho?: boolean;
+      eliminar?: boolean;
       asignarA?: string;
       tarea?: Partial<TaskItem>;
     }

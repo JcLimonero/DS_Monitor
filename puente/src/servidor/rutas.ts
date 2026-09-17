@@ -1430,6 +1430,7 @@ export function construirRutas(
       id?: string;
       comentario?: string;
       hecho?: boolean;
+      eliminar?: boolean;
       asignarA?: string;
       tarea?: Partial<TaskItem>;
     };
@@ -1449,6 +1450,14 @@ export function construirRutas(
     }
     if (typeof cuerpo.hecho === 'boolean') {
       nota.hecho = cuerpo.hecho;
+    }
+    if (cuerpo.eliminar === true) {
+      // Un pendiente propio se borra de verdad; los demas se esconden.
+      nota.eliminado = true;
+      nota.hecho = true;
+      await datos.personales.escribir(
+        datos.personales.leer().filter((t) => t.id !== id)
+      );
     }
     nota.actualizadoEn = ahora;
     await datos.anotaciones.escribir({ ...todas, [id]: nota });

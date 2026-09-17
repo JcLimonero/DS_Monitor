@@ -288,11 +288,13 @@ const COMPANY_CLASS: Record<string, string> = {
               <pt-icon name="externo" class="h-4 w-4" />
             </a>
           }
-          @if (task().origin === 'local') {
+          @if (task().origin === 'local' || done()) {
             <button
               type="button"
               class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-danger"
-              [attr.aria-label]="'Borrar ' + task().title"
+              [disabled]="saving()"
+              [attr.aria-label]="'Eliminar ' + task().title"
+              title="Eliminar"
               (click)="remove()">
               <pt-icon name="basura" class="h-4 w-4" />
             </button>
@@ -413,9 +415,20 @@ export class TaskCardComponent {
     }
   }
 
+  /**
+   * Los propios se borran siempre; los demás (correo, Ops, Odoo) solo cuando
+   * ya están hechos, y lo que se borra es la vista: la fuente no se toca.
+   */
   remove(): void {
-    this.local.remove(this.task().id);
-    this.store.refreshTasks();
+    if (!confirm(`¿Eliminar "${this.task().title}"?`)) {
+      return;
+    }
+    if (!this.ia.disponible) {
+      this.local.remove(this.task().id);
+      this.store.refreshTasks();
+      return;
+    }
+    this.guardar({ eliminar: true });
   }
 
   private guardar(
