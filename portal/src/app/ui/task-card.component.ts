@@ -125,6 +125,9 @@ const COMPANY_CLASS: Record<string, string> = {
           <div
             class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
             <pt-account-chip [accountId]="task().accountId" />
+            @for (cuenta of task().alsoIn ?? []; track cuenta) {
+              <pt-account-chip [accountId]="cuenta" />
+            }
             <span [class]="statusClass()">{{ statusLabel() }}</span>
             <button
               type="button"

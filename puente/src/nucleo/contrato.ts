@@ -42,6 +42,8 @@ export interface TaskItem {
   company?: string;
   /** Personal, no del negocio: solo se ve en Personales. */
   personal?: boolean;
+  /** Otras cuentas donde llego el mismo pendiente. */
+  alsoIn?: string[];
   status: TaskStatus;
   priority: TaskPriority;
   dueDate?: string;

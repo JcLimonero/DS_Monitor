@@ -26,6 +26,8 @@ export interface TaskItem {
    * carrusel ni los resúmenes del equipo.
    */
   personal?: boolean;
+  /** Otras cuentas donde llegó el mismo pendiente (el mismo correo en dos buzones). */
+  alsoIn?: string[];
   status: TaskStatus;
   priority: TaskPriority;
   /** Fecha compromiso en ISO. Sin fecha significa que nadie la ha puesto. */

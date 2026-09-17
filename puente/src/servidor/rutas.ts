@@ -22,6 +22,7 @@ import type {
 import type { Fuentes } from '../ia/tablero.js';
 import { anotar, type Anotaciones } from '../pendientes/anotaciones.js';
 import { registrar, type Registro } from '../pendientes/registro.js';
+import { homologarPendientes, idsDelGrupo } from '../pendientes/homologar.js';
 import { enviarPorEmailJs } from '../acceso/acceso.js';
 import type {
   ClienteIngesta,
@@ -943,7 +944,22 @@ export function construirRutas(
       metodo === 'graph' || metodo === 'imap'
         ? (await leido(cuenta))[parte]
         : recibidoDe(cuenta, tipo);
-    return parte === 'pendientes' ? conNotas(lista as TaskItem[]) : lista;
+    if (parte !== 'pendientes') {
+      return lista;
+    }
+    // Lo de este buzon se homologa contra lo registrado de los demas: el
+    // mismo correo en dos buzones se sirve una vez, y de los avisos
+    // repetidos solo el ultimo. Los demas buzones se leen del registro, no
+    // del proveedor, para no esperar por ellos.
+    const registro = datos.registroCorreo.leer();
+    const porCuenta: Record<string, TaskItem[]> = {};
+    for (const [otra, tareas] of Object.entries(registro)) {
+      if (otra !== cuenta.id) {
+        porCuenta[otra] = tareas;
+      }
+    }
+    porCuenta[cuenta.id] = lista as TaskItem[];
+    return conNotas(homologarPendientes(porCuenta)[cuenta.id] ?? []);
   };
 
   router.get('/correo/:id/licenses', ({ segmentos }) =>
@@ -1461,7 +1477,23 @@ export function construirRutas(
       );
     }
     nota.actualizadoEn = ahora;
-    await datos.anotaciones.escribir({ ...todas, [id]: nota });
+    // Hecho y eliminado aplican a todo el grupo: el mismo correo en otro
+    // buzon y los avisos anteriores del mismo remitente.
+    const grupo = idsDelGrupo(
+      id,
+      Object.values(datos.registroCorreo.leer()).flat()
+    );
+    const conGrupo = { ...todas, [id]: nota };
+    for (const otro of grupo.filter((x) => x !== id)) {
+      const previa = conGrupo[otro] ?? { comentarios: [], actualizadoEn: '' };
+      conGrupo[otro] = {
+        ...previa,
+        hecho: nota.hecho ?? previa.hecho,
+        eliminado: nota.eliminado ?? previa.eliminado,
+        actualizadoEn: ahora
+      };
+    }
+    await datos.anotaciones.escribir(conGrupo);
     let aviso: string | undefined;
     if (cuerpo.asignarA !== undefined) {
       const quien = (cuerpo.asignarA ?? '').trim();
@@ -1519,7 +1551,16 @@ export function construirRutas(
 
   const fuentes: Fuentes = {
     pendientes: async () => {
-      const correo = await porBuzon<TaskItem>('pendientes', 'pendientes');
+      const correo = Object.values(
+        homologarPendientes(
+          Object.fromEntries(
+            (await porBuzon<TaskItem>('pendientes', 'pendientes')).reduce(
+              (m, t) => m.set(t.accountId, [...(m.get(t.accountId) ?? []), t]),
+              new Map<string, TaskItem[]>()
+            )
+          )
+        )
+      ).flat();
       const odooTareas = await siHay(cfg().odoo, async () =>
         actividadesComoPendientes(
           (await odoo()).actividades,
