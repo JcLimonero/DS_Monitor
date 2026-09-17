@@ -361,7 +361,7 @@ INTEGRACIONES.push({
 
 INTEGRACIONES.push({
   id: 'openrouter',
-  etiqueta: 'IA del correo (OpenRouter)',
+  etiqueta: 'Inteligencia artificial (OpenRouter)',
   kind: 'openrouter',
   campos: [
     {
@@ -370,14 +370,14 @@ INTEGRACIONES.push({
       tipo: 'secreto',
       obligatoria: true,
       ayuda:
-        'sk-or-…, de openrouter.ai → Keys. Con ella el puente lee los correos que las reglas no reconocen y decide cuáles son pendientes, de qué empresa y con qué prioridad.'
+        'sk-or-…, de openrouter.ai → Keys. Una sola llave para todo lo que el portal resuelva con un modelo; el primer uso es clasificar el correo.'
     },
     {
       variable: 'OPENROUTER_MODEL',
       etiqueta: 'Modelo',
       tipo: 'texto',
       ayuda:
-        'Por omisión anthropic/claude-haiku-4.5 (rápido y barato: centavos por lectura). anthropic/claude-sonnet-5 afina mejor los casos ambiguos.'
+        'Cualquier id de openrouter.ai/models. Por omisión anthropic/claude-haiku-4.5 (centavos por lectura); los que terminan en :free no cuestan y sirven para probar.'
     },
     {
       variable: 'OPENROUTER_DIAS',

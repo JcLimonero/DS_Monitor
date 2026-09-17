@@ -606,10 +606,6 @@ export class ConfiguracionBase {
       : undefined
   );
 
-  /** La IA que clasifica el correo (OpenRouter); va con los buzones. */
-  readonly iaCorreo = computed(() =>
-    (this.integraciones() ?? []).find((i) => i.id === 'openrouter')
-  );
 
   /** Integraciones del puente que no corresponden a ninguna conexión (Acceso). */
   readonly integracionesSueltas = computed(() => {
@@ -618,9 +614,7 @@ export class ConfiguracionBase {
     );
     return (this.integraciones() ?? []).filter(
       (i) =>
-        !kinds.has(i.kind) &&
-        !(i.id === 'microsoft' && this.microsoftApp()) &&
-        i.id !== 'openrouter'
+        !kinds.has(i.kind) && !(i.id === 'microsoft' && this.microsoftApp())
     );
   });
 

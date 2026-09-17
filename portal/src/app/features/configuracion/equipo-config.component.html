@@ -90,8 +90,9 @@
   }
 </section>
 
+<!-- Lo general del portal: acceso e inteligencia artificial -->
 @for (estado of integracionesSueltas(); track estado.id) {
-  @if (estado.id === "acceso") {
+  @if (estado.id === "acceso" || estado.id === "openrouter") {
     <ng-container
       *ngTemplateOutlet="tarjetaIntegracion; context: { estado: estado }" />
   }
@@ -102,7 +103,7 @@
   descripcion="Otro sistema puede mandar la lista de personas con su token: POST /ingesta/equipo. Se mezclan con las de arriba, sin repetir."
   [tipos]="['equipo']" />
 
-<!-- Tarjeta de una integración sin conexión propia (Acceso) -->
+<!-- Tarjeta de una integración sin conexión propia (Acceso, IA) -->
 <ng-template #tarjetaIntegracion let-estado="estado">
   <section class="card card-pad mt-4">
     <h2 class="text-sm font-semibold text-ink">{{ estado.etiqueta }}</h2>
@@ -111,6 +112,14 @@
         Entrar al portal con un código de seis dígitos que llega por correo
         (EmailJS, asunto "Access Monitor"). Mientras no esté configurado, la
         aplicación queda abierta.
+      </p>
+    }
+    @if (estado.id === "openrouter") {
+      <p class="mt-0.5 text-xs text-ink-muted">
+        El modelo que usa todo el portal para lo que requiere criterio. Hoy:
+        leer el correo que las reglas no reconocen y decidir si es pendiente,
+        de qué empresa, con qué prioridad y para cuándo (cada correo se
+        analiza una sola vez). Sin API key no se manda nada y no hay costo.
       </p>
     }
     <div class="mt-3 rounded-lg bg-surface-muted p-3 text-xs">
