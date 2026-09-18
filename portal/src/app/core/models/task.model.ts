@@ -6,6 +6,15 @@ export type TaskPriority = 'baja' | 'media' | 'alta' | 'urgente';
 /** De dónde salió el pendiente. Decide el icono y a donde lleva el enlace. */
 export type TaskOrigin = 'odoo' | 'ops' | 'local' | 'correo';
 
+/** De quién viene un pendiente de correo. */
+export type SenderKind = 'empresa' | 'equipo' | 'por_identificar';
+
+export const SENDER_KIND_LABEL: Record<SenderKind, string> = {
+  empresa: 'De empresas',
+  equipo: 'Del equipo',
+  por_identificar: 'Por identificar'
+};
+
 /** Un comentario puesto desde el portal sobre un pendiente. */
 export interface TaskComment {
   text: string;
@@ -28,6 +37,8 @@ export interface TaskItem {
   personal?: boolean;
   /** Otras cuentas donde llegó el mismo pendiente (el mismo correo en dos buzones). */
   alsoIn?: string[];
+  /** Quién lo pide (correo): una empresa, alguien de las empresas propias, o por identificar. */
+  senderKind?: SenderKind;
   status: TaskStatus;
   priority: TaskPriority;
   /** Fecha compromiso en ISO. Sin fecha significa que nadie la ha puesto. */

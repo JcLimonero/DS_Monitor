@@ -7,6 +7,8 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
+  SENDER_KIND_LABEL,
+  SenderKind,
   TASK_PRIORITY_LABEL,
   TASK_STATUS_LABEL,
   TaskItem,
@@ -90,6 +92,18 @@ export class PendientesComponent {
   readonly origin = signal<TaskOrigin | 'todos'>('todos');
   readonly priority = signal<TaskPriority | 'todas'>('todas');
   readonly company = signal<string>('todas');
+  /** De quién viene (solo aplica a los de correo). */
+  readonly sender = signal<SenderKind | 'todos'>('todos');
+  readonly senderLabel = SENDER_KIND_LABEL;
+  readonly senders: SenderKind[] = ['empresa', 'equipo', 'por_identificar'];
+  readonly porIdentificar = computed(
+    () =>
+      this.store
+        .tasks()
+        .filter(
+          (t) => t.status !== 'hecho' && t.senderKind === 'por_identificar'
+        ).length
+  );
   readonly empresas = EMPRESAS;
   readonly includeDone = signal(false);
 
@@ -117,6 +131,7 @@ export class PendientesComponent {
     const origin = this.origin();
     const priority = this.priority();
     const company = this.company();
+    const sender = this.sender();
     const includeDone = this.includeDone();
 
     return this.store.tasks().filter((task) => {
@@ -148,6 +163,9 @@ export class PendientesComponent {
           ? !!task.company
           : company !== 'todas' && task.company !== company
       ) {
+        return false;
+      }
+      if (sender !== 'todos' && task.senderKind !== sender) {
         return false;
       }
       if (term) {
@@ -210,6 +228,7 @@ export class PendientesComponent {
     this.origin.set('todos');
     this.priority.set('todas');
     this.company.set('todas');
+    this.sender.set('todos');
   }
 
   clearFilters(): void {
@@ -218,6 +237,7 @@ export class PendientesComponent {
     this.origin.set('todos');
     this.priority.set('todas');
     this.company.set('todas');
+    this.sender.set('todos');
     this.includeDone.set(false);
   }
 }

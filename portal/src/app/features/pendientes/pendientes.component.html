@@ -1,4 +1,13 @@
 <pt-page-header title="Pendientes" [subtitle]="subtitle()">
+  @if (porIdentificar() > 0 && sender() !== 'por_identificar') {
+    <button
+      type="button"
+      class="btn border-amber-300 bg-amber-50 text-amber-900"
+      (click)="sender.set('por_identificar')">
+      <pt-icon name="alerta" class="h-4 w-4" />
+      {{ porIdentificar() }} por identificar
+    </button>
+  }
   <button type="button" class="btn" (click)="clearFilters()">
     Limpiar filtros
   </button>
@@ -137,6 +146,19 @@
           <option [value]="empresa">{{ empresa }}</option>
         }
         <option value="ninguna">Sin empresa</option>
+      </select>
+    </label>
+    <label>
+      <span class="mb-1 block text-xs font-medium text-ink-muted">Quién lo pide</span>
+      <select
+        class="field"
+        [ngModel]="sender()"
+        (ngModelChange)="sender.set($event)"
+        name="filtro-remitente">
+        <option value="todos">Todos</option>
+        @for (k of senders; track k) {
+          <option [value]="k">{{ senderLabel[k] }}</option>
+        }
       </select>
     </label>
     <label class="flex items-center gap-2 sm:pt-6">

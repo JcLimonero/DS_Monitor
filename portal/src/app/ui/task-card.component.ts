@@ -12,6 +12,7 @@ import { AvisosService } from '../core/avisos/avisos.service';
 import { ElementRef, effect } from '@angular/core';
 import { Borrador, EMPRESAS } from '../core/ia/ia.models';
 import {
+  SENDER_KIND_LABEL,
   TASK_PRIORITY_LABEL,
   TASK_STATUS_LABEL,
   TaskItem,
@@ -131,17 +132,48 @@ const COMPANY_CLASS: Record<string, string> = {
               <pt-account-chip [accountId]="cuenta" />
             }
             <span [class]="statusClass()">{{ statusLabel() }}</span>
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 rounded px-1 transition hover:bg-surface-muted hover:text-ink"
-              [class.text-ink-subtle]="!task().assignee"
-              [attr.aria-label]="
-                task().assignee ? 'Cambiar responsable' : 'Asignar a alguien'
-              "
-              (click)="abrirAsignar()">
-              <pt-icon name="equipo" class="h-3.5 w-3.5" />
-              {{ task().assignee?.name ?? 'Sin asignar · asignar' }}
-            </button>
+            @if (ia.disponible && ia.equipo().length > 0) {
+              <label class="inline-flex items-center gap-1">
+                <pt-icon name="equipo" class="h-3.5 w-3.5" />
+                <select
+                  class="h-7 max-w-40 rounded border border-line bg-surface px-1 text-xs text-ink"
+                  [class.text-ink-subtle]="!task().assignee"
+                  [disabled]="saving()"
+                  [ngModel]="
+                    task().assignee?.email ?? task().assignee?.id ?? ''
+                  "
+                  (ngModelChange)="reasignar($event)"
+                  name="resp-{{ task().id }}"
+                  aria-label="Responsable">
+                  <option value="">Sin asignar</option>
+                  @for (p of ia.equipo(); track p.id) {
+                    <option [value]="p.email ?? p.id">{{ p.name }}</option>
+                  }
+                </select>
+              </label>
+            } @else {
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 rounded px-1 transition hover:bg-surface-muted hover:text-ink"
+                [class.text-ink-subtle]="!task().assignee"
+                (click)="abrirAsignar()">
+                <pt-icon name="equipo" class="h-3.5 w-3.5" />
+                {{ task().assignee?.name ?? 'Sin asignar · asignar' }}
+              </button>
+            }
+            @if (task().senderKind; as kind) {
+              <span
+                class="chip"
+                [class]="
+                  kind === 'por_identificar'
+                    ? 'bg-amber-100 text-amber-800'
+                    : kind === 'equipo'
+                      ? 'bg-sky-100 text-sky-800'
+                      : 'bg-surface-muted text-ink-muted'
+                ">
+                {{ senderLabel[kind] }}
+              </span>
+            }
             @if (task().project; as project) {
               <span class="text-ink-subtle">{{ project }}</span>
             }
@@ -314,6 +346,23 @@ const COMPANY_CLASS: Record<string, string> = {
                       [ngModel]="e.project"
                       (ngModelChange)="patchEdit({ project: $event })" />
                   </label>
+                  @if (task().origin === 'correo') {
+                    <label>
+                      <span
+                        class="mb-1 block text-xs font-medium text-ink-muted"
+                        >Quién lo pide</span
+                      >
+                      <select
+                        class="field"
+                        name="e-rem-{{ task().id }}"
+                        [ngModel]="e.senderKind"
+                        (ngModelChange)="patchEdit({ senderKind: $event })">
+                        <option value="empresa">De empresas</option>
+                        <option value="equipo">Del equipo</option>
+                        <option value="por_identificar">Por identificar</option>
+                      </select>
+                    </label>
+                  }
                   <div class="flex gap-2 sm:col-span-2">
                     <button
                       type="submit"
@@ -373,6 +422,18 @@ const COMPANY_CLASS: Record<string, string> = {
         <div class="flex shrink-0 items-center gap-1">
           <button
             type="button"
+            class="btn h-8 px-2 text-xs"
+            [class.btn-primary]="!done()"
+            [disabled]="saving()"
+            [title]="done() ? 'Volver a abrir' : 'Dar por concluido'"
+            (click)="toggle()">
+            <pt-icon name="ok" class="h-4 w-4" />
+            <span class="hidden sm:inline">{{
+              done() ? 'Reabrir' : 'Hecho'
+            }}</span>
+          </button>
+          <button
+            type="button"
             class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
             [attr.aria-label]="
               open() ? 'Cerrar detalle' : 'Comentar, asignar o marcar'
@@ -425,6 +486,7 @@ export class TaskCardComponent {
   readonly message = signal<string | undefined>(undefined);
   readonly borrador = signal<Borrador | undefined>(undefined);
   readonly empresas = EMPRESAS;
+  readonly senderLabel = SENDER_KIND_LABEL;
   /** Copia editable del pendiente mientras el formulario está abierto. */
   readonly editing = signal<
     | {
@@ -433,6 +495,7 @@ export class TaskCardComponent {
         dueLocal: string;
         company: string;
         project: string;
+        senderKind: string;
       }
     | undefined
   >(undefined);
@@ -522,6 +585,11 @@ export class TaskCardComponent {
     this.guardar({ comentario: texto }, () => this.draft.set(''));
   }
 
+  /** Reasignar desde la lista: cambia y avisa sin abrir la tarjeta. */
+  reasignar(quien: string): void {
+    this.guardar({ asignarA: quien, tarea: this.task() });
+  }
+
   assign(): void {
     this.guardar({ asignarA: this.assignTo(), tarea: this.task() });
   }
@@ -548,7 +616,8 @@ export class TaskCardComponent {
       priority: t.priority,
       dueLocal: t.dueDate ? aLocal(t.dueDate) : '',
       company: t.company ?? '',
-      project: t.project ?? ''
+      project: t.project ?? '',
+      senderKind: t.senderKind ?? 'por_identificar'
     });
   }
 
@@ -570,7 +639,10 @@ export class TaskCardComponent {
           priority: e.priority as TaskPriority,
           dueDate: e.dueLocal ? new Date(e.dueLocal).toISOString() : undefined,
           company: e.company || undefined,
-          project: e.project || undefined
+          project: e.project || undefined,
+          ...(this.task().origin === 'correo'
+            ? { senderKind: e.senderKind as TaskItem['senderKind'] }
+            : {})
         }
       },
       () => this.editing.set(undefined)

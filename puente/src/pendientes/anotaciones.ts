@@ -25,7 +25,13 @@ export interface Anotacion {
 export type CambiosPendiente = Partial<
   Pick<
     TaskItem,
-    'title' | 'description' | 'priority' | 'dueDate' | 'company' | 'project'
+    | 'title'
+    | 'description'
+    | 'priority'
+    | 'dueDate'
+    | 'company'
+    | 'project'
+    | 'senderKind'
   >
 >;
 
@@ -94,6 +100,12 @@ export function limpiarCambios(
       typeof cambios.company === 'string' && cambios.company.trim()
         ? cambios.company.trim()
         : undefined;
+  }
+  if (
+    cambios.senderKind &&
+    ['empresa', 'equipo', 'por_identificar'].includes(cambios.senderKind)
+  ) {
+    salida.senderKind = cambios.senderKind;
   }
   if ('project' in cambios) {
     salida.project =

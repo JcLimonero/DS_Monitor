@@ -28,6 +28,7 @@ import {
 } from '../pendientes/anotaciones.js';
 import { registrar, type Registro } from '../pendientes/registro.js';
 import { homologarPendientes, idsDelGrupo } from '../pendientes/homologar.js';
+import { conRemitente } from '../pendientes/remitente.js';
 import { enviarPorEmailJs } from '../acceso/acceso.js';
 import type {
   ClienteIngesta,
@@ -1073,7 +1074,12 @@ export function construirRutas(
       }
     }
     porCuenta[cuenta.id] = lista as TaskItem[];
-    return conNotas(homologarPendientes(porCuenta)[cuenta.id] ?? []);
+    return conNotas(
+      conRemitente(
+        homologarPendientes(porCuenta)[cuenta.id] ?? [],
+        await equipoCompleto()
+      )
+    );
   };
 
   router.get('/correo/:id/licenses', ({ segmentos }) =>
@@ -1743,7 +1749,7 @@ export function construirRutas(
       // Lo personal no es del negocio: no entra al resumen ni al correo del
       // equipo.
       return conNotas([
-        ...correo,
+        ...conRemitente(correo, await equipoCompleto()),
         ...datos.personales.leer().filter((t) => !t.personal),
         ...pendientesOps(),
         ...odooTareas

@@ -137,6 +137,12 @@ export interface NuevaJunta {
 export type CambiosPendiente = Partial<
   Pick<
     TaskItem,
-    'title' | 'description' | 'priority' | 'dueDate' | 'company' | 'project'
+    | 'title'
+    | 'description'
+    | 'priority'
+    | 'dueDate'
+    | 'company'
+    | 'project'
+    | 'senderKind'
   >
 >;

@@ -27,6 +27,9 @@ export type TaskStatus = 'pendiente' | 'en_progreso' | 'bloqueado' | 'hecho';
 export type TaskPriority = 'baja' | 'media' | 'alta' | 'urgente';
 export type TaskOrigin = 'odoo' | 'ops' | 'local' | 'correo';
 
+/** De quien viene un pendiente de correo. */
+export type SenderKind = 'empresa' | 'equipo' | 'por_identificar';
+
 /** Un comentario puesto desde el portal sobre un pendiente. */
 export interface TaskComment {
   text: string;
@@ -46,6 +49,11 @@ export interface TaskItem {
   personal?: boolean;
   /** Otras cuentas donde llego el mismo pendiente. */
   alsoIn?: string[];
+  /**
+   * Quien lo pide, para los que vienen del correo: una empresa (proveedor o
+   * cliente), alguien de las empresas propias, o por identificar.
+   */
+  senderKind?: SenderKind;
   status: TaskStatus;
   priority: TaskPriority;
   dueDate?: string;
