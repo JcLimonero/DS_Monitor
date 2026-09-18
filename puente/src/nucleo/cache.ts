@@ -59,6 +59,21 @@ export class Cache {
     return promesa;
   }
 
+  /**
+   * Lo guardado aunque ya haya vencido, con la bandera de si sigue vigente.
+   * Sirve para contestar con lo viejo mientras se renueva en segundo plano.
+   */
+  guardado<T>(llave: string): { valor: T; vigente: boolean } | undefined {
+    const entrada = this.entradas.get(llave);
+    if (!entrada) {
+      return undefined;
+    }
+    return {
+      valor: entrada.valor as T,
+      vigente: entrada.venceEn > this.ahora()
+    };
+  }
+
   /** Tira lo guardado. Sin llave, tira todo. */
   olvidar(llave?: string): void {
     if (llave === undefined) {

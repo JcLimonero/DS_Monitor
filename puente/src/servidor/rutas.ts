@@ -1100,6 +1100,37 @@ export function construirRutas(
       return { ...lectura, pendientes: actual };
     });
 
+  /**
+   * Lo leido del buzon sin hacer esperar al portal: si hay algo en cache
+   * (aunque haya vencido) se contesta con eso y se renueva atras; si el
+   * proceso acaba de arrancar y todavia no se ha leido nada, los pendientes
+   * salen del registro en disco mientras la primera lectura (que con miles
+   * de correos y la IA tarda minutos) corre sola. Juntas y licencias no
+   * tienen registro, asi que esas si esperan la primera vez.
+   */
+  const leidoSinEsperar = async (
+    cuenta: ConfiguracionCorreo,
+    parte: 'licencias' | 'pendientes' | 'juntas'
+  ): Promise<unknown[]> => {
+    type Lectura = Awaited<ReturnType<typeof leido>>;
+    const guardado = cache.guardado<Lectura>(`correo:${cuenta.id}`);
+    if (guardado) {
+      if (!guardado.vigente) {
+        leido(cuenta).catch(() => undefined);
+      }
+      return guardado.valor[parte];
+    }
+    const lectura = leido(cuenta);
+    if (parte === 'pendientes') {
+      const registrado = datos.registroCorreo.leer()[cuenta.id];
+      if (registrado && registrado.length > 0) {
+        lectura.catch(() => undefined);
+        return registrado;
+      }
+    }
+    return (await lectura)[parte];
+  };
+
   const conNotas = (tareas: TaskItem[]) =>
     anotar(tareas, datos.anotaciones.leer());
 
@@ -1125,7 +1156,7 @@ export function construirRutas(
     const metodo = metodoDe(cuenta, cfg());
     const lista =
       metodo === 'graph' || metodo === 'imap'
-        ? (await leido(cuenta))[parte]
+        ? await leidoSinEsperar(cuenta, parte)
         : recibidoDe(cuenta, tipo);
     if (parte !== 'pendientes') {
       return lista;

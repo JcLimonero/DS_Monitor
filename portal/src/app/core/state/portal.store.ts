@@ -1,6 +1,17 @@
 import { mergeMeetings, unmirroredMeetings } from '../util/meetings.util';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, catchError, forkJoin, interval, map, of, tap } from 'rxjs';
+import {
+  Observable,
+  catchError,
+  combineLatest,
+  interval,
+  map,
+  of,
+  skip,
+  startWith,
+  tap,
+  timeout
+} from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import {
   LocalSettingsStore,
@@ -44,6 +55,9 @@ const CALENDAR_DAYS_FORWARD = 21;
  * tumba a las demas: se queda sin datos y su error se muestra en Ajustes, que
  * es justo lo que uno quiere de un tablero que junta cinco integraciones.
  */
+/** Cuánto se espera a una fuente antes de darla por caída en este refresco. */
+const ESPERA_MAXIMA_MS = 90_000;
+
 @Injectable({ providedIn: 'root' })
 export class PortalStore {
   private readonly config = inject(PORTAL_CONFIG);
@@ -250,11 +264,18 @@ export class PortalStore {
     );
   }
 
+  /** Lo último que entregó cada fuente, por tipo de dato y fuente. */
+  private readonly previos = new Map<string, unknown[]>();
+
   /**
    * Pide lo mismo a todas las fuentes de un tipo y junta las respuestas.
    *
-   * Cada fuente lleva su propio `catchError` para que el falló de una no
-   * cancele el `forkJoin` completo y deje la pantalla vacía.
+   * Emite conforme va contestando cada fuente, no hasta que contesten
+   * todas: un buzón que tarda minutos (el puente recién arrancado leyendo
+   * miles de correos) no puede dejar el tablero vacío mientras tanto. Lo que
+   * todavía no contesta se rellena con lo último que entregó, y cada fuente
+   * lleva su propio `catchError` y un tope de espera para que ninguna se
+   * quede "sincronizando" para siempre.
    */
   private collect<S extends PortalSource, T>(
     sources: readonly S[],
@@ -263,17 +284,24 @@ export class PortalStore {
     if (sources.length === 0) {
       return of([]);
     }
+    const clave = (source: S) => `${source.kind}:${source.id}`;
     const calls = sources.map((source) => {
       this.markSync(source, 'sincronizando');
       return request(source).pipe(
-        tap(() => this.markSync(source, 'lista')),
+        timeout(ESPERA_MAXIMA_MS),
+        tap((items) => {
+          this.previos.set(clave(source), items);
+          this.markSync(source, 'lista');
+        }),
         catchError((error: unknown) => {
           this.markSync(source, 'error', describeError(error));
-          return of([] as T[]);
-        })
+          return of((this.previos.get(clave(source)) ?? []) as T[]);
+        }),
+        startWith((this.previos.get(clave(source)) ?? []) as T[])
       );
     });
-    return forkJoin(calls).pipe(
+    return combineLatest(calls).pipe(
+      skip(1),
       map((results) => results.flat()),
       tap(() => this.lastRefreshSignal.set(new Date().toISOString()))
     );
