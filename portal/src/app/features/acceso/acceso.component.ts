@@ -27,6 +27,9 @@ export class AccesoComponent {
   readonly codigo = signal('');
   readonly paso = signal<'correo' | 'codigo'>('correo');
   readonly ocupado = signal(false);
+  /** Cuenta regresiva antes de poder reenviar, para no disparar correos en cadena. */
+  readonly segundosParaReenviar = signal(0);
+  private cuenta: ReturnType<typeof setInterval> | undefined;
   readonly mensaje = signal<{ ok: boolean; texto: string } | undefined>(
     undefined
   );
@@ -42,7 +45,9 @@ export class AccesoComponent {
       next: (respuesta) => {
         this.mensaje.set({ ok: true, texto: respuesta.mensaje });
         this.paso.set('codigo');
+        this.codigo.set('');
         this.ocupado.set(false);
+        this.iniciarCuenta();
       },
       error: (error: unknown) => {
         this.mensaje.set({ ok: false, texto: describe(error) });
@@ -67,10 +72,29 @@ export class AccesoComponent {
     });
   }
 
+  /** Vuelve a mandar un código nuevo al mismo correo. */
+  reenviar(): void {
+    if (this.segundosParaReenviar() > 0) {
+      return;
+    }
+    this.pedirCodigo();
+  }
+
   otroCorreo(): void {
     this.paso.set('correo');
     this.codigo.set('');
     this.mensaje.set(undefined);
+  }
+
+  private iniciarCuenta(): void {
+    clearInterval(this.cuenta);
+    this.segundosParaReenviar.set(30);
+    this.cuenta = setInterval(() => {
+      this.segundosParaReenviar.update((s) => s - 1);
+      if (this.segundosParaReenviar() <= 0) {
+        clearInterval(this.cuenta);
+      }
+    }, 1000);
   }
 }
 

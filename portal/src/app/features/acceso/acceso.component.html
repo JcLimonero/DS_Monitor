@@ -64,9 +64,26 @@
           [disabled]="ocupado() || codigo().length < 6">
           Entrar
         </button>
-        <button type="button" class="btn w-full" (click)="otroCorreo()">
-          Usar otro correo
-        </button>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="btn flex-1"
+            [disabled]="ocupado() || segundosParaReenviar() > 0"
+            (click)="reenviar()">
+            {{
+              segundosParaReenviar() > 0
+                ? "Reenviar en " + segundosParaReenviar() + " s"
+                : "Reenviar código"
+            }}
+          </button>
+          <button type="button" class="btn flex-1" (click)="otroCorreo()">
+            Otro correo
+          </button>
+        </div>
+        <p class="text-xs text-ink-subtle">
+          ¿No llegó? Revisa correo no deseado; el reenvío genera un código
+          nuevo y el anterior deja de servir.
+        </p>
       </form>
     }
 
