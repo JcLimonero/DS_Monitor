@@ -183,6 +183,14 @@
       </div>
     </header>
 
+    @if (store.puenteCaido()) {
+      <p
+        class="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+        <pt-icon name="refrescar" class="h-4 w-4 animate-spin" />
+        El servidor se está reiniciando (pasa con cada publicación, dura un
+        minuto). Nada se pierde: se recarga solo en cuanto vuelva.
+      </p>
+    }
     <main class="flex-1 p-4 pb-24 sm:p-6 sm:pb-6">
       <router-outlet />
     </main>

@@ -1,6 +1,7 @@
 import { mergeMeetings, unmirroredMeetings } from '../util/meetings.util';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, catchError, forkJoin, map, of, tap } from 'rxjs';
+import { Observable, catchError, forkJoin, interval, map, of, tap } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
 import {
   LocalSettingsStore,
   applyLicenseSettings
@@ -117,6 +118,41 @@ export class PortalStore {
 
   accountOf(accountId: string): Account | undefined {
     return this.accountIndex().get(accountId);
+  }
+
+  private readonly http = inject(HttpClient);
+
+  /**
+   * El puente se reinicia en cada publicación (un minuto, más o menos) y en
+   * ese rato todo falla. Si hay fuentes con error, se le pregunta al puente
+   * cada quince segundos si ya volvió y, en cuanto responde, se recarga todo
+   * solo: nadie tiene que refrescar a mano ni pensar que se perdió algo.
+   */
+  readonly puenteCaido = signal(false);
+
+  constructor() {
+    if (this.config.gatewayUrl) {
+      interval(15_000).subscribe(() => this.vigilarPuente());
+    }
+  }
+
+  private vigilarPuente(): void {
+    if (this.failedSources().length === 0 || this.loading()) {
+      this.puenteCaido.set(false);
+      return;
+    }
+    this.http.get(`${this.config.gatewayUrl}/salud`).subscribe({
+      next: () => {
+        const caido = this.puenteCaido();
+        this.puenteCaido.set(false);
+        // Si estaba caído y ya contesta, o si hay errores con el puente
+        // sano (fue un reinicio a medias), se vuelve a pedir todo.
+        if (caido || this.failedSources().length > 0) {
+          this.refreshAll();
+        }
+      },
+      error: () => this.puenteCaido.set(true)
+    });
   }
 
   /** Vuelve a pedir todo. Es lo que corre al arrancar y en cada refresco. */
