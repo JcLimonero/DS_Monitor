@@ -7,7 +7,6 @@ import { AccountChipComponent } from '../../ui/account-chip.component';
 import { IconComponent } from '../../ui/icon.component';
 import { DayPipe, RelativePipe } from '../../ui/portal.pipes';
 import { ConfiguracionBase } from './configuracion-base';
-import { EmisoresConfigComponent } from './emisores-config.component';
 
 /** El equipo, quién puede entrar, y los emisores que alimentan la API. */
 @Component({
@@ -19,7 +18,6 @@ import { EmisoresConfigComponent } from './emisores-config.component';
     AccountChipComponent,
     DayPipe,
     DecimalPipe,
-    EmisoresConfigComponent,
     FormsModule,
     IconComponent,
     NgTemplateOutlet,

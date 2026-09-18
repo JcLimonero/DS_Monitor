@@ -31,6 +31,11 @@ import { ConfiguracionBase } from './configuracion-base';
   templateUrl: './integracion-config.component.html'
 })
 export class IntegracionConfigComponent extends ConfiguracionBase {
+  constructor() {
+    super();
+    this.cargarModelosIa();
+  }
+
   /** Qué `kind` de conexiones muestra este panel. */
   readonly kinds = input.required<string[]>();
 

@@ -242,6 +242,26 @@
         aplicación queda abierta.
       </p>
     }
+    @if (estado.id === "openrouter") {
+      <p class="mt-0.5 text-xs text-ink-muted">
+        El modelo del portal. Sola, la IA solo clasifica el correo que llega,
+        saca acuerdos de las juntas de Fireflies y entiende lo que dictas; lo
+        demás (resumen, repos, diagnósticos) solo desde el botón ✦ Ayuda.
+      </p>
+    }
+    @if (estado.id === "fireflies") {
+      <p class="mt-0.5 text-xs text-ink-muted">
+        Notas de juntas: cada junta transcrita se vuelve pendientes por
+        acuerdo, agrupados por junta y asignados a quien esté en el equipo.
+      </p>
+    }
+    @if (estado.id === "telegram") {
+      <p class="mt-0.5 text-xs text-ink-muted">
+        Dictar por chat (texto o nota de voz). Crea el bot con &#64;BotFather,
+        pega el token y prueba; luego escríbele al bot para obtener tu id de
+        chat y autorízalo aquí.
+      </p>
+    }
     <div class="mt-3 rounded-lg bg-surface-muted p-3 text-xs">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <p class="text-ink">
@@ -310,6 +330,19 @@
                   "
                   [ngModel]="variablesDraft()[campo.variable]"
                   (ngModelChange)="updateVariable(campo.variable, $event)" />
+              } @else if (campo.variable === "OPENROUTER_MODEL" && modelosIa().length > 0) {
+                <select
+                  class="field"
+                  [name]="campo.variable"
+                  [ngModel]="variablesDraft()[campo.variable] || ''"
+                  (ngModelChange)="updateVariable(campo.variable, $event)">
+                  <option value="">Por omisión (openai/gpt-oss-120b)</option>
+                  @for (m of modelosIa(); track m.id) {
+                    <option [value]="m.id">
+                      {{ m.id }} · ${{ m.entrada.toFixed(2) }} / ${{ m.salida.toFixed(2) }} por millón · {{ m.nota }}
+                    </option>
+                  }
+                </select>
               } @else {
                 <input
                   class="field"

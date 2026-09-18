@@ -1,0 +1,59 @@
+<pt-page-header
+  title="Integraciones"
+  subtitle="Todo lo que se conecta al monitor, en un solo lugar" />
+
+<div class="grid gap-4 lg:grid-cols-[14rem_1fr]">
+  <nav class="flex gap-1 overflow-x-auto lg:flex-col" aria-label="Integraciones">
+    @for (p of pestanas; track p.id) {
+      <button
+        type="button"
+        class="shrink-0 rounded-lg px-3 py-2 text-left text-sm transition lg:shrink"
+        [class.bg-brand]="activa() === p.id"
+        [class.text-white]="activa() === p.id"
+        [class.hover:bg-surface-muted]="activa() !== p.id"
+        [class.text-ink]="activa() !== p.id"
+        [attr.aria-current]="activa() === p.id ? 'page' : null"
+        (click)="elegir(p.id)">
+        <span class="block font-medium">{{ p.titulo }}</span>
+        <span
+          class="hidden text-xs lg:block"
+          [class.text-white/80]="activa() === p.id"
+          [class.text-ink-muted]="activa() !== p.id">
+          {{ p.detalle }}
+        </span>
+      </button>
+    }
+  </nav>
+
+  <div class="min-w-0 -mt-4">
+    @switch (activa()) {
+      @case ('correo') {
+        <pt-correo-config />
+      }
+      @case ('ia') {
+        <pt-integracion-config [kinds]="['openrouter', 'fireflies', 'telegram']" />
+      }
+      @case ('acceso') {
+        <pt-integracion-config [kinds]="['acceso']" />
+      }
+      @case ('servicios') {
+        <pt-integracion-config [kinds]="['vercel', 'github', 'odoo', 'monitor']" />
+      }
+      @case ('licencias') {
+        <pt-licencias-config />
+        <pt-integracion-config [kinds]="['anthropic', 'cursor', 'figma']" />
+      }
+      @case ('ingesta') {
+        <pt-emisores-config
+          titulo="API para alimentar los pendientes"
+          descripcion="Otro sistema (el tablero de Ops, un CI, un script) manda sus pendientes con su token a POST /ingesta/pendientes y aparecen con origen Ops."
+          [tipos]="['pendientes']"
+          cuenta="ops" />
+        <pt-emisores-config
+          titulo="API para alimentar el equipo"
+          descripcion="Otro sistema puede mandar la lista de personas con su token: POST /ingesta/equipo. Se mezclan con las capturadas en Equipo, sin repetir."
+          [tipos]="['equipo']" />
+      }
+    }
+  </div>
+</div>

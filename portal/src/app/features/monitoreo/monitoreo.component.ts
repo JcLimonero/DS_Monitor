@@ -24,7 +24,6 @@ import { RelativePipe } from '../../ui/portal.pipes';
 import { SparklineComponent } from '../../ui/sparkline.component';
 import { StatusPillComponent } from '../../ui/status-pill.component';
 
-import { IntegracionConfigComponent } from '../configuracion/integracion-config.component';
 @Component({
   selector: 'pt-monitoreo',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -36,8 +35,7 @@ import { IntegracionConfigComponent } from '../configuracion/integracion-config.
     PageHeaderComponent,
     RelativePipe,
     SparklineComponent,
-    StatusPillComponent,
-    IntegracionConfigComponent
+    StatusPillComponent
   ],
   templateUrl: './monitoreo.component.html'
 })

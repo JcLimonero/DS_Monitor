@@ -36,7 +36,7 @@ const NAV: NavItem[] = [
   { path: '/repos', label: 'Repositorios', icon: 'rama' },
   { path: '/licencias', label: 'Licencias', icon: 'licencia' },
   { path: '/equipo', label: 'Equipo', icon: 'equipo' },
-  { path: '/correo', label: 'Correo', icon: 'bandeja' },
+  { path: '/integraciones', label: 'Integraciones', icon: 'ajustes' },
   { path: '/dominios', label: 'Dominios', icon: 'lugar' }
 ];
 

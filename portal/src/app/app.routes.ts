@@ -128,6 +128,14 @@ export const routes: Routes = [
           )
       },
       {
+        path: 'integraciones',
+        title: 'Integraciones | DS Monitor',
+        loadComponent: () =>
+          import('./features/integraciones/integraciones.component').then(
+            (m) => m.IntegracionesComponent
+          )
+      },
+      {
         path: 'correo',
         title: 'Correo | DS Monitor',
         loadComponent: () =>

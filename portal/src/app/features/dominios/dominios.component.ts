@@ -16,7 +16,9 @@ import { IaAlertasComponent } from '../ia/ia-alertas.component';
       title="Dominios"
       subtitle="Registro, vencimiento y costo de renovación de cada dominio" />
     <div class="mb-4">
-      <pt-ia-alertas titulo="Dominios que requieren atención" [tipos]="['dominio']" />
+      <pt-ia-alertas
+        titulo="Dominios que requieren atención"
+        [tipos]="['dominio']" />
     </div>
     <pt-dominios-config />
   `

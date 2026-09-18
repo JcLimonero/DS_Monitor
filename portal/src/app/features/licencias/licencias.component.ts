@@ -33,8 +33,6 @@ const CANTIDAD = new Intl.NumberFormat('es-MX', {
 });
 const DINERO = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 });
 
-import { IntegracionConfigComponent } from '../configuracion/integracion-config.component';
-import { LicenciasConfigComponent } from '../configuracion/licencias-config.component';
 @Component({
   selector: 'pt-licencias',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -45,9 +43,7 @@ import { LicenciasConfigComponent } from '../configuracion/licencias-config.comp
     EmptyStateComponent,
     IconComponent,
     PageHeaderComponent,
-    RelativePipe,
-    IntegracionConfigComponent,
-    LicenciasConfigComponent
+    RelativePipe
   ],
   templateUrl: './licencias.component.html'
 })

@@ -199,15 +199,3 @@
   </div>
 }
 
-<!-- Configuración de este módulo -->
-<details class="mt-6" open>
-  <summary
-    class="cursor-pointer text-xs font-bold uppercase tracking-wide text-ink-subtle">
-    Configuración
-  </summary>
-  <pt-emisores-config
-    titulo="API para alimentar los pendientes"
-    descripcion="Otro sistema (el tablero de Ops, un CI, un script) manda sus pendientes con su token a POST /ingesta/pendientes y aparecen aquí con origen Ops."
-    [tipos]="['pendientes']"
-    cuenta="ops" />
-</details>
