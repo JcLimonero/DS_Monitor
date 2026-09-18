@@ -1,18 +1,14 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
   computed,
   inject,
   signal
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { interval } from 'rxjs';
-import {
-  Ejecucion,
-  PuenteAdminService
-} from '../../core/sources/gateway/puente-admin.service';
+import { EjecucionesService } from '../../core/ejecuciones/ejecuciones.service';
+import { Ejecucion } from '../../core/sources/gateway/puente-admin.service';
 import { plural } from '../../core/util/text.util';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { IconComponent } from '../../ui/icon.component';
@@ -42,9 +38,6 @@ const PUNTO_ESTADO: Record<Estado, string> = {
   atrasada: 'bg-ink-subtle'
 };
 
-/** Cuánto tarda en volver a pedir la lista. Un minuto alcanza: son corridas. */
-const CADA_MS = 60_000;
-
 /**
  * La última corrida de cada integración: qué corrió, cuándo, cómo le fue y
  * cuánto tardó. Lo manda cada aplicación con su token (Integraciones → API
@@ -64,11 +57,11 @@ const CADA_MS = 60_000;
   templateUrl: './ejecuciones.component.html'
 })
 export class EjecucionesComponent {
-  private readonly admin = inject(PuenteAdminService);
+  private readonly servicio = inject(EjecucionesService);
 
-  readonly disponible = this.admin.disponible;
-  readonly ejecuciones = signal<Ejecucion[] | undefined>(undefined);
-  readonly error = signal<string | undefined>(undefined);
+  readonly disponible = this.servicio.disponible;
+  readonly ejecuciones = this.servicio.lista;
+  readonly error = this.servicio.error;
   readonly filtro = signal<Estado | 'todas'>('todas');
   readonly abierta = signal<string | undefined>(undefined);
   readonly etiqueta = ESTADO_EJECUCION_LABEL;
@@ -115,23 +108,8 @@ export class EjecucionesComponent {
     return partes.join(' · ');
   });
 
-  constructor() {
-    if (this.disponible) {
-      this.cargar();
-      const destroy = inject(DestroyRef);
-      const sub = interval(CADA_MS).subscribe(() => this.cargar());
-      destroy.onDestroy(() => sub.unsubscribe());
-    }
-  }
-
   cargar(): void {
-    this.admin.ejecuciones().subscribe({
-      next: (lista) => {
-        this.ejecuciones.set(lista);
-        this.error.set(undefined);
-      },
-      error: (e: unknown) => this.error.set(describir(e))
-    });
+    this.servicio.cargar();
   }
 
   alternar(clave: string): void {
@@ -146,10 +124,7 @@ export class EjecucionesComponent {
     ) {
       return;
     }
-    this.admin.borrarEjecucion(e.clave).subscribe({
-      next: () => this.cargar(),
-      error: (err: unknown) => this.error.set(describir(err))
-    });
+    this.servicio.borrar(e.clave);
   }
 
   claseEstado(e: Ejecucion): string {
@@ -188,9 +163,4 @@ export class EjecucionesComponent {
     }
     return `cada ${m} min`;
   }
-}
-
-function describir(error: unknown): string {
-  const http = error as { error?: { error?: string }; message?: string };
-  return http?.error?.error ?? http?.message ?? String(error);
 }

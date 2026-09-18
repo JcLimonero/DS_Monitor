@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  avisosPendientes,
   estadoDe,
   listarEjecuciones,
   registrarEjecucion
@@ -114,6 +115,118 @@ describe('ejecuciones', () => {
     assert.deepEqual(
       listarEjecuciones(e, AHORA).map((x) => x.integracion),
       ['mal', 'meh', 'bien']
+    );
+  });
+
+  it('sin frecuencia declarada, una hora callada ya es atrasada', () => {
+    const { ejecucion } = registrarEjecucion(
+      {},
+      'nexdms',
+      { integracion: 'cron', estado: 'ok' },
+      AHORA
+    );
+    assert.equal(
+      estadoDe(ejecucion, new Date(AHORA.getTime() + 59 * 60_000)),
+      'ok'
+    );
+    assert.equal(
+      estadoDe(ejecucion, new Date(AHORA.getTime() + 61 * 60_000)),
+      'atrasada'
+    );
+  });
+});
+
+describe('avisosPendientes (Telegram)', () => {
+  const minutos = (n: number) => new Date(AHORA.getTime() + n * 60_000);
+
+  it('avisa una vez cuando pasa más de una hora sin señal y otra cuando vuelve', () => {
+    let e = registrarEjecucion(
+      {},
+      'totalone',
+      {
+        integracion: 'odoo-sync',
+        nombre: 'Sincronía con Odoo',
+        estado: 'ok',
+        cadaMinutos: 15
+      },
+      AHORA
+    ).ejecuciones;
+    // A los 30 min la pantalla ya la marca atrasada, pero Telegram espera la hora.
+    assert.equal(estadoDe(Object.values(e)[0]!, minutos(30)), 'atrasada');
+    assert.deepEqual(avisosPendientes(e, {}, minutos(30)).lineas, []);
+
+    const uno = avisosPendientes(e, {}, minutos(61));
+    assert.equal(uno.lineas.length, 1);
+    assert.match(
+      uno.lineas[0]!,
+      /Sincronía con Odoo.*sin señal desde hace 1 h/
+    );
+    // En la siguiente vuelta, nada nuevo.
+    assert.deepEqual(avisosPendientes(e, uno.avisadas, minutos(71)).lineas, []);
+
+    e = registrarEjecucion(
+      e,
+      'totalone',
+      { integracion: 'odoo-sync', estado: 'ok' },
+      minutos(80)
+    ).ejecuciones;
+    const vuelta = avisosPendientes(e, uno.avisadas, minutos(81));
+    assert.equal(vuelta.lineas.length, 1);
+    assert.match(vuelta.lineas[0]!, /volvió a reportar/);
+    assert.deepEqual(vuelta.avisadas, {});
+  });
+
+  it('respeta una frecuencia declarada mayor a una hora', () => {
+    const e = registrarEjecucion(
+      {},
+      'totalone',
+      { integracion: 'reportes', estado: 'ok', cadaMinutos: 1440 },
+      AHORA
+    ).ejecuciones;
+    assert.deepEqual(avisosPendientes(e, {}, minutos(5 * 60)).lineas, []);
+    assert.equal(avisosPendientes(e, {}, minutos(37 * 60)).lineas.length, 1);
+  });
+
+  it('avisa el primer error de la racha, no cada fallo, y cuando vuelve a estar bien', () => {
+    let e = registrarEjecucion(
+      {},
+      'nexdms',
+      { integracion: 'barrido', ok: false, mensaje: 'timeout' },
+      AHORA
+    ).ejecuciones;
+    const uno = avisosPendientes(e, {}, minutos(1));
+    assert.equal(uno.lineas.length, 1);
+    assert.match(uno.lineas[0]!, /❌.*barrido.*timeout/);
+
+    e = registrarEjecucion(
+      e,
+      'nexdms',
+      { integracion: 'barrido', ok: false },
+      minutos(15)
+    ).ejecuciones;
+    assert.deepEqual(avisosPendientes(e, uno.avisadas, minutos(16)).lineas, []);
+
+    e = registrarEjecucion(
+      e,
+      'nexdms',
+      { integracion: 'barrido', ok: true },
+      minutos(30)
+    ).ejecuciones;
+    const bien = avisosPendientes(e, uno.avisadas, minutos(31));
+    assert.match(bien.lineas[0]!, /volvió a correr bien/);
+    assert.deepEqual(bien.avisadas, {});
+  });
+
+  it('escapa el HTML de lo que manda la aplicación', () => {
+    const e = registrarEjecucion(
+      {},
+      'x',
+      { integracion: 'a', ok: false, mensaje: '<script>alert(1)</script>' },
+      AHORA
+    ).ejecuciones;
+    assert.match(
+      avisosPendientes(e, {}, minutos(1)).lineas[0]!,
+      /&lt;script&gt;/
     );
   });
 });

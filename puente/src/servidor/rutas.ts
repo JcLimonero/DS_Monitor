@@ -88,7 +88,12 @@ import {
   servirRecibido
 } from '../ingesta/rutas-ingesta.js';
 import type { TipoIngesta } from '../ingesta/modelos.js';
-import { listarEjecuciones, type Ejecuciones } from '../ingesta/ejecuciones.js';
+import {
+  avisosPendientes,
+  listarEjecuciones,
+  type AvisosEjecuciones,
+  type Ejecuciones
+} from '../ingesta/ejecuciones.js';
 import { Cache } from '../nucleo/cache.js';
 import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
 import { licenciasAnthropic } from '../proveedores/anthropic.js';
@@ -266,6 +271,8 @@ export interface Datos {
   pushSuscripciones: AlmacenJson<Suscripcion[]>;
   pushCola: AlmacenJson<ColaPush>;
   pushAvisados: AlmacenJson<Record<string, string>>;
+  /** Por integracion, que problema ya se aviso por Telegram. */
+  ejecucionesAvisadas: AlmacenJson<AvisosEjecuciones>;
   /** Donde se permite usar el modelo (Integraciones → IA). */
   iaUsos: AlmacenJson<UsosIa>;
   /** Bitacora de llamadas al modelo. */
@@ -360,6 +367,10 @@ export function abrirDatos(directorio: string): Datos {
     ),
     pushCola: new AlmacenJson(join(directorio, 'push-cola.json'), {}),
     pushAvisados: new AlmacenJson(join(directorio, 'push-avisados.json'), {}),
+    ejecucionesAvisadas: new AlmacenJson<AvisosEjecuciones>(
+      join(directorio, 'ejecuciones-avisadas.json'),
+      {}
+    ),
     iaBitacora: new AlmacenJson<EntradaBitacora[]>(
       join(directorio, 'ia-bitacora.json'),
       []
@@ -2810,6 +2821,48 @@ export function construirRutas(
   );
 
   // --- Lo que corrio cada integracion (se lee con sesion) ---
+
+  // Vigilancia: si un servicio lleva mas de una hora sin reportar (o mas de
+  // su frecuencia declarada) o su ultima corrida fallo, se avisa por
+  // Telegram a los chats autorizados, una vez por problema, y otra cuando
+  // vuelve.
+  programables.push({
+    nombre: 'vigilancia de ejecuciones',
+    cadaMinutos: 10,
+    correr: async () => {
+      const { lineas, avisadas } = avisosPendientes(
+        datos.ejecuciones.leer(),
+        datos.ejecucionesAvisadas.leer()
+      );
+      if (lineas.length === 0) {
+        return;
+      }
+      const telegram = cfg().telegram;
+      if (!telegram || telegram.chats.length === 0) {
+        console.warn(
+          `[puente] ejecuciones: ${lineas.length} aviso(s) sin Telegram configurado`
+        );
+        return;
+      }
+      const texto = `<b>DS Monitor · servicios</b>\n${lineas.join('\n')}\n${cfg().urlPortal}/ejecuciones`;
+      let mandado = false;
+      for (const chat of telegram.chats) {
+        try {
+          await responder(telegram, chat, texto);
+          mandado = true;
+        } catch (error) {
+          console.warn(
+            `[puente] telegram (ejecuciones): ${(error as Error).message}`
+          );
+        }
+      }
+      // Solo se da por avisado lo que de verdad salio; si Telegram fallo se
+      // vuelve a intentar en la siguiente vuelta.
+      if (mandado) {
+        await datos.ejecucionesAvisadas.escribir(avisadas);
+      }
+    }
+  });
 
   router.get('/ejecuciones', async () =>
     listarEjecuciones(datos.ejecuciones.leer())

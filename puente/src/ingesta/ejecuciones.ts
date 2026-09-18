@@ -61,6 +61,12 @@ const RESULTADOS: ResultadoEjecucion[] = ['ok', 'aviso', 'error'];
 /** Margen sobre la frecuencia esperada antes de marcar "atrasada". */
 const HOLGURA = 1.5;
 const HOLGURA_MINIMA_MS = 5 * 60_000;
+/**
+ * Sin frecuencia declarada, una integracion que lleva mas de una hora sin
+ * reportar se da por atrasada; y por Telegram nunca se avisa antes de una
+ * hora, aunque la frecuencia declarada sea mas corta.
+ */
+export const SILENCIO_MS = 60 * 60_000;
 
 /** Registra (o reemplaza) la ultima corrida de una integracion. */
 export function registrarEjecucion(
@@ -130,16 +136,120 @@ export function registrarEjecucion(
   return { ejecuciones: { ...previas, [clave]: ejecucion }, ejecucion };
 }
 
+/** Cuanto puede callar una integracion antes de darse por atrasada. */
+export function umbralSilencioMs(e: Ejecucion): number {
+  if (!e.cadaMinutos) {
+    return SILENCIO_MS;
+  }
+  const esperado = e.cadaMinutos * 60_000;
+  return Math.max(esperado * HOLGURA, esperado + HOLGURA_MINIMA_MS);
+}
+
+/** Cuanto lleva sin reportar. */
+export function silencioMs(e: Ejecucion, ahora = new Date()): number {
+  return ahora.getTime() - Date.parse(e.terminoEn);
+}
+
 /** El estado que se muestra: lo que mando, salvo que ya deberia haber vuelto a correr. */
 export function estadoDe(e: Ejecucion, ahora = new Date()): EstadoEjecucion {
-  if (e.cadaMinutos) {
-    const esperado = e.cadaMinutos * 60_000;
-    const tope = Math.max(esperado * HOLGURA, esperado + HOLGURA_MINIMA_MS);
-    if (ahora.getTime() - Date.parse(e.terminoEn) > tope) {
-      return 'atrasada';
-    }
+  if (silencioMs(e, ahora) > umbralSilencioMs(e)) {
+    return 'atrasada';
   }
   return e.resultado;
+}
+
+/** Por integracion, sobre que corrida ya se aviso (para no repetir). */
+export interface AvisoEjecucion {
+  /** `terminoEn` de la corrida tras la cual se aviso que callo. */
+  silencio?: string;
+  /** `terminoEn` de la corrida con error que se aviso. */
+  error?: string;
+}
+
+export type AvisosEjecuciones = Record<string, AvisoEjecucion>;
+
+/**
+ * Que hay que avisar por Telegram en este momento, y como queda el registro
+ * de avisados. Cada problema se avisa una vez: el silencio, cuando pasa mas
+ * de una hora (o la frecuencia declarada, si es mayor) sin corrida nueva; el
+ * error, al primer fallo de una racha. Y cuando vuelve a reportar bien, una
+ * vez que volvio.
+ */
+export function avisosPendientes(
+  ejecuciones: Ejecuciones,
+  avisadas: AvisosEjecuciones,
+  ahora = new Date()
+): { lineas: string[]; avisadas: AvisosEjecuciones } {
+  const lineas: string[] = [];
+  const nuevas: AvisosEjecuciones = {};
+  for (const e of Object.values(ejecuciones)) {
+    const previo = avisadas[e.clave] ?? {};
+    const actual: AvisoEjecucion = { ...previo };
+    const silencio = silencioMs(e, ahora);
+    const callada = silencio > Math.max(umbralSilencioMs(e), SILENCIO_MS);
+    const quien = `<b>${escapar(e.nombre)}</b> (${escapar(e.emisor)})`;
+
+    if (callada) {
+      if (previo.silencio !== e.terminoEn) {
+        lineas.push(
+          `⏰ ${quien}: sin señal desde hace ${enPalabras(silencio)}${
+            e.cadaMinutos
+              ? `, esperaba cada ${enPalabras(e.cadaMinutos * 60_000)}`
+              : ''
+          }. Última corrida: ${etiqueta(e.resultado)}${e.mensaje ? ` — ${escapar(e.mensaje)}` : ''}.`
+        );
+        actual.silencio = e.terminoEn;
+      }
+    } else if (previo.silencio) {
+      lineas.push(`✅ ${quien}: volvió a reportar (${etiqueta(e.resultado)}).`);
+      delete actual.silencio;
+    }
+
+    if (e.resultado === 'error') {
+      if (!previo.error) {
+        lineas.push(
+          `❌ ${quien}: falló hace ${enPalabras(silencio)}${e.mensaje ? ` — ${escapar(e.mensaje)}` : ''}.`
+        );
+        actual.error = e.terminoEn;
+      }
+    } else if (previo.error) {
+      lineas.push(`✅ ${quien}: volvió a correr bien.`);
+      delete actual.error;
+    }
+
+    if (actual.silencio || actual.error) {
+      nuevas[e.clave] = actual;
+    }
+  }
+  return { lineas, avisadas: nuevas };
+}
+
+function etiqueta(r: ResultadoEjecucion): string {
+  return r === 'ok' ? 'bien' : r === 'aviso' ? 'con aviso' : 'con error';
+}
+
+function escapar(texto: string): string {
+  return texto
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/** "45 s", "20 min", "3 h", "2 días". */
+export function enPalabras(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 60) {
+    return `${s} s`;
+  }
+  const min = Math.round(s / 60);
+  if (min < 60) {
+    return `${min} min`;
+  }
+  const h = min / 60;
+  if (h < 48) {
+    return h < 10 && h % 1 >= 0.25 ? `${h.toFixed(1)} h` : `${Math.round(h)} h`;
+  }
+  return `${Math.round(h / 24)} días`;
 }
 
 /** Las ejecuciones con su estado calculado, las que estan mal primero. */

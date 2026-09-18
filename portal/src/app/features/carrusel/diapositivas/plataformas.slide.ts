@@ -52,7 +52,8 @@ const CLASE_ESTADO: Record<MonitorStatus, string> = {
           class="tv-card flex min-h-0 flex-col justify-between gap-2 px-5 py-4"
           [class]="claseTarjeta(destino)">
           <div class="min-w-0">
-            <p class="break-all text-xl font-bold text-ink sm:truncate 2xl:text-2xl">
+            <p
+              class="break-all text-xl font-bold text-ink sm:truncate 2xl:text-2xl">
               {{ destino.name }}
             </p>
             <p class="truncate text-base text-ink-muted">

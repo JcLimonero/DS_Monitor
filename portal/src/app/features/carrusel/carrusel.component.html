@@ -9,7 +9,8 @@
 
       <div class="min-w-0 flex-1">
         <p class="tv-label truncate">{{ fecha() }}</p>
-        <h1 class="truncate text-2xl font-bold text-ink sm:text-3xl 2xl:text-4xl">
+        <h1
+          class="truncate text-2xl font-bold text-ink sm:text-3xl 2xl:text-4xl">
           {{ actual().titulo }}
         </h1>
       </div>
@@ -56,6 +57,9 @@
       }
       @case ("plataformas") {
         <pt-slide-plataformas />
+      }
+      @case ("ejecuciones") {
+        <pt-slide-ejecuciones />
       }
       @case ("despliegues") {
         <pt-slide-despliegues />

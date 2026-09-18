@@ -2,8 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  inject,
-  signal
+  inject
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { SesionService } from '../../core/acceso/sesion.service';
@@ -16,10 +15,7 @@ import {
 import { PortalStore } from '../../core/state/portal.store';
 import { accountsOf } from '../../core/util/meetings.util';
 import { AvisosService } from '../../core/avisos/avisos.service';
-import {
-  Ejecucion,
-  PuenteAdminService
-} from '../../core/sources/gateway/puente-admin.service';
+import { EjecucionesService } from '../../core/ejecuciones/ejecuciones.service';
 import {
   CLASE_PLAZO,
   PUNTO_PLAZO,
@@ -52,27 +48,8 @@ import { IaResumenComponent } from '../ia/ia-resumen.component';
 export class HoyComponent {
   private readonly store = inject(PortalStore);
   private readonly sesion = inject(SesionService);
-  private readonly admin = inject(PuenteAdminService);
-
   /** Las integraciones que no están bien (error o atrasadas), para avisar. */
-  readonly ejecucionesMal = signal<Ejecucion[]>([]);
-
-  constructor() {
-    this.cargarEjecuciones();
-  }
-
-  private cargarEjecuciones(): void {
-    if (!this.admin.disponible) {
-      return;
-    }
-    this.admin.ejecuciones().subscribe({
-      next: (lista) =>
-        this.ejecucionesMal.set(
-          lista.filter((e) => e.estado === 'error' || e.estado === 'atrasada')
-        ),
-      error: () => this.ejecucionesMal.set([])
-    });
-  }
+  readonly ejecucionesMal = inject(EjecucionesService).mal;
 
   readonly fecha = new Date().toLocaleDateString('es-MX', {
     weekday: 'long',

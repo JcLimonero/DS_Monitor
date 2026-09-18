@@ -70,10 +70,12 @@ interface Columna {
                     class="mt-2 h-2.5 w-2.5 shrink-0 rounded-full"
                     [class]="punto(tarea)"></span>
                   <span class="min-w-0 flex-1">
-                    <span class="block text-lg font-bold leading-tight text-ink 2xl:text-xl">
+                    <span
+                      class="block text-lg font-bold leading-tight text-ink 2xl:text-xl">
                       {{ tarea.title }}
                     </span>
-                    <span class="mt-0.5 block truncate text-base text-ink-muted">
+                    <span
+                      class="mt-0.5 block truncate text-base text-ink-muted">
                       @if (tarea.company) {
                         {{ tarea.company }} ·
                       }
@@ -82,21 +84,26 @@ interface Columna {
                   </span>
                   <span class="shrink-0 text-right">
                     @if (col.id === 'despues') {
-                      <span class="block whitespace-nowrap text-base font-bold text-ink">
+                      <span
+                        class="block whitespace-nowrap text-base font-bold text-ink">
                         {{ tarea.dueDate | dia }}
                       </span>
-                      <span class="block whitespace-nowrap text-sm text-ink-muted">
+                      <span
+                        class="block whitespace-nowrap text-sm text-ink-muted">
                         {{ plazo(tarea) }}
                       </span>
                     } @else if (esVencido(tarea)) {
-                      <span class="block whitespace-nowrap text-base font-bold text-danger">
+                      <span
+                        class="block whitespace-nowrap text-base font-bold text-danger">
                         Vencido
                       </span>
-                      <span class="block whitespace-nowrap text-sm text-ink-muted">
+                      <span
+                        class="block whitespace-nowrap text-sm text-ink-muted">
                         {{ tarea.dueDate | dia }}
                       </span>
                     } @else {
-                      <span class="block whitespace-nowrap text-base font-bold text-ink">
+                      <span
+                        class="block whitespace-nowrap text-base font-bold text-ink">
                         {{ tarea.dueDate | hora }}
                       </span>
                       <span
@@ -173,7 +180,9 @@ export class PendientesSlideComponent {
   }
 
   punto(tarea: TaskItem): string {
-    return tarea.dueDate ? PUNTO_PLAZO[tonoPlazo(tarea.dueDate)] : 'bg-ink-subtle';
+    return tarea.dueDate
+      ? PUNTO_PLAZO[tonoPlazo(tarea.dueDate)]
+      : 'bg-ink-subtle';
   }
 
   plazo(tarea: TaskItem): string {

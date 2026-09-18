@@ -7,6 +7,7 @@ export interface Diapositiva {
     | 'pendientes'
     | 'agenda'
     | 'plataformas'
+    | 'ejecuciones'
     | 'despliegues'
     | 'embudo'
     | 'licencias'
@@ -42,6 +43,12 @@ export const DIAPOSITIVAS: Diapositiva[] = [
     titulo: 'Plataformas',
     corto: 'Plataformas',
     icono: 'monitoreo'
+  },
+  {
+    id: 'ejecuciones',
+    titulo: 'Servicios: última corrida',
+    corto: 'Servicios',
+    icono: 'reloj'
   },
   {
     id: 'despliegues',
