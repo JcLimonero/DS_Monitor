@@ -122,8 +122,17 @@
       </div>
     </header>
 
-    <main class="flex-1 p-4 sm:p-6">
+    <main class="flex-1 p-4 pb-24 sm:p-6 sm:pb-6">
       <router-outlet />
     </main>
+
+    <!-- En el celular, el micrófono siempre a la mano -->
+    <a
+      routerLink="/dictado"
+      routerLinkActive="hidden"
+      class="fixed bottom-5 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-brand text-white shadow-lg transition hover:brightness-110 lg:hidden"
+      aria-label="Dictar un pendiente">
+      <pt-icon name="microfono" class="h-6 w-6" />
+    </a>
   </div>
 </div>
