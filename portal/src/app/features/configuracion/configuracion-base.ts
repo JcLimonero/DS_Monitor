@@ -1,3 +1,4 @@
+import { IaService } from '../../core/ia/ia.service';
 import { Directive, computed, inject, isDevMode, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
@@ -670,6 +671,23 @@ export class ConfiguracionBase {
   }
 
   readonly estatusMensaje = signal<string | undefined>(undefined);
+
+  private readonly iaSvc = inject(IaService);
+
+  /** Modelos recomendados que la cuenta de OpenRouter puede usar. */
+  readonly modelosIa = signal<
+    { id: string; nota: string; entrada: number; salida: number }[]
+  >([]);
+
+  cargarModelosIa(): void {
+    if (!this.admin.disponible) {
+      return;
+    }
+    this.iaSvc.modelos().subscribe({
+      next: (r) => this.modelosIa.set(r.modelos),
+      error: () => undefined
+    });
+  }
   /** Que dias y a que hora se pide estatus; de inicio martes y jueves a las 9. */
   readonly estatusProg = signal<{ dias: number[]; hora: number }>({
     dias: [2, 4],

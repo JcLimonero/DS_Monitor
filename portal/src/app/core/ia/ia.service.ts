@@ -68,6 +68,16 @@ export class IaService {
       .subscribe({ next: (p) => this.equipo.set(p), error: () => undefined });
   }
 
+  modelos(): Observable<{
+    actual?: string;
+    modelos: { id: string; nota: string; entrada: number; salida: number }[];
+  }> {
+    return this.http.get<{
+      actual?: string;
+      modelos: { id: string; nota: string; entrada: number; salida: number }[];
+    }>(this.url('/ia/modelos'));
+  }
+
   resumen(): Observable<{ disponible: boolean; resumen?: ResumenDia }> {
     return this.disponible
       ? this.http.get<{ disponible: boolean; resumen?: ResumenDia }>(

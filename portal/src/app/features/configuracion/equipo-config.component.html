@@ -245,6 +245,19 @@
                   "
                   [ngModel]="variablesDraft()[campo.variable]"
                   (ngModelChange)="updateVariable(campo.variable, $event)" />
+              } @else if (campo.variable === "OPENROUTER_MODEL" && modelosIa().length > 0) {
+                <select
+                  class="field"
+                  [name]="campo.variable"
+                  [ngModel]="variablesDraft()[campo.variable] || ''"
+                  (ngModelChange)="updateVariable(campo.variable, $event)">
+                  <option value="">Por omisión (openai/gpt-oss-120b)</option>
+                  @for (m of modelosIa(); track m.id) {
+                    <option [value]="m.id">
+                      {{ m.id }} · ${{ m.entrada.toFixed(2) }} / ${{ m.salida.toFixed(2) }} por millón · {{ m.nota }}
+                    </option>
+                  }
+                </select>
               } @else {
                 <input
                   class="field"

@@ -31,5 +31,6 @@ export class EquipoConfigComponent extends ConfiguracionBase {
   constructor() {
     super();
     this.cargarEstatusProg();
+    this.cargarModelosIa();
   }
 }

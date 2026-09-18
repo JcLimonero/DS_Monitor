@@ -377,7 +377,7 @@ INTEGRACIONES.push({
       etiqueta: 'Modelo',
       tipo: 'texto',
       ayuda:
-        'Cualquier id de openrouter.ai/models. Por omisión anthropic/claude-haiku-4.5 (centavos por lectura); los que terminan en :free no cuestan y sirven para probar.'
+        'Elige uno de los recomendados (solo salen los que tu cuenta puede usar, con su precio) o escribe cualquier id de openrouter.ai/models. Por omisión openai/gpt-oss-120b.'
     },
     {
       variable: 'OPENROUTER_DIAS',

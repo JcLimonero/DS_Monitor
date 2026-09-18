@@ -550,7 +550,7 @@ function leer(): Configuracion {
     ia: texto('OPENROUTER_API_KEY')
       ? {
           apiKey: texto('OPENROUTER_API_KEY') as string,
-          modelo: texto('OPENROUTER_MODEL') ?? 'anthropic/claude-haiku-4.5',
+          modelo: texto('OPENROUTER_MODEL') ?? 'openai/gpt-oss-120b',
           dias: numeroCon('OPENROUTER_DIAS', 7),
           maximo: numeroCon('OPENROUTER_MAXIMO', 40)
         }

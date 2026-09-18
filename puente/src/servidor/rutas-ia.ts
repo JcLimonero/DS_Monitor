@@ -184,6 +184,59 @@ export function registrarRutasIa(
     };
   });
 
+  // --- Modelos recomendados que la cuenta tiene disponibles ---
+  //
+  // OpenRouter filtra por la politica de datos de la cuenta (ZDR), asi que
+  // se enseñan solo los que de verdad se pueden usar, con su precio.
+
+  router.get('/ia/modelos', async () => {
+    const config = ia();
+    if (!config) {
+      return { actual: undefined, modelos: [] };
+    }
+    const RECOMENDADOS: Record<string, string> = {
+      'openai/gpt-oss-120b': 'Rápido y barato; buen español',
+      'deepseek/deepseek-v4-flash-0731':
+        'Misma familia que DeepSeek 4.1, 5× más barato',
+      'deepseek/deepseek-v4-flash': 'DeepSeek 4 Flash',
+      'deepseek/deepseek-v4.1-flash':
+        'DeepSeek 4.1 Flash (más caro, muy capaz)',
+      'qwen/qwen3.7-flash': 'Qwen 3.7 Flash (el más barato)',
+      'google/gemini-2.5-flash-lite': 'Gemini 2.5 Flash Lite',
+      'google/gemini-2.5-flash': 'Gemini 2.5 Flash (también transcribe audio)',
+      'anthropic/claude-haiku-4.5':
+        'Claude Haiku 4.5 (el más fino de los baratos)',
+      'mistralai/mistral-nemo': 'Mistral Nemo (muy barato, más simple)'
+    };
+    try {
+      const r = await fetch('https://openrouter.ai/api/v1/models/user', {
+        headers: { authorization: `Bearer ${config.apiKey}` }
+      });
+      const datos = (await r.json()) as {
+        data?: {
+          id: string;
+          pricing?: { prompt?: string; completion?: string };
+        }[];
+      };
+      const disponibles = new Map((datos.data ?? []).map((m) => [m.id, m]));
+      const modelos = Object.entries(RECOMENDADOS)
+        .filter(([id]) => disponibles.has(id))
+        .map(([id, nota]) => {
+          const m = disponibles.get(id);
+          return {
+            id,
+            nota,
+            entrada: Number(m?.pricing?.prompt ?? 0) * 1e6,
+            salida: Number(m?.pricing?.completion ?? 0) * 1e6
+          };
+        })
+        .sort((a, b) => a.entrada + a.salida - (b.entrada + b.salida));
+      return { actual: config.modelo, modelos };
+    } catch {
+      return { actual: config.modelo, modelos: [] };
+    }
+  });
+
   // --- Resumen del dia ---
 
   const alertasActuales = async (ahora: Date): Promise<Alerta[]> => {
