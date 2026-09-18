@@ -17,6 +17,12 @@ export const routes: Routes = [
       )
   },
   {
+    path: 'mio/:token',
+    title: 'Mis pendientes | DS Monitor',
+    loadComponent: () =>
+      import('./features/mio/mio.component').then((m) => m.MioComponent)
+  },
+  {
     path: 'carrusel',
     title: 'Carrusel | DS Monitor',
     loadComponent: () =>

@@ -129,7 +129,7 @@ export function correoDeSemana(s: SemanaPersona, urlPortal: string): string {
           )
           .join('')}</ul>`
       : '') +
-    `<p><a href="${urlPortal}/pendientes">Abrir DS Monitor</a></p>`
+    `<p><a href="${urlPortal.includes('/mio/') ? urlPortal : `${urlPortal}/pendientes`}" style="display:inline-block;padding:10px 16px;background:#04202B;color:#fff;text-decoration:none;border-radius:6px">Ver mis pendientes, comentar o marcar como hecho</a></p>`
   );
 }
 

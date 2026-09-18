@@ -134,11 +134,18 @@ body {
   }
 
   .tv-row {
-    @apply text-xl 2xl:text-2xl;
+    @apply text-lg sm:text-xl 2xl:text-2xl;
   }
 
   .tv-numero {
     @apply font-bold tabular-nums leading-none;
-    font-size: clamp(2.5rem, 5vw, 5.5rem);
+    font-size: clamp(2rem, 5vw, 5.5rem);
+  }
+}
+
+/* El carrusel en un telefono: todo lo que va en rem se reduce a tres cuartos. */
+@media (max-width: 767px) {
+  html.kiosco {
+    font-size: 12px;
   }
 }

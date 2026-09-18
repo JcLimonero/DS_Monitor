@@ -31,7 +31,8 @@ export const sesionInterceptor: HttpInterceptorFn = (req, next) => {
         alPuente &&
         error instanceof HttpErrorResponse &&
         error.status === 401 &&
-        !req.url.includes('/acceso/')
+        !req.url.includes('/acceso/') &&
+        !router.url.startsWith('/mio/')
       ) {
         sesion.requerida.set(true);
         if (!router.url.startsWith('/acceso')) {

@@ -110,6 +110,8 @@ export interface DependenciasIa {
     sesion: Sesion | undefined
   ) => Promise<string | undefined>;
   dominios: () => Dominio[];
+  /** La liga personal de alguien del equipo (ve, comenta y marca lo suyo). */
+  ligaDe: (persona: Person) => Promise<string>;
   /** Buzones donde se pueden crear juntas (conectados con Microsoft). */
   calendarios: () => { id: string; usuario: string }[];
   /** Crea una junta en el calendario del buzon dado (Microsoft). */
@@ -695,7 +697,7 @@ export function registrarRutasIa(
       try {
         await enviarPorEmailJs(acceso, s.persona.email as string, '', false, {
           titulo: `Tu semana en DS Monitor · ${new Date(ahora).toLocaleDateString('es-MX', { dateStyle: 'long', timeZone: 'America/Mexico_City' })}`,
-          html: correoDeSemana(s, urlPortal())
+          html: correoDeSemana(s, await d.ligaDe(s.persona))
         });
         enviados.push(s.persona.email as string);
       } catch (error) {

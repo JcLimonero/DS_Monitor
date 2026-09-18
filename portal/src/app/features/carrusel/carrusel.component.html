@@ -1,14 +1,15 @@
-<div class="flex h-full flex-col">
+<div class="flex min-h-full flex-col lg:h-full">
   <header class="shrink-0">
-    <div class="flex items-center gap-6 px-8 pb-3 pt-5 2xl:px-12 2xl:pt-7">
-      <pt-brand-logo [heightRem]="3" />
-      <span class="tv-label shrink-0 border-l border-line pl-6"
+    <div
+      class="flex items-center gap-3 px-4 pb-3 pt-4 sm:gap-6 sm:px-8 sm:pt-5 2xl:px-12 2xl:pt-7">
+      <pt-brand-logo class="hidden sm:block" [heightRem]="3" />
+      <span class="tv-label hidden shrink-0 border-l border-line pl-6 sm:block"
         >DS Monitor</span
       >
 
       <div class="min-w-0 flex-1">
-        <p class="tv-label">{{ fecha() }}</p>
-        <h1 class="truncate text-3xl font-bold text-ink 2xl:text-4xl">
+        <p class="tv-label truncate">{{ fecha() }}</p>
+        <h1 class="truncate text-2xl font-bold text-ink sm:text-3xl 2xl:text-4xl">
           {{ actual().titulo }}
         </h1>
       </div>
@@ -28,7 +29,7 @@
             {{ reloj() }}
           </span>
         </p>
-        <p class="text-right">
+        <p class="hidden text-right sm:block">
           <span class="tv-label block">Laredo</span>
           <span
             class="block text-3xl font-bold tabular-nums leading-none text-ink-muted 2xl:text-4xl">
@@ -40,7 +41,9 @@
     <div class="regla-marca"></div>
   </header>
 
-  <main class="min-h-0 flex-1 overflow-hidden px-8 py-5 2xl:px-12 2xl:py-7">
+  <!-- En pantalla grande cada diapositiva cabe entera; en el celular se desplaza. -->
+  <main
+    class="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-8 sm:py-5 lg:overflow-hidden 2xl:px-12 2xl:py-7">
     @switch (actual().id) {
       @case ("resumen") {
         <pt-slide-resumen />

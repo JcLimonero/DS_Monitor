@@ -125,6 +125,13 @@ export class CarruselComponent {
     void this.pantalla.iniciar();
     this.destroyRef.onDestroy(() => void this.pantalla.detener());
 
+    // En el celular el carrusel se ve a 3/4: las medidas de television no
+    // caben en 430 px. La clase en <html> escala todo lo que va en rem.
+    document.documentElement.classList.add('kiosco');
+    this.destroyRef.onDestroy(() =>
+      document.documentElement.classList.remove('kiosco')
+    );
+
     // Modo kiosco: el Pi no recarga solo. Cada diez minutos se mira si hay
     // una version nueva publicada (cambia el nombre del bundle principal) y,
     // si la hay, se recarga la pagina entre una diapositiva y la siguiente.

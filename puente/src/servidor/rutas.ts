@@ -234,6 +234,8 @@ export interface Datos {
   pushSuscripciones: AlmacenJson<Suscripcion[]>;
   pushCola: AlmacenJson<ColaPush>;
   pushAvisados: AlmacenJson<Record<string, string>>;
+  /** Token por persona del equipo para su liga "mis pendientes". */
+  ligasEquipo: AlmacenJson<Record<string, string>>;
   /** Transcripciones de Fireflies ya convertidas en pendientes. */
   firefliesProcesadas: AlmacenJson<
     Record<string, { en: string; titulo: string; pendientes: number }>
@@ -296,6 +298,7 @@ export function abrirDatos(directorio: string): Datos {
     ),
     pushCola: new AlmacenJson(join(directorio, 'push-cola.json'), {}),
     pushAvisados: new AlmacenJson(join(directorio, 'push-avisados.json'), {}),
+    ligasEquipo: new AlmacenJson(join(directorio, 'ligas-equipo.json'), {}),
     firefliesProcesadas: new AlmacenJson(
       join(directorio, 'fireflies-procesadas.json'),
       {}
@@ -1443,6 +1446,21 @@ export function construirRutas(
   // EmailJS (el mismo servicio del acceso).
 
   /**
+   * La liga personal de alguien del equipo: con ella ve sus pendientes,
+   * comenta y los marca, sin entrar al portal. El token se crea la primera
+   * vez y no caduca; se puede renovar borrandolo de datos/ligas-equipo.json.
+   */
+  const ligaDe = async (persona: Person): Promise<string> => {
+    const ligas = datos.ligasEquipo.leer();
+    let token = ligas[persona.id];
+    if (!token) {
+      token = randomBytes(18).toString('base64url');
+      await datos.ligasEquipo.escribir({ ...ligas, [persona.id]: token });
+    }
+    return `${cfg().urlPublica.replace(/\/api\/portal$/, '')}/mio/${token}`;
+  };
+
+  /**
    * Asigna un pendiente a alguien del equipo y le avisa por correo. Devuelve
    * el aviso (que se mando, o por que no) para enseñarlo en el portal.
    */
@@ -1505,7 +1523,8 @@ export function construirRutas(
       (nota.comentarios.length > 0
         ? `<p>Comentarios:</p><ul>${nota.comentarios.map((c) => `<li>${escapar(c.text)}</li>`).join('')}</ul>`
         : '') +
-      `<p><a href="${config.urlPublica.replace(/\/api\/portal$/, '')}/pendientes">Abrir en DS Monitor</a></p>`;
+      `<p><a href="${await ligaDe(persona)}" style="display:inline-block;padding:10px 16px;background:#04202B;color:#fff;text-decoration:none;border-radius:6px">Ver mis pendientes, comentar o marcar como hecho</a></p>` +
+      `<p style="color:#666;font-size:12px">La liga es personal: con ella entras directo a tus pendientes sin código.</p>`;
     try {
       await enviarPorEmailJs(config.acceso, persona.email, '', false, {
         titulo: `Pendiente asignado: ${t.title ?? id}`,
@@ -1725,6 +1744,7 @@ export function construirRutas(
       conNotas(Object.values(datos.registroCorreo.leer()).flat()),
     asignar: asignarPendiente,
     dominios: () => datos.dominios.leer(),
+    ligaDe,
     calendarios: () =>
       buzones_(cfg(), almacenCorreo)
         .filter((c) => metodoDe(c, cfg()) === 'graph')
@@ -2016,6 +2036,93 @@ export function construirRutas(
     },
     ...ia.programables
   );
+
+  // --- Mis pendientes: la liga personal de cada quien del equipo ---
+  //
+  // Sin sesion: el token de la liga identifica a la persona. Solo ve y toca
+  // lo que tiene asignado.
+
+  const personaDeLiga = async (token: string): Promise<Person> => {
+    const id = Object.entries(datos.ligasEquipo.leer()).find(
+      ([, t]) => t === token
+    )?.[0];
+    const persona = id
+      ? (await equipoCompleto()).find((p) => p.id === id)
+      : undefined;
+    if (!persona) {
+      throw new ErrorPuente('Esta liga ya no es válida.', 404);
+    }
+    return persona;
+  };
+
+  const pendientesDe = async (persona: Person): Promise<TaskItem[]> => {
+    const correo = persona.email?.toLowerCase();
+    return (await fuentes.pendientes()).filter(
+      (t) =>
+        t.assignee &&
+        (t.assignee.id === persona.id ||
+          (correo && t.assignee.email?.toLowerCase() === correo))
+    );
+  };
+
+  router.get('/mio/:token/tasks', async ({ segmentos }) => {
+    const persona = await personaDeLiga(segmentos[1] as string);
+    return {
+      persona: { id: persona.id, name: persona.name, role: persona.role },
+      pendientes: await pendientesDe(persona)
+    };
+  });
+
+  router.post('/mio/:token/anotar', async (contexto) => {
+    const persona = await personaDeLiga(contexto.segmentos[1] as string);
+    const cuerpo = (contexto.cuerpo ?? {}) as {
+      id?: string;
+      comentario?: string;
+      hecho?: boolean;
+    };
+    const id = (cuerpo.id ?? '').trim();
+    const mias = await pendientesDe(persona);
+    if (!id || !mias.some((t) => t.id === id)) {
+      throw new ErrorPuente('Ese pendiente no está a tu nombre.', 403);
+    }
+    const todas = datos.anotaciones.leer();
+    const nota = todas[id] ?? { comentarios: [], actualizadoEn: '' };
+    const ahora = new Date().toISOString();
+    if (typeof cuerpo.comentario === 'string' && cuerpo.comentario.trim()) {
+      nota.comentarios = [
+        ...nota.comentarios,
+        { text: cuerpo.comentario.trim(), at: ahora, by: persona.name }
+      ];
+    }
+    if (typeof cuerpo.hecho === 'boolean') {
+      nota.hecho = cuerpo.hecho;
+    }
+    nota.actualizadoEn = ahora;
+    await datos.anotaciones.escribir({ ...todas, [id]: nota });
+    cache.olvidar();
+    // Quien asigna se entera por push.
+    const tarea = mias.find((t) => t.id === id) as TaskItem;
+    void push.avisar({
+      titulo: `${persona.name}: ${cuerpo.hecho === true ? 'terminó' : cuerpo.hecho === false ? 'reabrió' : 'comentó'} ${tarea.title}`,
+      cuerpo:
+        typeof cuerpo.comentario === 'string'
+          ? cuerpo.comentario.slice(0, 140)
+          : '',
+      url: '/pendientes',
+      etiqueta: `mio:${id}`
+    });
+    return { ok: true, anotacion: nota };
+  });
+
+  router.get('/equipo/ligas', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const equipo = await equipoCompleto();
+    const salida: Record<string, string> = {};
+    for (const p of equipo) {
+      salida[p.id] = await ligaDe(p);
+    }
+    return salida;
+  });
 
   // --- Avisos push al celular ---
 
