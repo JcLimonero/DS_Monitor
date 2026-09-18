@@ -195,6 +195,23 @@ export class PuenteAdminService {
     );
   }
 
+  estatusConfig(): Observable<{ dias: number[]; hora: number }> {
+    return this.http.get<{ dias: number[]; hora: number }>(
+      this.url('/equipo/estatus-config')
+    );
+  }
+
+  guardarEstatusConfig(config: {
+    dias: number[];
+    hora: number;
+  }): Observable<{ dias: number[]; hora: number }> {
+    return this.http.post<{ dias: number[]; hora: number }>(
+      this.url('/equipo/estatus-config'),
+      config,
+      { headers: this.headers() }
+    );
+  }
+
   solicitarEstatus(
     ids?: string[]
   ): Observable<{ enviados: string[]; errores: string[] }> {

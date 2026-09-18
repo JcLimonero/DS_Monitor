@@ -27,4 +27,9 @@ import { EmisoresConfigComponent } from './emisores-config.component';
   ],
   templateUrl: './equipo-config.component.html'
 })
-export class EquipoConfigComponent extends ConfiguracionBase {}
+export class EquipoConfigComponent extends ConfiguracionBase {
+  constructor() {
+    super();
+    this.cargarEstatusProg();
+  }
+}

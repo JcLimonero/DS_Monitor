@@ -240,6 +240,8 @@ export interface Datos {
   avisos: AlmacenJson<Aviso[]>;
   /** Ultimo dia en que se pidio estatus, para no repetir. */
   estatusPedido: AlmacenJson<{ dia?: string }>;
+  /** Que dias y a que hora se pide estatus (0 = domingo … 6 = sabado). */
+  estatusConfig: AlmacenJson<{ dias: number[]; hora: number }>;
   /** Transcripciones de Fireflies ya convertidas en pendientes. */
   firefliesProcesadas: AlmacenJson<
     Record<string, { en: string; titulo: string; pendientes: number }>
@@ -317,6 +319,11 @@ export function abrirDatos(directorio: string): Datos {
     ligasEquipo: new AlmacenJson(join(directorio, 'ligas-equipo.json'), {}),
     avisos: new AlmacenJson(join(directorio, 'avisos.json'), []),
     estatusPedido: new AlmacenJson(join(directorio, 'estatus-pedido.json'), {}),
+    // De inicio martes y jueves a las 9; se cambia desde Equipo → Configuración.
+    estatusConfig: new AlmacenJson(join(directorio, 'estatus-config.json'), {
+      dias: [2, 4],
+      hora: 9
+    }),
     firefliesProcesadas: new AlmacenJson(
       join(directorio, 'fireflies-procesadas.json'),
       {}
@@ -2261,7 +2268,37 @@ export function construirRutas(
     );
   });
 
-  // Entre semana a las 9, a quien tenga la marca "pedir estatus".
+  router.get('/equipo/estatus-config', async () => datos.estatusConfig.leer());
+
+  router.post('/equipo/estatus-config', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { dias, hora } = (contexto.cuerpo ?? {}) as {
+      dias?: unknown;
+      hora?: unknown;
+    };
+    const limpiosDias = Array.isArray(dias)
+      ? [
+          ...new Set(
+            dias
+              .map(Number)
+              .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+          )
+        ].sort()
+      : datos.estatusConfig.leer().dias;
+    const limpiaHora =
+      typeof hora === 'number' &&
+      Number.isInteger(hora) &&
+      hora >= 0 &&
+      hora <= 23
+        ? hora
+        : datos.estatusConfig.leer().hora;
+    return datos.estatusConfig.escribir({
+      dias: limpiosDias,
+      hora: limpiaHora
+    });
+  });
+
+  // Los dias y a la hora configurados, a quien tenga la marca "pedir estatus".
   programables.push({
     nombre: 'solicitud de estatus',
     cadaMinutos: 15,
@@ -2271,10 +2308,10 @@ export function construirRutas(
         ahora.toLocaleString('en-US', { timeZone: 'America/Mexico_City' })
       );
       const dia = local.toISOString().slice(0, 10);
+      const programa = datos.estatusConfig.leer();
       if (
-        local.getDay() === 0 ||
-        local.getDay() === 6 ||
-        local.getHours() < 9
+        !programa.dias.includes(local.getDay()) ||
+        local.getHours() < programa.hora
       ) {
         return;
       }

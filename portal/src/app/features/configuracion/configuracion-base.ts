@@ -670,6 +670,53 @@ export class ConfiguracionBase {
   }
 
   readonly estatusMensaje = signal<string | undefined>(undefined);
+  /** Que dias y a que hora se pide estatus; de inicio martes y jueves a las 9. */
+  readonly estatusProg = signal<{ dias: number[]; hora: number }>({
+    dias: [2, 4],
+    hora: 9
+  });
+  readonly diasSemana = [
+    { n: 1, l: 'L' },
+    { n: 2, l: 'M' },
+    { n: 3, l: 'X' },
+    { n: 4, l: 'J' },
+    { n: 5, l: 'V' },
+    { n: 6, l: 'S' },
+    { n: 0, l: 'D' }
+  ];
+
+  cargarEstatusProg(): void {
+    if (!this.admin.disponible) {
+      return;
+    }
+    this.admin.estatusConfig().subscribe({
+      next: (c) => this.estatusProg.set(c),
+      error: () => undefined
+    });
+  }
+
+  alternarDiaEstatus(dia: number): void {
+    const actual = this.estatusProg();
+    const dias = actual.dias.includes(dia)
+      ? actual.dias.filter((d) => d !== dia)
+      : [...actual.dias, dia].sort();
+    this.guardarEstatusProg({ ...actual, dias });
+  }
+
+  ponerHoraEstatus(hora: string): void {
+    const h = Number(hora.split(':')[0]);
+    if (Number.isInteger(h)) {
+      this.guardarEstatusProg({ ...this.estatusProg(), hora: h });
+    }
+  }
+
+  private guardarEstatusProg(config: { dias: number[]; hora: number }): void {
+    this.estatusProg.set(config);
+    this.admin.guardarEstatusConfig(config).subscribe({
+      next: (c) => this.estatusProg.set(c),
+      error: (error: unknown) => this.estatusMensaje.set(describeHttp(error))
+    });
+  }
 
   /** Manda el correo de estatus a quienes tienen la marca. */
   solicitarEstatus(): void {

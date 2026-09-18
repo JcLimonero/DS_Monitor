@@ -95,6 +95,29 @@
         (click)="solicitarEstatus()">
         Pedir estatus ahora
       </button>
+      <span class="flex flex-wrap items-center gap-1 text-xs text-ink-muted">
+        Se pide los
+        @for (d of diasSemana; track d.n) {
+          <button
+            type="button"
+            class="h-7 w-7 rounded-full border text-xs font-bold transition"
+            [class.bg-brand]="estatusProg().dias.includes(d.n)"
+            [class.text-white]="estatusProg().dias.includes(d.n)"
+            [class.border-brand]="estatusProg().dias.includes(d.n)"
+            [class.border-line]="!estatusProg().dias.includes(d.n)"
+            [attr.aria-pressed]="estatusProg().dias.includes(d.n)"
+            (click)="alternarDiaEstatus(d.n)">
+            {{ d.l }}
+          </button>
+        }
+        a las
+        <input
+          class="field h-7 w-24 px-2 text-xs"
+          type="time"
+          step="3600"
+          [value]="(estatusProg().hora < 10 ? '0' : '') + estatusProg().hora + ':00'"
+          (change)="ponerHoraEstatus($any($event.target).value)" />
+      </span>
       @if (estatusMensaje(); as m) {
         <span class="text-xs text-ink-muted">{{ m }}</span>
       }
