@@ -129,11 +129,44 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
 export class DesplieguesSlideComponent {
   private readonly store = inject(PortalStore);
 
-  readonly despliegues = computed(() =>
-    [...this.store.deployments()]
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, RENGLONES)
-  );
+  /**
+   * Un renglon por proyecto con su ultimo despliegue: lo que importa en la
+   * pantalla es el estado actual de cada cosa, no el historial. Produccion
+   * manda sobre vista previa cuando hay de las dos; lo roto va arriba.
+   */
+  readonly despliegues = computed(() => {
+    const ultimoPorProyecto = new Map<string, Deployment>();
+    for (const d of [...this.store.deployments()].sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt)
+    )) {
+      const clave = `${d.project}|${d.environment}`;
+      if (!ultimoPorProyecto.has(clave)) {
+        ultimoPorProyecto.set(clave, d);
+      }
+    }
+    // Si el proyecto tiene produccion, se enseña esa; si no, su vista previa.
+    const porProyecto = new Map<string, Deployment>();
+    for (const d of ultimoPorProyecto.values()) {
+      const actual = porProyecto.get(d.project);
+      if (
+        !actual ||
+        (actual.environment !== 'produccion' && d.environment === 'produccion')
+      ) {
+        porProyecto.set(d.project, d);
+      }
+    }
+    const peso = (d: Deployment) =>
+      d.state === 'error'
+        ? 0
+        : d.state === 'construyendo' || d.state === 'en_cola'
+          ? 1
+          : 2;
+    return [...porProyecto.values()]
+      .sort(
+        (a, b) => peso(a) - peso(b) || b.createdAt.localeCompare(a.createdAt)
+      )
+      .slice(0, RENGLONES);
+  });
 
   readonly fallidos = computed(() =>
     failedDeployments(this.store.deployments())

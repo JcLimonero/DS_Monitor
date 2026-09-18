@@ -1,5 +1,12 @@
 import { enviarPorEmailJs, type Sesion } from '../acceso/acceso.js';
-import type { Configuracion } from '../config/entorno.js';
+import type { Configuracion, ConfiguracionIa } from '../config/entorno.js';
+import {
+  ETIQUETA_USO,
+  USOS_IA,
+  USOS_POR_OMISION,
+  limpiarUsos,
+  type UsoIa
+} from '../ia/usos.js';
 import type { Dominio } from '../datos/dominios.js';
 import { acuerdosDeJunta, type Acuerdo } from '../ia/acuerdos.js';
 import { interpretarDictado, type Propuesta } from '../ia/dictado.js';
@@ -101,6 +108,7 @@ export interface DatosIa {
 export interface DependenciasIa {
   cfg: () => Configuracion;
   datos: DatosIa & {
+    iaUsos: AlmacenJson<Record<UsoIa, boolean>>;
     anotaciones: AlmacenJson<Anotaciones>;
     iaCorreo: AlmacenJson<Record<string, Clasificacion>>;
     personales: AlmacenJson<TaskItem[]>;
@@ -120,6 +128,8 @@ export interface DependenciasIa {
   dominios: () => Dominio[];
   /** Clasificar empresa/prioridad de pendientes de Ops con el modelo (apagado). */
   clasificarPendientesAutomatico?: boolean;
+  /** El modelo solo si ese uso esta permitido en Integraciones → IA. */
+  iaPara: (uso: UsoIa) => ConfiguracionIa | undefined;
   /** Avisos push, para el arranque del dia. */
   push: {
     avisar: (
@@ -160,15 +170,33 @@ export function registrarRutasIa(
   d: DependenciasIa
 ): ServiciosIa {
   const ia = () => d.cfg().ia;
-  const exigirIa = () => {
-    const config = ia();
+  const exigirIa = (uso: UsoIa) => {
+    if (!ia()) {
+      throw new ErrorConfiguracion(
+        'La inteligencia artificial no está configurada: captura la API key de OpenRouter en Integraciones → IA.'
+      );
+    }
+    const config = d.iaPara(uso);
     if (!config) {
       throw new ErrorConfiguracion(
-        'La inteligencia artificial no está configurada: captura la API key de OpenRouter en Equipo → Configuración.'
+        `El uso "${ETIQUETA_USO[uso].titulo}" de la IA está apagado; se prende en Integraciones → IA.`
       );
     }
     return config;
   };
+
+  router.get('/ia/usos', async () => ({
+    usos: { ...USOS_POR_OMISION, ...d.datos.iaUsos.leer() },
+    catalogo: USOS_IA.map((id) => ({ id, ...ETIQUETA_USO[id] }))
+  }));
+
+  router.post('/ia/usos', async (contexto) => {
+    d.exigirAdmin(contexto);
+    const actual = { ...USOS_POR_OMISION, ...d.datos.iaUsos.leer() };
+    return {
+      usos: await d.datos.iaUsos.escribir(limpiarUsos(contexto.cuerpo, actual))
+    };
+  });
   const urlPortal = () => d.cfg().urlPublica.replace(/\/api\/portal$/, '');
 
   router.get('/ia/estado', async () => {
@@ -180,7 +208,8 @@ export function registrarRutasIa(
       // Donde se pueden crear juntas: buzones conectados con Microsoft.
       calendarios: d.calendarios(),
       fireflies: !!d.cfg().fireflies,
-      telegram: !!d.cfg().telegram
+      telegram: !!d.cfg().telegram,
+      usos: { ...USOS_POR_OMISION, ...d.datos.iaUsos.leer() }
     };
   });
 
@@ -260,7 +289,7 @@ export function registrarRutasIa(
   router.get('/ia/alertas', async () => alertasActuales(new Date()));
 
   const generarResumen = async (ahora = new Date()): Promise<ResumenDia> => {
-    const config = exigirIa();
+    const config = exigirIa('resumen');
     const tablero = await armarTablero(d.fuentes, ahora);
     const alertas = await alertasActuales(ahora);
     const resumen = await resumirDia(config, tablero, alertas, ahora);
@@ -295,7 +324,7 @@ export function registrarRutasIa(
 
   router.post('/ia/acuerdos', async (contexto) => {
     d.exigirAdmin(contexto);
-    const config = exigirIa();
+    const config = exigirIa('juntas');
     let { junta } = (contexto.cuerpo ?? {}) as { junta?: Meeting };
     if (
       !junta ||
@@ -409,8 +438,12 @@ export function registrarRutasIa(
       throw new ErrorPuente('Falta el texto dictado.', 400);
     }
     const equipo = await d.fuentes.equipo();
-    const propuestas = await interpretarDictado(ia(), texto, equipo);
-    return { propuestas, conIa: !!ia() };
+    const propuestas = await interpretarDictado(
+      d.iaPara('dictado'),
+      texto,
+      equipo
+    );
+    return { propuestas, conIa: !!d.iaPara('dictado') };
   });
 
   router.post('/ia/dictado/aceptar', async (contexto) => {
@@ -515,12 +548,27 @@ export function registrarRutasIa(
 
   router.post('/ia/respuesta', async (contexto) => {
     d.exigirAdmin(contexto);
-    const config = exigirIa();
-    const { id, instrucciones } = (contexto.cuerpo ?? {}) as {
+    const config = exigirIa('respuestas');
+    const { id, instrucciones, correo } = (contexto.cuerpo ?? {}) as {
       id?: string;
       instrucciones?: string;
+      /** Un correo pegado tal cual, cuando no viene de un pendiente. */
+      correo?: string;
     };
-    const tarea = d.pendientesDeCorreo().find((t) => t.id === id);
+    const tarea =
+      typeof correo === 'string' && correo.trim()
+        ? {
+            id: 'libre',
+            title: /^Asunto: (.+)$/m.exec(correo)?.[1]?.trim() ?? 'Correo',
+            description: correo.trim().slice(0, 8000),
+            status: 'pendiente' as const,
+            priority: 'media' as const,
+            accountId: 'mios',
+            origin: 'correo' as const,
+            tags: [],
+            updatedAt: new Date().toISOString()
+          }
+        : d.pendientesDeCorreo().find((t) => t.id === id);
     if (!tarea) {
       throw new ErrorPuente(
         'Ese pendiente no viene del correo o ya no está.',
@@ -601,7 +649,7 @@ export function registrarRutasIa(
   // --- Diagnostico de caidas y despliegues fallidos ---
 
   const diagnosticos = async (ahora: Date): Promise<Diagnostico[]> => {
-    const config = ia();
+    const config = d.iaPara('diagnosticos');
     const [monitoreo, despliegues] = await Promise.all([
       d.fuentes.monitoreo().catch(() => [] as MonitorTarget[]),
       d.fuentes.despliegues().catch(() => [] as Deployment[])
@@ -681,14 +729,14 @@ export function registrarRutasIa(
 
   router.post('/ia/diagnosticos/generar', async (contexto) => {
     d.exigirAdmin(contexto);
-    exigirIa();
+    exigirIa('diagnosticos');
     return diagnosticos(new Date());
   });
 
   // --- La semana en los repositorios ---
 
   const resumenRepos = async (forzar: boolean, ahora = new Date()) => {
-    const config = exigirIa();
+    const config = exigirIa('repos');
     const github = d.cfg().github;
     if (!github) {
       throw new ErrorConfiguracion(
@@ -729,7 +777,7 @@ export function registrarRutasIa(
       d.datos.anotaciones.leer(),
       ahora
     );
-    return redactar ? redactarAperturas(ia(), semanas) : semanas;
+    return redactar ? redactarAperturas(d.iaPara('semana'), semanas) : semanas;
   };
 
   const enviarSemana = async (
@@ -800,7 +848,7 @@ export function registrarRutasIa(
     const vistos = d.datos.iaPendientes.leer();
     // Empresa y prioridad de Ops/personales ya no se piden solas al modelo:
     // se usa lo que haya guardado.
-    if (config && d.clasificarPendientesAutomatico) {
+    if (config && d.iaPara('pendientes')) {
       const nuevos = tareas
         .filter((t) => !vistos[t.id] && (!t.company || !t.priority))
         .slice(0, MAXIMO_POR_LOTE);

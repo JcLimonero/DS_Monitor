@@ -7,7 +7,7 @@ import {
   signal
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { EMPRESAS, Propuesta } from '../../core/ia/ia.models';
+import { Borrador, EMPRESAS, Propuesta } from '../../core/ia/ia.models';
 import { IaService, describirError } from '../../core/ia/ia.service';
 import { TASK_PRIORITY_LABEL, TaskPriority } from '../../core/models';
 import { PortalStore } from '../../core/state/portal.store';
@@ -83,6 +83,46 @@ export class DictadoComponent implements OnDestroy {
   readonly error = signal<string | undefined>(undefined);
 
   readonly equipo = this.ia.equipo;
+
+  // --- Responder un correo ---
+  readonly correoRecibido = signal('');
+  readonly instruccionesRespuesta = signal('');
+  readonly redactando = signal(false);
+  readonly errorRespuesta = signal<string | undefined>(undefined);
+  readonly borrador = signal<Borrador | undefined>(undefined);
+  readonly mailto = computed(() => {
+    const b = this.borrador();
+    return b
+      ? `mailto:${encodeURIComponent(b.para ?? '')}?subject=${encodeURIComponent(b.asunto)}&body=${encodeURIComponent(b.cuerpo)}`
+      : '';
+  });
+
+  redactarRespuesta(): void {
+    this.redactando.set(true);
+    this.errorRespuesta.set(undefined);
+    this.ia
+      .responderCorreo(
+        this.correoRecibido(),
+        this.instruccionesRespuesta() || undefined
+      )
+      .subscribe({
+        next: (b) => {
+          this.borrador.set(b);
+          this.redactando.set(false);
+        },
+        error: (e: unknown) => {
+          this.errorRespuesta.set(describirError(e));
+          this.redactando.set(false);
+        }
+      });
+  }
+
+  copiarBorrador(): void {
+    const b = this.borrador();
+    if (b) {
+      void navigator.clipboard?.writeText(b.cuerpo);
+    }
+  }
   readonly puedeProcesar = computed(
     () => this.texto().trim().length > 0 && !this.procesando()
   );

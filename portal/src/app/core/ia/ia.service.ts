@@ -128,10 +128,19 @@ export class IaService {
   respuesta(id: string, instrucciones?: string): Observable<Borrador> {
     return this.http.post<Borrador>(
       this.url('/ia/respuesta'),
-      {
-        id,
-        instrucciones
-      },
+      { id, instrucciones },
+      { headers: this.headers() }
+    );
+  }
+
+  /** Borrador de contestación a un correo pegado tal cual. */
+  responderCorreo(
+    correo: string,
+    instrucciones?: string
+  ): Observable<Borrador> {
+    return this.http.post<Borrador>(
+      this.url('/ia/respuesta'),
+      { correo, instrucciones },
       { headers: this.headers() }
     );
   }

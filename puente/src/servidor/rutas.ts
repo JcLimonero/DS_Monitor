@@ -99,6 +99,7 @@ import {
 } from '../proveedores/vercel.js';
 import { Redireccion, Router, type Contexto } from './router.js';
 import { Push, type ColaPush, type Suscripcion } from '../push/push.js';
+import { USOS_POR_OMISION, type UsoIa, type UsosIa } from '../ia/usos.js';
 import type { ClavesVapid } from '../push/vapid.js';
 import {
   registrarRutasIa,
@@ -243,6 +244,8 @@ export interface Datos {
   pushSuscripciones: AlmacenJson<Suscripcion[]>;
   pushCola: AlmacenJson<ColaPush>;
   pushAvisados: AlmacenJson<Record<string, string>>;
+  /** Donde se permite usar el modelo (Integraciones → IA). */
+  iaUsos: AlmacenJson<UsosIa>;
   /** Ligas "mis pendientes": token → persona y hasta cuando sirve. */
   ligasEquipo: AlmacenJson<Record<string, { persona: string; vence: string }>>;
   /** Lo que el equipo hizo sobre sus pendientes, para avisar en el monitor. */
@@ -325,6 +328,10 @@ export function abrirDatos(directorio: string): Datos {
     ),
     pushCola: new AlmacenJson(join(directorio, 'push-cola.json'), {}),
     pushAvisados: new AlmacenJson(join(directorio, 'push-avisados.json'), {}),
+    iaUsos: new AlmacenJson<UsosIa>(
+      join(directorio, 'ia-usos.json'),
+      USOS_POR_OMISION
+    ),
     ligasEquipo: new AlmacenJson(join(directorio, 'ligas-equipo.json'), {}),
     avisos: new AlmacenJson(join(directorio, 'avisos.json'), []),
     estatusPedido: new AlmacenJson(join(directorio, 'estatus-pedido.json'), {}),
@@ -485,6 +492,12 @@ export function construirRutas(
     datos.pushCola,
     () => cfg().acceso?.correos[0] ?? 'monitor@dealersolutions.com.mx'
   );
+  /** La configuracion del modelo solo si ese uso esta permitido. */
+  const iaPara = (uso: UsoIa) => {
+    const usos = { ...USOS_POR_OMISION, ...datos.iaUsos.leer() };
+    return usos[uso] ? cfg().ia : undefined;
+  };
+
   // Se asigna mas abajo, cuando ya existen las fuentes que necesita; las
   // rutas lo usan en tiempo de peticion, cuando ya esta.
   let ia: ServiciosIa | undefined;
@@ -967,7 +980,7 @@ export function construirRutas(
    * crezca sin fin.
    */
   const opcionesIa = () => {
-    const ia = cfg().ia;
+    const ia = iaPara('correo');
     if (!ia) {
       return undefined;
     }
@@ -983,7 +996,7 @@ export function construirRutas(
     cuenta: ConfiguracionCorreo,
     lectura: DatosCorreo
   ): Promise<TaskItem[]> => {
-    const ia = cfg().ia;
+    const ia = iaPara('correo');
     if (!ia || lectura.paraIa.length === 0) {
       return [];
     }
@@ -1835,6 +1848,7 @@ export function construirRutas(
     dominios: () => datos.dominios.leer(),
     ligaDe,
     push,
+    iaPara,
     calendarios: () =>
       buzones_(cfg(), almacenCorreo)
         .filter((c) => metodoDe(c, cfg()) === 'graph')
@@ -1914,7 +1928,7 @@ export function construirRutas(
     const completa = await transcripcion(fireflies, id);
     const equipo = await equipoCompleto();
     const nuevos = await pendientesDeTranscripcion(
-      cfg().ia,
+      iaPara('juntas'),
       completa,
       equipo,
       ahora
@@ -2071,7 +2085,7 @@ export function construirRutas(
     try {
       const equipo = await equipoCompleto();
       const propuestas = await interpretarDictado(
-        cfg().ia,
+        iaPara('dictado'),
         mensaje.texto,
         equipo
       );
