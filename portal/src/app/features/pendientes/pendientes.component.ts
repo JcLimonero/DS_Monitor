@@ -69,6 +69,7 @@ export class PendientesComponent {
     const params = inject(ActivatedRoute).snapshot.queryParamMap;
     if (params.get('owner') === 'nadie') {
       this.owner.set('nadie');
+      this.filtrosAbiertos.set(true);
     }
     if (params.get('vista') === 'personales') {
       this.vista.set('personales');
@@ -117,6 +118,20 @@ export class PendientesComponent {
   readonly vista = signal<'negocio' | 'personales'>('negocio');
   /** El formulario de alta se abre a pedido: la lista es lo primero. */
   readonly mostrarAlta = signal(false);
+  /** Los filtros se pliegan para que las dos columnas quepan en pantalla. */
+  readonly filtrosAbiertos = signal(false);
+  readonly filtrosActivos = computed(
+    () =>
+      [
+        this.search().trim() !== '',
+        this.owner() !== 'todos',
+        this.origin() !== 'todos',
+        this.priority() !== 'todas',
+        this.company() !== 'todas',
+        this.sender() !== 'todos',
+        this.includeDone()
+      ].filter(Boolean).length
+  );
   readonly sinAsignar = computed(
     () =>
       this.store

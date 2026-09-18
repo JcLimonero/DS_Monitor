@@ -114,7 +114,16 @@
 }
 
 @if (vista() === 'negocio') {
-<section class="card card-pad mt-4">
+<details class="card mt-4" [open]="filtrosAbiertos()">
+  <summary
+    class="cursor-pointer select-none px-4 py-3 text-xs font-bold uppercase tracking-wide text-ink-subtle"
+    (click)="filtrosAbiertos.set(!filtrosAbiertos()); $event.preventDefault()">
+    Filtros
+    @if (filtrosActivos() > 0) {
+      <span class="chip ml-2 bg-brand-soft text-brand">{{ filtrosActivos() }} activos</span>
+    }
+  </summary>
+<section class="card-pad pt-0">
   <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <label class="lg:col-span-2">
       <span class="mb-1 block text-xs font-medium text-ink-muted">Buscar</span>
@@ -214,12 +223,13 @@
     </label>
   </div>
 </section>
+</details>
 }
 
 @if (groups().length > 0 || sinFecha().length > 0) {
-  <div class="mt-4 grid items-start gap-6 lg:grid-cols-[3fr_2fr]">
+  <div class="mt-4 grid items-start gap-4 md:grid-cols-[3fr_2fr] md:gap-6">
     <!-- Con fecha: para trabajar, por cuándo vence -->
-    <div class="space-y-6">
+    <div class="space-y-6 md:max-h-[calc(100vh-11rem)] md:overflow-y-auto md:pr-1">
       @for (group of groups(); track group.bucket) {
         <section>
           <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
@@ -245,7 +255,7 @@
     </div>
 
     <!-- Sin fecha: lo más reciente primero, hasta que se le ponga entrega -->
-    <section class="lg:sticky lg:top-20">
+    <section class="md:max-h-[calc(100vh-11rem)] md:overflow-y-auto md:pr-1">
       <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
         Sin fecha de entrega
         <span class="chip bg-surface-muted text-ink-muted">{{ sinFecha().length }}</span>
