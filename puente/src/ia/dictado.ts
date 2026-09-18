@@ -31,6 +31,8 @@ export interface Propuesta {
   empresa?: string;
   prioridad: TaskPriority;
   venceEn?: string;
+  /** venceEn trae hora dicha por quien dicta, no el mediodia por omision. */
+  conHora?: boolean;
   responsable?: string;
   persona?: Person;
   proyecto?: string;
@@ -89,6 +91,7 @@ export async function interpretarDictado(
             (p) => p === e.prioridad
           ) ?? 'media',
         venceEn: fechaHora(e.venceEn),
+        conHora: tieneHora(e.venceEn),
         responsable,
         persona: responsable ? personaDe(responsable, equipo) : undefined,
         proyecto: texto1(e.proyecto),
@@ -98,6 +101,13 @@ export async function interpretarDictado(
       };
     })
     .filter((p): p is Propuesta => p !== undefined);
+}
+
+/** Si el modelo devolvio fecha con hora ("YYYY-MM-DDTHH:mm"). */
+function tieneHora(valor: unknown): boolean {
+  return (
+    typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(valor)
+  );
 }
 
 /** "YYYY-MM-DDTHH:mm" en hora de Mexico, o solo fecha (mediodia). */
@@ -178,6 +188,7 @@ export function interpretarPorReglas(
       empresa: personal ? undefined : empresa,
       prioridad,
       venceEn: fechaDeFrase(sinAcentos, ahora),
+      conHora: HORA_EN_FRASE.test(sinAcentos),
       responsable: persona?.name,
       persona,
       proyecto: CLIENTES.find((c) => sinAcentos.includes(c.toLowerCase())),
@@ -191,6 +202,9 @@ export function interpretarPorReglas(
 }
 
 /** "el martes a las 12", "hoy", "mañana a las 5 pm" → ISO, o nada. */
+const HORA_EN_FRASE =
+  /a las? (\d{1,2})(?::(\d{2}))?\s*(pm|am|de la tarde|de la noche)?/;
+
 export function fechaDeFrase(frase: string, ahora: Date): string | undefined {
   const hoy = new Date(
     ahora.toLocaleString('en-US', { timeZone: 'America/Mexico_City' })
@@ -209,10 +223,7 @@ export function fechaDeFrase(frase: string, ahora: Date): string | undefined {
   if (dias === undefined) {
     return undefined;
   }
-  const hora =
-    /a las? (\d{1,2})(?::(\d{2}))?\s*(pm|am|de la tarde|de la noche)?/.exec(
-      frase
-    );
+  const hora = HORA_EN_FRASE.exec(frase);
   let h = 12;
   let m = 0;
   if (hora) {

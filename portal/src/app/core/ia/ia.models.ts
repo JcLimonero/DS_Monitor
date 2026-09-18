@@ -114,6 +114,8 @@ export interface Propuesta {
   empresa?: string;
   prioridad: TaskPriority;
   venceEn?: string;
+  /** venceEn trae hora dicha, no el mediodía por omisión. */
+  conHora?: boolean;
   responsable?: string;
   persona?: Person;
   proyecto?: string;
@@ -141,6 +143,7 @@ export type CambiosPendiente = Partial<
     | 'description'
     | 'priority'
     | 'dueDate'
+    | 'dueHasTime'
     | 'company'
     | 'project'
     | 'senderKind'

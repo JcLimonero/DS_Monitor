@@ -67,6 +67,8 @@ export interface TaskItem {
   status: TaskStatus;
   priority: TaskPriority;
   dueDate?: string;
+  /** La fecha lleva hora concreta; si no, es "para ese dia". */
+  dueHasTime?: boolean;
   assignee?: Person;
   accountId: string;
   origin: TaskOrigin;

@@ -31,7 +31,7 @@ import {
 import { ACCOUNT_BAR_CLASS } from './account-colors';
 import { AccountChipComponent } from './account-chip.component';
 import { IconComponent } from './icon.component';
-import { DayPipe, RelativePipe } from './portal.pipes';
+import { DayPipe, RelativePipe, TimePipe } from './portal.pipes';
 
 const PRIORITY_CLASS: Record<TaskPriority, string> = {
   urgente: 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
@@ -75,6 +75,7 @@ const COMPANY_CLASS: Record<string, string> = {
     FormsModule,
     IconComponent,
     DayPipe,
+    TimePipe,
     RelativePipe
   ],
   template: `
@@ -200,7 +201,9 @@ const COMPANY_CLASS: Record<string, string> = {
                 <span
                   class="h-2 w-2 rounded-full"
                   [class]="done() ? 'bg-ink-subtle' : puntoPlazo()"></span>
-                {{ due | dia }} · {{ textoPlazo() }}
+                {{ due | dia
+                }}{{ task().dueHasTime ? ' ' + (due | hora) : '' }} ·
+                {{ textoPlazo() }}
               </span>
             }
           </div>
@@ -355,10 +358,22 @@ const COMPANY_CLASS: Record<string, string> = {
                     >
                     <input
                       class="field"
-                      type="datetime-local"
+                      type="date"
                       name="e-fecha-{{ task().id }}"
                       [ngModel]="e.dueLocal"
                       (ngModelChange)="patchEdit({ dueLocal: $event })" />
+                  </label>
+                  <label>
+                    <span class="mb-1 block text-xs font-medium text-ink-muted"
+                      >Hora (opcional)</span
+                    >
+                    <input
+                      class="field"
+                      type="time"
+                      name="e-hora-{{ task().id }}"
+                      [disabled]="!e.dueLocal"
+                      [ngModel]="e.dueTime"
+                      (ngModelChange)="patchEdit({ dueTime: $event })" />
                   </label>
                   <label>
                     <span class="mb-1 block text-xs font-medium text-ink-muted"
@@ -522,7 +537,10 @@ export class TaskCardComponent {
         title: string;
         description: string;
         priority: string;
+        /** "YYYY-MM-DD" del input de fecha. */
         dueLocal: string;
+        /** "HH:mm" o vacío. */
+        dueTime: string;
         company: string;
         project: string;
         senderKind: string;
@@ -705,7 +723,8 @@ export class TaskCardComponent {
       title: t.title,
       description: t.description ?? '',
       priority: t.priority,
-      dueLocal: t.dueDate ? aLocal(t.dueDate) : '',
+      dueLocal: t.dueDate ? aLocal(t.dueDate).slice(0, 10) : '',
+      dueTime: t.dueDate && t.dueHasTime ? aLocal(t.dueDate).slice(11, 16) : '',
       company: t.company ?? '',
       project: t.project ?? '',
       senderKind: t.senderKind ?? 'por_identificar'
@@ -729,7 +748,11 @@ export class TaskCardComponent {
           title: e.title,
           description: e.description,
           priority: e.priority as TaskPriority,
-          dueDate: e.dueLocal ? new Date(e.dueLocal).toISOString() : undefined,
+          // Sin hora se ancla a mediodia (cae en ese día en cualquier zona).
+          dueDate: e.dueLocal
+            ? new Date(`${e.dueLocal}T${e.dueTime || '12:00'}:00`).toISOString()
+            : undefined,
+          dueHasTime: !!(e.dueLocal && e.dueTime),
           company: e.company || undefined,
           project: e.project || undefined,
           ...(this.task().origin === 'correo'

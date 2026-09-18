@@ -18,7 +18,7 @@ import {
 } from '../../core/models';
 import { BrandLogoComponent } from '../../ui/brand-logo.component';
 import { IconComponent } from '../../ui/icon.component';
-import { DayPipe, RelativePipe } from '../../ui/portal.pipes';
+import { DayPipe, RelativePipe, TimePipe } from '../../ui/portal.pipes';
 
 /**
  * Mis pendientes: la pantalla a la que llega cada persona del equipo desde
@@ -32,6 +32,7 @@ import { DayPipe, RelativePipe } from '../../ui/portal.pipes';
   imports: [
     BrandLogoComponent,
     DayPipe,
+    TimePipe,
     FormsModule,
     IconComponent,
     RelativePipe

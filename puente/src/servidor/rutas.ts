@@ -853,6 +853,7 @@ export function construirRutas(
             (p) => p === t['priority']
           ) ?? 'media',
         dueDate: texto(t['dueDate']),
+        dueHasTime: t['dueHasTime'] === true ? true : undefined,
         accountId: 'mios',
         origin: 'local',
         project: texto(t['project']),
@@ -2287,6 +2288,7 @@ export function construirRutas(
         status: 'pendiente',
         priority: p.prioridad,
         dueDate: p.venceEn,
+        dueHasTime: p.conHora === true ? true : undefined,
         accountId: 'mios',
         origin: 'local',
         project: p.proyecto,

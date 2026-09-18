@@ -144,6 +144,8 @@ export class PendientesComponent {
   readonly newTitle = signal('');
   readonly newPriority = signal<TaskPriority>('media');
   readonly newDueDate = signal('');
+  /** "HH:mm" o vacío: sin hora el pendiente es "para ese día". */
+  readonly newDueTime = signal('');
   readonly newCompany = signal('');
 
   readonly people = computed(() => {
@@ -270,18 +272,23 @@ export class PendientesComponent {
       return;
     }
     const due = this.newDueDate();
+    const hora = due ? this.newDueTime() : '';
     this.local.add({
       title: this.newTitle(),
       priority: this.newPriority(),
-      // El input de tipo date entrega "2026-03-12"; se ancla a mediodia para
-      // que el pendiente caiga en ese día sin importar la zona horaria.
-      dueDate: due ? new Date(`${due}T12:00:00`).toISOString() : undefined,
+      // El input de tipo date entrega "2026-03-12"; sin hora se ancla a
+      // mediodia para que caiga en ese día sin importar la zona horaria.
+      dueDate: due
+        ? new Date(`${due}T${hora || '12:00'}:00`).toISOString()
+        : undefined,
+      dueHasTime: !!hora,
       company: this.vista() === 'personales' ? undefined : this.newCompany(),
       personal: this.vista() === 'personales'
     });
     this.mostrarAlta.set(false);
     this.newTitle.set('');
     this.newDueDate.set('');
+    this.newDueTime.set('');
     this.store.refreshTasks();
   }
 

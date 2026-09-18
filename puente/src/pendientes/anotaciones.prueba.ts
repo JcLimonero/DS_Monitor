@@ -35,8 +35,16 @@ describe('describirCambios', () => {
       { dueDate: '2026-09-21T12:00:00Z' }
     );
     assert.equal(texto, '');
+    // Sin hora, solo el día; con hora (dueHasTime), el día y la hora.
     assert.match(
       describirCambios({ dueDate: '2026-09-21T18:00:00.000Z' }, anterior),
+      /^Fecha: \(vacío\) → 21 sept? 2026$/
+    );
+    assert.match(
+      describirCambios(
+        { dueDate: '2026-09-21T18:00:00.000Z', dueHasTime: true },
+        anterior
+      ),
       /^Fecha: \(vacío\) → 21 sept? 2026, 12:00/
     );
   });

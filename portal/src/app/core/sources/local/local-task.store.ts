@@ -10,6 +10,7 @@ export interface NewLocalTask {
   title: string;
   priority: TaskPriority;
   dueDate?: string;
+  dueHasTime?: boolean;
   project?: string;
   company?: string;
   description?: string;
@@ -75,6 +76,7 @@ export class LocalTaskStore implements TaskSource {
       status: 'pendiente',
       priority: input.priority,
       dueDate: input.dueDate,
+      dueHasTime: input.dueHasTime ? true : undefined,
       accountId: this.accountId,
       origin: 'local',
       project: input.project?.trim() || undefined,

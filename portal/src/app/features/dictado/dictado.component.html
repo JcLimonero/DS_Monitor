@@ -64,14 +64,20 @@
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h2 class="text-sm font-semibold text-ink">
           Lo que entendí
-          <span class="chip bg-surface-muted text-ink-muted">{{ lista.length }}</span>
+          <span class="chip bg-surface-muted text-ink-muted">{{
+            lista.length
+          }}</span>
         </h2>
         <button
           type="button"
           class="btn btn-primary"
           [disabled]="guardando() || cuantasElegidas() === 0"
           (click)="guardar()">
-          {{ guardando() ? "Guardando…" : "Agregar " + cuantasElegidas() + " a pendientes" }}
+          {{
+            guardando()
+              ? "Guardando…"
+              : "Agregar " + cuantasElegidas() + " a pendientes"
+          }}
         </button>
       </div>
 
@@ -87,9 +93,12 @@
                 [ngModel]="elegidas()[$index]"
                 (ngModelChange)="elegir($index, $event)"
                 name="elegida-{{ $index }}" />
-              <div class="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div
+                class="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 <label class="sm:col-span-2 lg:col-span-3">
-                  <span class="mb-1 block text-xs font-medium text-ink-muted">Qué</span>
+                  <span class="mb-1 block text-xs font-medium text-ink-muted"
+                    >Qué</span
+                  >
                   <input
                     class="field"
                     type="text"
@@ -98,11 +107,15 @@
                     name="titulo-{{ $index }}" />
                 </label>
                 <label>
-                  <span class="mb-1 block text-xs font-medium text-ink-muted">Tipo</span>
+                  <span class="mb-1 block text-xs font-medium text-ink-muted"
+                    >Tipo</span
+                  >
                   <select
                     class="field"
                     [ngModel]="p.personal ? 'personal' : 'negocio'"
-                    (ngModelChange)="cambiar($index, { personal: $event === 'personal' })"
+                    (ngModelChange)="
+                      cambiar($index, { personal: $event === 'personal' })
+                    "
                     name="tipo-{{ $index }}">
                     <option value="negocio">Del negocio</option>
                     <option value="personal">Personal</option>
@@ -110,11 +123,15 @@
                 </label>
                 @if (!p.personal) {
                   <label>
-                    <span class="mb-1 block text-xs font-medium text-ink-muted">Empresa</span>
+                    <span class="mb-1 block text-xs font-medium text-ink-muted"
+                      >Empresa</span
+                    >
                     <select
                       class="field"
                       [ngModel]="p.empresa ?? ''"
-                      (ngModelChange)="cambiar($index, { empresa: $event || undefined })"
+                      (ngModelChange)="
+                        cambiar($index, { empresa: $event || undefined })
+                      "
                       name="empresa-{{ $index }}">
                       <option value="">Sin empresa</option>
                       @for (e of empresas; track e) {
@@ -124,7 +141,9 @@
                   </label>
                 }
                 <label>
-                  <span class="mb-1 block text-xs font-medium text-ink-muted">Prioridad</span>
+                  <span class="mb-1 block text-xs font-medium text-ink-muted"
+                    >Prioridad</span
+                  >
                   <select
                     class="field"
                     [ngModel]="p.prioridad"
@@ -136,16 +155,34 @@
                   </select>
                 </label>
                 <label>
-                  <span class="mb-1 block text-xs font-medium text-ink-muted">Para cuándo</span>
+                  <span class="mb-1 block text-xs font-medium text-ink-muted"
+                    >Para cuándo</span
+                  >
                   <input
                     class="field"
-                    type="datetime-local"
-                    [ngModel]="fechaLocal(p.venceEn)"
-                    (ngModelChange)="ponerFecha($index, $event)"
+                    type="date"
+                    [ngModel]="fechaLocal(p.venceEn).slice(0, 10)"
+                    (ngModelChange)="ponerFecha($index, $event, p)"
                     name="fecha-{{ $index }}" />
                 </label>
                 <label>
-                  <span class="mb-1 block text-xs font-medium text-ink-muted">Responsable</span>
+                  <span class="mb-1 block text-xs font-medium text-ink-muted"
+                    >Hora (opcional)</span
+                  >
+                  <input
+                    class="field"
+                    type="time"
+                    [disabled]="!p.venceEn"
+                    [ngModel]="
+                      p.conHora ? fechaLocal(p.venceEn).slice(11, 16) : ''
+                    "
+                    (ngModelChange)="ponerHora($index, $event, p)"
+                    name="hora-{{ $index }}" />
+                </label>
+                <label>
+                  <span class="mb-1 block text-xs font-medium text-ink-muted"
+                    >Responsable</span
+                  >
                   <select
                     class="field"
                     [ngModel]="p.persona?.email ?? p.persona?.id ?? ''"
@@ -153,7 +190,9 @@
                     name="responsable-{{ $index }}">
                     <option value="">Nadie</option>
                     @for (per of equipo(); track per.id) {
-                      <option [value]="per.email ?? per.id">{{ per.name }}</option>
+                      <option [value]="per.email ?? per.id">
+                        {{ per.name }}
+                      </option>
                     }
                   </select>
                   @if (p.responsable && !p.persona) {
@@ -164,11 +203,15 @@
                 </label>
                 @if (p.esJunta && ia.calendarios().length > 0) {
                   <label>
-                    <span class="mb-1 block text-xs font-medium text-ink-muted">Agendar en</span>
+                    <span class="mb-1 block text-xs font-medium text-ink-muted"
+                      >Agendar en</span
+                    >
                     <select
                       class="field"
                       [ngModel]="p.agendarEn ?? ''"
-                      (ngModelChange)="cambiar($index, { agendarEn: $event || undefined })"
+                      (ngModelChange)="
+                        cambiar($index, { agendarEn: $event || undefined })
+                      "
                       name="agendar-{{ $index }}">
                       <option value="">No agendar</option>
                       @for (c of ia.calendarios(); track c.id) {
@@ -177,22 +220,30 @@
                     </select>
                   </label>
                   <label>
-                    <span class="mb-1 block text-xs font-medium text-ink-muted">Lugar</span>
+                    <span class="mb-1 block text-xs font-medium text-ink-muted"
+                      >Lugar</span
+                    >
                     <input
                       class="field"
                       type="text"
                       [ngModel]="p.lugar ?? ''"
-                      (ngModelChange)="cambiar($index, { lugar: $event || undefined })"
+                      (ngModelChange)="
+                        cambiar($index, { lugar: $event || undefined })
+                      "
                       name="lugar-{{ $index }}" />
                   </label>
                 }
                 <label>
-                  <span class="mb-1 block text-xs font-medium text-ink-muted">Proyecto / cliente</span>
+                  <span class="mb-1 block text-xs font-medium text-ink-muted"
+                    >Proyecto / cliente</span
+                  >
                   <input
                     class="field"
                     type="text"
                     [ngModel]="p.proyecto ?? ''"
-                    (ngModelChange)="cambiar($index, { proyecto: $event || undefined })"
+                    (ngModelChange)="
+                      cambiar($index, { proyecto: $event || undefined })
+                    "
                     name="proyecto-{{ $index }}" />
                 </label>
                 @if (p.descripcion) {
@@ -217,7 +268,9 @@
     correo: el monitor no envía nada.
   </p>
   <label class="mt-3 block">
-    <span class="mb-1 block text-xs font-medium text-ink-muted">Correo recibido</span>
+    <span class="mb-1 block text-xs font-medium text-ink-muted"
+      >Correo recibido</span
+    >
     <textarea
       class="field min-h-32 w-full"
       name="correo-recibido"
@@ -226,7 +279,9 @@
       (ngModelChange)="correoRecibido.set($event)"></textarea>
   </label>
   <label class="mt-2 block">
-    <span class="mb-1 block text-xs font-medium text-ink-muted">Qué quieres contestar (opcional)</span>
+    <span class="mb-1 block text-xs font-medium text-ink-muted"
+      >Qué quieres contestar (opcional)</span
+    >
     <input
       class="field"
       type="text"
@@ -256,10 +311,14 @@
         class="field mt-2 min-h-40 w-full"
         name="borrador-respuesta"
         [ngModel]="b.cuerpo"
-        (ngModelChange)="borrador.set({ para: b.para, asunto: b.asunto, cuerpo: $event })"></textarea>
+        (ngModelChange)="
+          borrador.set({ para: b.para, asunto: b.asunto, cuerpo: $event })
+        "></textarea>
       <div class="mt-2 flex flex-wrap gap-2">
         <a class="btn btn-primary" [href]="mailto()">Abrir en mi correo</a>
-        <button type="button" class="btn" (click)="copiarBorrador()">Copiar texto</button>
+        <button type="button" class="btn" (click)="copiarBorrador()">
+          Copiar texto
+        </button>
       </div>
     </div>
   }

@@ -53,6 +53,8 @@ export interface TaskItem {
   priority: TaskPriority;
   /** Fecha compromiso en ISO. Sin fecha significa que nadie la ha puesto. */
   dueDate?: string;
+  /** La fecha lleva hora concreta; si no, es "para ese día". */
+  dueHasTime?: boolean;
   /** A quien le toca. Sin responsable el pendiente sale como "sin asignar". */
   assignee?: Person;
   accountId: string;

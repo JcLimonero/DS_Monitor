@@ -104,7 +104,13 @@ interface Columna {
                     } @else {
                       <span
                         class="block whitespace-nowrap text-base font-bold text-ink">
-                        {{ tarea.dueDate | hora }}
+                        {{
+                          tarea.dueHasTime
+                            ? (tarea.dueDate | hora)
+                            : col.id === 'hoy'
+                              ? 'hoy'
+                              : 'mañana'
+                        }}
                       </span>
                       <span
                         class="chip mt-0.5 px-2 py-0.5 text-xs"

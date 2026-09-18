@@ -232,7 +232,10 @@
             <span
               class="shrink-0 text-right text-xs font-medium"
               [class]="p.clase">
-              {{ p.t.dueDate | dia }}<br />{{ p.texto }}
+              {{ p.t.dueDate | dia
+              }}{{ p.t.dueHasTime ? " " + (p.t.dueDate | hora) : "" }}<br />{{
+                p.texto
+              }}
             </span>
           </li>
         }

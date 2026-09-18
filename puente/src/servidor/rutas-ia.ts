@@ -499,6 +499,7 @@ export function registrarRutasIa(
           typeof p.venceEn === 'string' && !Number.isNaN(Date.parse(p.venceEn))
             ? p.venceEn
             : undefined,
+        dueHasTime: p.conHora === true ? true : undefined,
         accountId: 'mios',
         origin: 'local',
         project:

@@ -88,7 +88,7 @@
       </label>
       <label>
         <span class="mb-1 block text-xs font-medium text-ink-muted"
-          >Para cuando</span
+          >Para cuándo</span
         >
         <input
           class="field"
@@ -96,6 +96,18 @@
           [ngModel]="newDueDate()"
           (ngModelChange)="newDueDate.set($event)"
           name="fecha" />
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Hora (opcional)</span
+        >
+        <input
+          class="field"
+          type="time"
+          [disabled]="!newDueDate()"
+          [ngModel]="newDueTime()"
+          (ngModelChange)="newDueTime.set($event)"
+          name="hora" />
       </label>
       @if (vista() === "negocio") {
         <label>

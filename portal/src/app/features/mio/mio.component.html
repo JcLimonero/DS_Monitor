@@ -75,7 +75,9 @@
                   }
                   @if (t.dueDate; as due) {
                     <span [class.text-danger]="vencido(t)">
-                      vence {{ due | dia }} · {{ due | relativo }}
+                      vence {{ due | dia
+                      }}{{ t.dueHasTime ? " " + (due | hora) : "" }} ·
+                      {{ due | relativo }}
                     </span>
                   }
                 </div>

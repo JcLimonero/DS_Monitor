@@ -39,6 +39,7 @@ export type CambiosPendiente = Partial<
     | 'description'
     | 'priority'
     | 'dueDate'
+    | 'dueHasTime'
     | 'company'
     | 'project'
     | 'senderKind'
@@ -107,6 +108,9 @@ export function limpiarCambios(
         ? new Date(cambios.dueDate).toISOString()
         : undefined;
   }
+  if ('dueHasTime' in cambios) {
+    salida.dueHasTime = cambios.dueHasTime === true ? true : undefined;
+  }
   if ('company' in cambios) {
     salida.company =
       typeof cambios.company === 'string' && cambios.company.trim()
@@ -148,6 +152,7 @@ const ETIQUETA_CAMPO: Record<keyof CambiosPendiente, string> = {
   description: 'Descripción',
   priority: 'Prioridad',
   dueDate: 'Fecha',
+  dueHasTime: 'Hora',
   company: 'Empresa',
   project: 'Proyecto',
   senderKind: 'Remitente'
@@ -164,6 +169,10 @@ export function describirCambios(
 ): string {
   const partes: string[] = [];
   for (const clave of Object.keys(cambios) as (keyof CambiosPendiente)[]) {
+    if (clave === 'dueHasTime') {
+      // Va implicito en la fecha: si hay hora, la fecha se muestra con ella.
+      continue;
+    }
     const nuevo = cambios[clave];
     const viejo = anterior?.[clave];
     if (anterior && igual(clave, nuevo, viejo)) {
@@ -173,8 +182,13 @@ export function describirCambios(
       partes.push(nuevo ? 'Descripción editada' : 'Descripción borrada');
       continue;
     }
-    const de = anterior ? `${mostrar(clave, viejo)} → ` : '';
-    partes.push(`${ETIQUETA_CAMPO[clave]}: ${de}${mostrar(clave, nuevo)}`);
+    const conHora =
+      clave === 'dueDate' &&
+      (cambios.dueHasTime === true || anterior?.dueHasTime === true);
+    const de = anterior ? `${mostrar(clave, viejo, conHora)} → ` : '';
+    partes.push(
+      `${ETIQUETA_CAMPO[clave]}: ${de}${mostrar(clave, nuevo, conHora)}`
+    );
   }
   return partes.join(' · ');
 }
@@ -190,14 +204,18 @@ function igual(clave: keyof CambiosPendiente, a: unknown, b: unknown): boolean {
   return (a ?? '') === (b ?? '');
 }
 
-function mostrar(clave: keyof CambiosPendiente, v: unknown): string {
+function mostrar(
+  clave: keyof CambiosPendiente,
+  v: unknown,
+  conHora = false
+): string {
   if (v === undefined || v === null || v === '') {
     return '(vacío)';
   }
   if (clave === 'dueDate' && typeof v === 'string') {
     return new Date(v).toLocaleString('es-MX', {
       dateStyle: 'medium',
-      timeStyle: 'short',
+      timeStyle: conHora ? 'short' : undefined,
       timeZone: 'America/Mexico_City'
     });
   }

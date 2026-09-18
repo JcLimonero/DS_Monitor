@@ -244,9 +244,25 @@ export class DictadoComponent implements OnDestroy {
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
   }
 
-  ponerFecha(i: number, local: string): void {
+  /** El día; conserva la hora dicha si la había, o ancla a mediodía. */
+  ponerFecha(i: number, dia: string, p: Propuesta): void {
+    if (!dia) {
+      this.cambiar(i, { venceEn: undefined, conHora: false });
+      return;
+    }
+    const hora = p.conHora ? this.fechaLocal(p.venceEn).slice(11, 16) : '12:00';
+    this.cambiar(i, { venceEn: new Date(`${dia}T${hora}:00`).toISOString() });
+  }
+
+  /** "HH:mm" o vacío para dejarlo "para ese día". */
+  ponerHora(i: number, hora: string, p: Propuesta): void {
+    const dia = this.fechaLocal(p.venceEn).slice(0, 10);
+    if (!dia) {
+      return;
+    }
     this.cambiar(i, {
-      venceEn: local ? new Date(local).toISOString() : undefined
+      venceEn: new Date(`${dia}T${hora || '12:00'}:00`).toISOString(),
+      conHora: !!hora
     });
   }
 
