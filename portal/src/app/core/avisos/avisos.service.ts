@@ -7,6 +7,8 @@ import { PORTAL_CONFIG } from '../config/portal-config.token';
 export interface Aviso {
   id: string;
   tipo: 'comento' | 'termino' | 'reabrio';
+  /** El verbo listo para mostrar; si no viene, se deduce del tipo. */
+  accion?: string;
   persona: string;
   tareaId: string;
   titulo: string;

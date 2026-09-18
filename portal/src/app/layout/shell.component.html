@@ -134,11 +134,12 @@
                         <p class="text-sm text-ink">
                           <span class="font-medium">{{ a.persona }}</span>
                           {{
-                            a.tipo === "termino"
-                              ? "terminó"
-                              : a.tipo === "reabrio"
-                                ? "reabrió"
-                                : "comentó"
+                            a.accion ??
+                              (a.tipo === "termino"
+                                ? "terminó"
+                                : a.tipo === "reabrio"
+                                  ? "reabrió"
+                                  : "comentó")
                           }}
                           <span class="font-medium">{{ a.titulo }}</span>
                         </p>

@@ -285,6 +285,8 @@ export interface Datos {
 export interface Aviso {
   id: string;
   tipo: 'comento' | 'termino' | 'reabrio';
+  /** El verbo tal cual se muestra ("puso en progreso", "terminó"). */
+  accion?: string;
   persona: string;
   tareaId: string;
   titulo: string;
@@ -2455,6 +2457,14 @@ export function construirRutas(
     cache.olvidar();
     // Quien asigna se entera: aviso en el monitor y push.
     const tarea = mias.find((t) => t.id === id) as TaskItem;
+    const accion =
+      cuerpo.hecho === true
+        ? 'terminó'
+        : cuerpo.hecho === false
+          ? cuerpo.estado && cuerpo.estado !== 'pendiente'
+            ? `puso ${TASK_STATUS_LABEL[cuerpo.estado].toLowerCase()}`
+            : 'reabrió'
+          : 'comentó';
     const aviso: Aviso = {
       id: randomBytes(8).toString('hex'),
       tipo:
@@ -2463,6 +2473,7 @@ export function construirRutas(
           : cuerpo.hecho === false
             ? 'reabrio'
             : 'comento',
+      accion,
       persona: persona.name,
       tareaId: id,
       titulo: tarea.title,
@@ -2475,7 +2486,7 @@ export function construirRutas(
     };
     await datos.avisos.escribir([aviso, ...datos.avisos.leer()].slice(0, 200));
     void push.avisar({
-      titulo: `${persona.name}: ${cuerpo.hecho === true ? 'terminó' : cuerpo.hecho === false ? 'reabrió' : 'comentó'} ${tarea.title}`,
+      titulo: `${persona.name} ${accion} ${tarea.title}`,
       cuerpo:
         typeof cuerpo.comentario === 'string'
           ? cuerpo.comentario.slice(0, 140)

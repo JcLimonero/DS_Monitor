@@ -1,7 +1,9 @@
 <div class="mx-auto max-w-2xl">
   <div class="flex items-end justify-between gap-3">
     <div>
-      <h1 class="text-xl font-bold text-ink first-letter:uppercase">{{ fecha }}</h1>
+      <h1 class="text-xl font-bold text-ink first-letter:uppercase">
+        {{ fecha }}
+      </h1>
       <p class="text-sm text-ink-muted">
         {{ juntas().length }} {{ juntas().length === 1 ? "junta" : "juntas" }} ·
         {{ vencidos().length }} vencidos · {{ paraHoy().length }} para hoy
@@ -17,13 +19,14 @@
     <pt-ia-resumen />
   </div>
 
-
   <section class="card mt-4">
     <div class="flex items-center gap-2 border-b border-line px-4 py-3">
       <pt-icon name="agenda" class="h-4 w-4 text-brand" />
       <h2 class="text-sm font-semibold text-ink">Juntas de hoy</h2>
       @if (sinHomologar() > 0) {
-        <a routerLink="/agenda" class="ml-auto chip bg-amber-100 text-amber-800">
+        <a
+          routerLink="/agenda"
+          class="ml-auto chip bg-amber-100 text-amber-800">
           {{ sinHomologar() }} sin homologar
         </a>
       }
@@ -32,11 +35,14 @@
       <ul class="divide-y divide-line">
         @for (j of juntas(); track j.id) {
           <li class="flex items-start gap-3 px-4 py-3">
-            <span class="w-14 shrink-0 text-sm font-semibold tabular-nums text-ink">
+            <span
+              class="w-14 shrink-0 text-sm font-semibold tabular-nums text-ink">
               {{ j.start | hora }}
             </span>
             <div class="min-w-0 flex-1">
-              <p class="text-sm font-medium text-ink" [class.line-through]="j.status === 'cancelada'">
+              <p
+                class="text-sm font-medium text-ink"
+                [class.line-through]="j.status === 'cancelada'">
                 {{ j.title }}
               </p>
               <p class="text-xs text-ink-muted">
@@ -47,7 +53,11 @@
               </p>
             </div>
             @if (j.joinUrl; as join) {
-              <a class="btn shrink-0 px-2 py-1 text-xs" [href]="join" target="_blank" rel="noopener">
+              <a
+                class="btn shrink-0 px-2 py-1 text-xs"
+                [href]="join"
+                target="_blank"
+                rel="noopener">
                 <pt-icon name="video" class="h-3.5 w-3.5" />
                 Entrar
               </a>
@@ -59,7 +69,9 @@
       <p class="px-4 py-4 text-sm text-ink-muted">
         Sin juntas hoy.
         @if (siguientes().length > 0) {
-          La próxima: {{ siguientes()[0]!.title }} ({{ siguientes()[0]!.start | hora }}).
+          La próxima: {{ siguientes()[0]!.title }} ({{
+            siguientes()[0]!.start | hora
+          }}).
         }
       </p>
     }
@@ -81,10 +93,13 @@
 
   @if (vencidos().length > 0) {
     <section class="mt-4">
-      <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-danger">
+      <h2
+        class="mb-2 flex items-center gap-2 text-sm font-semibold text-danger">
         <pt-icon name="alerta" class="h-4 w-4" />
         Vencidos
-        <span class="chip bg-rose-100 text-rose-700">{{ vencidos().length }}</span>
+        <span class="chip bg-rose-100 text-rose-700">{{
+          vencidos().length
+        }}</span>
       </h2>
       <div class="space-y-2">
         @for (t of vencidos(); track t.id) {
@@ -99,7 +114,9 @@
       <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
         <pt-icon name="reloj" class="h-4 w-4" />
         Para hoy
-        <span class="chip bg-surface-muted text-ink-muted">{{ paraHoy().length }}</span>
+        <span class="chip bg-surface-muted text-ink-muted">{{
+          paraHoy().length
+        }}</span>
       </h2>
       <div class="space-y-2">
         @for (t of paraHoy(); track t.id) {
@@ -114,7 +131,9 @@
       <div class="flex items-center gap-2 border-b border-line px-4 py-3">
         <pt-icon name="ok" class="h-4 w-4 text-ok" />
         <h2 class="text-sm font-semibold text-ink">Ayer</h2>
-        <span class="chip bg-surface-muted text-ink-muted">{{ ayer().length }} cerrados</span>
+        <span class="chip bg-surface-muted text-ink-muted"
+          >{{ ayer().length }} cerrados</span
+        >
       </div>
       <ul class="divide-y divide-line">
         @for (t of ayer(); track t.id) {
@@ -122,14 +141,23 @@
             <pt-icon name="ok" class="h-4 w-4 shrink-0 text-ok" />
             <span class="min-w-0 flex-1 truncate text-ink">{{ t.title }}</span>
             @if (t.assignee) {
-              <span class="shrink-0 text-xs text-ink-muted">{{ t.assignee.name }}</span>
+              <span class="shrink-0 text-xs text-ink-muted">{{
+                t.assignee.name
+              }}</span>
             }
           </li>
         }
         @for (a of movimientosAyer(); track a.id) {
           <li class="px-4 py-2 text-sm text-ink-muted">
             <span class="font-medium text-ink">{{ a.persona }}</span>
-            {{ a.tipo === "termino" ? "terminó" : a.tipo === "reabrio" ? "reabrió" : "comentó" }}
+            {{
+              a.accion ??
+                (a.tipo === "termino"
+                  ? "terminó"
+                  : a.tipo === "reabrio"
+                    ? "reabrió"
+                    : "comentó")
+            }}
             {{ a.titulo }}
             @if (a.texto) {
               · “{{ a.texto }}”
@@ -145,17 +173,30 @@
       <div class="flex items-center gap-2 border-b border-line px-4 py-3">
         <pt-icon name="reloj" class="h-4 w-4 text-brand" />
         <h2 class="text-sm font-semibold text-ink">Próximas entregas</h2>
-        <span class="chip bg-surface-muted text-ink-muted">{{ proximas().length }}</span>
-        <span class="ml-auto hidden items-center gap-3 text-[10px] uppercase tracking-wide text-ink-subtle sm:flex">
-          <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-orange-500"></span>≤ 2 días</span>
-          <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-amber-500"></span>semana</span>
-          <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>después</span>
+        <span class="chip bg-surface-muted text-ink-muted">{{
+          proximas().length
+        }}</span>
+        <span
+          class="ml-auto hidden items-center gap-3 text-[10px] uppercase tracking-wide text-ink-subtle sm:flex">
+          <span class="flex items-center gap-1"
+            ><span class="h-2 w-2 rounded-full bg-orange-500"></span>≤ 2
+            días</span
+          >
+          <span class="flex items-center gap-1"
+            ><span class="h-2 w-2 rounded-full bg-amber-500"></span>semana</span
+          >
+          <span class="flex items-center gap-1"
+            ><span class="h-2 w-2 rounded-full bg-emerald-500"></span
+            >después</span
+          >
         </span>
       </div>
       <ul class="divide-y divide-line">
         @for (p of proximas(); track p.t.id) {
           <li class="flex items-center gap-3 px-4 py-2 text-sm">
-            <span class="h-2.5 w-2.5 shrink-0 rounded-full" [class]="p.punto"></span>
+            <span
+              class="h-2.5 w-2.5 shrink-0 rounded-full"
+              [class]="p.punto"></span>
             <span class="min-w-0 flex-1">
               <span class="block truncate text-ink">{{ p.t.title }}</span>
               <span class="block text-xs text-ink-muted">
@@ -165,7 +206,9 @@
                 }
               </span>
             </span>
-            <span class="shrink-0 text-right text-xs font-medium" [class]="p.clase">
+            <span
+              class="shrink-0 text-right text-xs font-medium"
+              [class]="p.clase">
               {{ p.t.dueDate | dia }}<br />{{ p.texto }}
             </span>
           </li>
@@ -176,7 +219,9 @@
 
   @if (mios().length > 0) {
     <section class="mt-4">
-      <h2 class="mb-2 text-sm font-semibold text-ink">Míos, sin fecha cercana</h2>
+      <h2 class="mb-2 text-sm font-semibold text-ink">
+        Míos, sin fecha cercana
+      </h2>
       <div class="space-y-2">
         @for (t of mios(); track t.id) {
           <pt-task-card [task]="t" />
@@ -185,10 +230,17 @@
     </section>
   }
 
-  @if (!cargando() && vencidos().length === 0 && paraHoy().length === 0 && juntas().length === 0) {
+  @if (
+    !cargando() &&
+    vencidos().length === 0 &&
+    paraHoy().length === 0 &&
+    juntas().length === 0
+  ) {
     <p class="mt-4 text-center text-sm text-ink-muted">
-      Nada urgente hoy. <a routerLink="/pendientes" class="text-brand hover:underline">Ver todos los pendientes</a>.
+      Nada urgente hoy.
+      <a routerLink="/pendientes" class="text-brand hover:underline"
+        >Ver todos los pendientes</a
+      >.
     </p>
   }
-
 </div>
