@@ -248,6 +248,12 @@ export interface Configuracion {
    * regreso de OAuth. Por omision, localhost con el puerto y el prefijo.
    */
   urlPublica: string;
+  /**
+   * URL del portal tal como la abre la gente (ligas del equipo, avisos de
+   * Telegram, correos). Por omision, la publica del puente sin `/api/portal`;
+   * va aparte porque cambiar la del puente cambia la URI de regreso de OAuth.
+   */
+  urlPortal: string;
   /** Emisores autorizados a mandar datos al puente. */
   clientesIngesta: ClienteIngesta[];
   /** Donde se guarda lo recibido. Vacio lo deja solo en memoria. */
@@ -581,6 +587,12 @@ function leer(): Configuracion {
     urlPublica:
       texto('PUENTE_URL_PUBLICA')?.replace(/\/+$/, '') ??
       `http://localhost:${numeroCon('PUENTE_PUERTO', 8787)}${texto('PUENTE_PREFIJO') ?? ''}`,
+    urlPortal:
+      texto('PUENTE_PORTAL_URL')?.replace(/\/+$/, '') ??
+      (
+        texto('PUENTE_URL_PUBLICA')?.replace(/\/+$/, '') ??
+        `http://localhost:${numeroCon('PUENTE_PUERTO', 8787)}`
+      ).replace(/\/api\/portal$/, ''),
     clientesIngesta: clientesIngesta(),
     directorioIngesta: texto('INGESTA_DIRECTORIO') ?? 'datos/ingesta',
     maximoCuerpoBytes: numeroCon('INGESTA_MAXIMO_KB', 512) * 1024,

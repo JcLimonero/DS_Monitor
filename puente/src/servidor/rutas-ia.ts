@@ -220,7 +220,7 @@ export function registrarRutasIa(
       usos: await d.datos.iaUsos.escribir(limpiarUsos(contexto.cuerpo, actual))
     };
   });
-  const urlPortal = () => d.cfg().urlPublica.replace(/\/api\/portal$/, '');
+  const urlPortal = () => d.cfg().urlPortal;
 
   router.get('/ia/estado', async () => {
     const config = ia();

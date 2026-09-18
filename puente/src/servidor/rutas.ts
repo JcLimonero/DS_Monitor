@@ -1629,7 +1629,7 @@ export function construirRutas(
       ...vigentes,
       [token]: { persona: persona.id, vence: proximasTres(ahora) }
     });
-    return `${cfg().urlPublica.replace(/\/api\/portal$/, '')}/mio/${token}`;
+    return `${cfg().urlPortal}/mio/${token}`;
   };
 
   /**
@@ -2288,7 +2288,7 @@ export function construirRutas(
       }
       cache.olvidar();
       await contestar(
-        `Agregué ${nuevos.length}:\n${lineas.join('\n')}\n\nRevísalos en ${cfg().urlPublica.replace(/\/api\/portal$/, '')}/pendientes`
+        `Agregué ${nuevos.length}:\n${lineas.join('\n')}\n\nRevísalos en ${cfg().urlPortal}/pendientes`
       );
     } catch (error) {
       await contestar(`No pude procesarlo: ${(error as Error).message}`);
