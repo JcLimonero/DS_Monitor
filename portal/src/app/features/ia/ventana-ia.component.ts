@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  Injectable,
   inject,
   signal,
   viewChild
@@ -17,6 +18,36 @@ interface Turno {
   texto: string;
 }
 
+/** Si la ventana está abierta; lo comparten el botón de la cabecera y el panel. */
+@Injectable({ providedIn: 'root' })
+export class VentanaIaEstado {
+  readonly abierta = signal(false);
+}
+
+/**
+ * El botón de la cabecera que abre la ventana. Va separado del panel porque
+ * la cabecera lleva backdrop-blur, y eso vuelve al `fixed` del panel relativo
+ * a ella: el panel se monta en la raíz del shell.
+ */
+@Component({
+  selector: 'pt-ventana-ia-boton',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <button
+      type="button"
+      class="btn px-2 py-1.5"
+      aria-label="Abrir la ventana de la IA"
+      title="Pedirle algo a la IA"
+      (click)="estado.abierta.set(!estado.abierta())">
+      <span class="text-base leading-none">✦</span>
+      <span class="hidden text-xs sm:inline">IA</span>
+    </button>
+  `
+})
+export class VentanaIaBotonComponent {
+  readonly estado = inject(VentanaIaEstado);
+}
+
 /**
  * La ventana de la IA: un panel lateral para preguntarle lo que sea sobre
  * el tablero ("¿qué vence esta semana de Dealer?", "redáctame un mensaje
@@ -28,16 +59,6 @@ interface Turno {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, IconComponent],
   template: `
-    <button
-      type="button"
-      class="btn px-2 py-1.5"
-      aria-label="Abrir la ventana de la IA"
-      title="Pedirle algo a la IA"
-      (click)="abierta.set(!abierta())">
-      <span class="text-base leading-none">✦</span>
-      <span class="hidden text-xs sm:inline">IA</span>
-    </button>
-
     @if (abierta()) {
       <div
         class="fixed inset-0 z-30 bg-black/30"
@@ -160,7 +181,7 @@ export class VentanaIaComponent {
   private readonly router = inject(Router);
   private readonly hilo = viewChild<ElementRef<HTMLDivElement>>('hilo');
 
-  readonly abierta = signal(false);
+  readonly abierta = inject(VentanaIaEstado).abierta;
   readonly texto = signal('');
   readonly turnos = signal<Turno[]>([]);
   readonly ocupado = signal(false);

@@ -83,7 +83,7 @@
         </button>
 
         <div class="ml-auto flex items-center gap-3">
-          <pt-ventana-ia />
+          <pt-ventana-ia-boton />
           <div class="relative">
             <button
               type="button"
@@ -105,7 +105,8 @@
               <div
                 class="absolute right-0 z-40 mt-2 w-[min(92vw,22rem)] rounded-lg border border-line bg-surface p-2 shadow-lg">
                 <div class="flex items-center justify-between px-2 py-1">
-                  <p class="text-xs font-bold uppercase tracking-wide text-ink-subtle">
+                  <p
+                    class="text-xs font-bold uppercase tracking-wide text-ink-subtle">
                     Movimientos del equipo
                   </p>
                   @if (avisos.noLeidos() > 0) {
@@ -118,7 +119,9 @@
                   }
                 </div>
                 @if (avisos.avisos().length === 0) {
-                  <p class="px-2 py-3 text-sm text-ink-muted">Sin movimientos todavía.</p>
+                  <p class="px-2 py-3 text-sm text-ink-muted">
+                    Sin movimientos todavía.
+                  </p>
                 }
                 <ul class="max-h-96 overflow-y-auto">
                   @for (a of avisos.avisos().slice(0, 30); track a.id) {
@@ -130,13 +133,21 @@
                         (click)="irAlAviso(a)">
                         <p class="text-sm text-ink">
                           <span class="font-medium">{{ a.persona }}</span>
-                          {{ a.tipo === "termino" ? "terminó" : a.tipo === "reabrio" ? "reabrió" : "comentó" }}
+                          {{
+                            a.tipo === "termino"
+                              ? "terminó"
+                              : a.tipo === "reabrio"
+                                ? "reabrió"
+                                : "comentó"
+                          }}
                           <span class="font-medium">{{ a.titulo }}</span>
                         </p>
                         @if (a.texto) {
                           <p class="text-xs text-ink-muted">“{{ a.texto }}”</p>
                         }
-                        <p class="text-xs text-ink-subtle">{{ a.en | relativo }}</p>
+                        <p class="text-xs text-ink-subtle">
+                          {{ a.en | relativo }}
+                        </p>
                       </button>
                     </li>
                   }
@@ -211,3 +222,6 @@
     </a>
   </div>
 </div>
+
+<!-- Fuera de la cabecera (backdrop-blur) para que el fixed sea de verdad -->
+<pt-ventana-ia />
