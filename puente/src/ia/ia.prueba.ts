@@ -373,3 +373,33 @@ describe('dictado por reglas', () => {
     assert.equal(fechaDeFrase('sin fecha', jueves), undefined);
   });
 });
+
+describe('acuerdos de Fireflies', () => {
+  it('lee los action items por persona y los empareja con el equipo', async () => {
+    const { leerAcuerdos } = await import('./juntas-fireflies.js');
+    const texto = `
+**Carlos**
+Compartir el API para incluir ID de cuenta (11:39)
+Preparar conexión y mapeo para Salesforce en sandbox (11:38)
+
+**Johana**
+- Actualizar los registros para enviar el monto pendiente (06:01)
+
+**Equipo (Carlos, Johana y Marcos)**
+Realizar pruebas integradas el martes o miércoles próximos (12:05)
+`;
+    const equipo: Person[] = [
+      { id: 'carlos', name: 'Carlos Limón', email: 'carlos@x.com' }
+    ];
+    const acuerdos = leerAcuerdos(texto, equipo);
+    assert.equal(acuerdos.length, 4);
+    assert.equal(
+      acuerdos[0]?.titulo,
+      'Compartir el API para incluir ID de cuenta'
+    );
+    assert.equal(acuerdos[0]?.persona?.id, 'carlos');
+    assert.equal(acuerdos[2]?.responsable, 'Johana');
+    assert.equal(acuerdos[2]?.persona, undefined);
+    assert.equal(acuerdos[3]?.responsable, undefined);
+  });
+});

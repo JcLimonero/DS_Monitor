@@ -35,7 +35,11 @@ import type {
   ConfiguracionOdoo,
   ConfiguracionVercel
 } from '../config/entorno.js';
-import { transcripcionesRecientes } from '../proveedores/fireflies.js';
+import {
+  transcripcion,
+  transcripcionesRecientes
+} from '../proveedores/fireflies.js';
+import { pendientesDeTranscripcion } from '../ia/juntas-fireflies.js';
 import { leerUpdate, responder } from '../proveedores/telegram.js';
 import { interpretarDictado } from '../ia/dictado.js';
 import {
@@ -230,6 +234,10 @@ export interface Datos {
   pushSuscripciones: AlmacenJson<Suscripcion[]>;
   pushCola: AlmacenJson<ColaPush>;
   pushAvisados: AlmacenJson<Record<string, string>>;
+  /** Transcripciones de Fireflies ya convertidas en pendientes. */
+  firefliesProcesadas: AlmacenJson<
+    Record<string, { en: string; titulo: string; pendientes: number }>
+  >;
 }
 
 /** Lee todos los almacenes del disco; se llama una vez al arrancar. */
@@ -287,7 +295,11 @@ export function abrirDatos(directorio: string): Datos {
       []
     ),
     pushCola: new AlmacenJson(join(directorio, 'push-cola.json'), {}),
-    pushAvisados: new AlmacenJson(join(directorio, 'push-avisados.json'), {})
+    pushAvisados: new AlmacenJson(join(directorio, 'push-avisados.json'), {}),
+    firefliesProcesadas: new AlmacenJson(
+      join(directorio, 'fireflies-procesadas.json'),
+      {}
+    )
   };
 }
 
@@ -1775,6 +1787,107 @@ export function construirRutas(
         )
       : []
   );
+
+  // Cada junta que Fireflies transcribe se vuelve pendientes (uno por
+  // acuerdo, agrupados por el nombre de la junta), una sola vez por
+  // transcripcion. Corre solo cada 15 min; /fireflies/procesar lo fuerza.
+  const procesarTranscripcion = async (
+    id: string,
+    ahora = new Date()
+  ): Promise<{ titulo: string; pendientes: number }> => {
+    const fireflies = cfg().fireflies;
+    if (!fireflies) {
+      throw new ErrorConfiguracion(
+        'Falta la API key de Fireflies (Agenda → Configuración).'
+      );
+    }
+    const completa = await transcripcion(fireflies, id);
+    const equipo = await equipoCompleto();
+    const nuevos = await pendientesDeTranscripcion(
+      cfg().ia,
+      completa,
+      equipo,
+      ahora
+    );
+    const existentes = new Set(datos.personales.leer().map((t) => t.id));
+    const agregar = nuevos.filter((t) => !existentes.has(t.id));
+    await datos.personales.escribir([
+      ...agregar.map(({ assignee: _a, ...t }) => t),
+      ...datos.personales.leer()
+    ]);
+    for (const t of agregar) {
+      if (t.assignee?.email || t.assignee?.id) {
+        await asignarPendiente(
+          t.id,
+          t.assignee.email ?? t.assignee.id,
+          t,
+          undefined
+        ).catch((error) =>
+          console.warn(`[puente] Fireflies: ${(error as Error).message}`)
+        );
+      }
+    }
+    await datos.firefliesProcesadas.escribir({
+      ...datos.firefliesProcesadas.leer(),
+      [id]: {
+        en: ahora.toISOString(),
+        titulo: completa.titulo,
+        pendientes: agregar.length
+      }
+    });
+    if (agregar.length > 0) {
+      cache.olvidar();
+      void push.avisar({
+        titulo: `Junta: ${completa.titulo}`,
+        cuerpo: `${agregar.length} ${agregar.length === 1 ? 'acuerdo registrado' : 'acuerdos registrados'} como pendientes.`,
+        url: '/pendientes',
+        etiqueta: `fireflies:${id}`
+      });
+    }
+    return { titulo: completa.titulo, pendientes: agregar.length };
+  };
+
+  router.get('/fireflies/estado', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    return datos.firefliesProcesadas.leer();
+  });
+
+  router.post('/fireflies/procesar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { id } = (contexto.cuerpo ?? {}) as { id?: string };
+    if (typeof id !== 'string' || !id) {
+      throw new ErrorPuente('Falta el id de la transcripción.', 400);
+    }
+    return procesarTranscripcion(id);
+  });
+
+  programables.push({
+    nombre: 'juntas de Fireflies',
+    cadaMinutos: 15,
+    correr: async () => {
+      const fireflies = cfg().fireflies;
+      if (!fireflies) {
+        return;
+      }
+      const procesadas = datos.firefliesProcesadas.leer();
+      const recientes = await transcripcionesRecientes(fireflies, 3, 20);
+      for (const t of recientes) {
+        if (procesadas[t.id] || !t.acuerdos) {
+          continue;
+        }
+        try {
+          const r = await procesarTranscripcion(t.id);
+          console.log(
+            `[puente] junta "${r.titulo}": ${r.pendientes} pendientes desde Fireflies`
+          );
+        } catch (error) {
+          console.warn(
+            `[puente] Fireflies "${t.titulo}": ${(error as Error).message}`
+          );
+        }
+      }
+    }
+  });
 
   // --- Telegram: dictar por chat ---
   //
