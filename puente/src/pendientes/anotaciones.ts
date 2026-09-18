@@ -142,3 +142,64 @@ export function conEvento(
     historial: [...(nota.historial ?? []), entrada].slice(-200)
   };
 }
+
+const ETIQUETA_CAMPO: Record<keyof CambiosPendiente, string> = {
+  title: 'Título',
+  description: 'Descripción',
+  priority: 'Prioridad',
+  dueDate: 'Fecha',
+  company: 'Empresa',
+  project: 'Proyecto',
+  senderKind: 'Remitente'
+};
+
+/**
+ * Lo que cambio, en una linea para la trazabilidad: solo los campos cuyo
+ * valor es distinto del que tenia el pendiente (el portal manda el
+ * formulario completo). Sin el pendiente anterior se listan todos.
+ */
+export function describirCambios(
+  cambios: CambiosPendiente,
+  anterior?: Partial<TaskItem>
+): string {
+  const partes: string[] = [];
+  for (const clave of Object.keys(cambios) as (keyof CambiosPendiente)[]) {
+    const nuevo = cambios[clave];
+    const viejo = anterior?.[clave];
+    if (anterior && igual(clave, nuevo, viejo)) {
+      continue;
+    }
+    if (clave === 'description') {
+      partes.push(nuevo ? 'Descripción editada' : 'Descripción borrada');
+      continue;
+    }
+    const de = anterior ? `${mostrar(clave, viejo)} → ` : '';
+    partes.push(`${ETIQUETA_CAMPO[clave]}: ${de}${mostrar(clave, nuevo)}`);
+  }
+  return partes.join(' · ');
+}
+
+function igual(clave: keyof CambiosPendiente, a: unknown, b: unknown): boolean {
+  if (clave === 'dueDate') {
+    const fecha = (v: unknown) =>
+      typeof v === 'string' && !Number.isNaN(Date.parse(v))
+        ? new Date(v).toISOString()
+        : '';
+    return fecha(a) === fecha(b);
+  }
+  return (a ?? '') === (b ?? '');
+}
+
+function mostrar(clave: keyof CambiosPendiente, v: unknown): string {
+  if (v === undefined || v === null || v === '') {
+    return '(vacío)';
+  }
+  if (clave === 'dueDate' && typeof v === 'string') {
+    return new Date(v).toLocaleString('es-MX', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'America/Mexico_City'
+    });
+  }
+  return String(v).slice(0, 60);
+}

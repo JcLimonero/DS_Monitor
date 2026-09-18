@@ -276,28 +276,6 @@ const COMPANY_CLASS: Record<string, string> = {
                 </form>
 
                 <div class="flex flex-wrap items-end gap-2">
-                  <label>
-                    <span class="mb-1 block text-xs font-medium text-ink-muted"
-                      >Asignar a</span
-                    >
-                    <select
-                      class="field"
-                      [ngModel]="assignTo()"
-                      (ngModelChange)="assignTo.set($event)"
-                      name="asignar-{{ task().id }}">
-                      <option value="">Nadie</option>
-                      @for (p of ia.equipo(); track p.id) {
-                        <option [value]="p.email ?? p.id">{{ p.name }}</option>
-                      }
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    class="btn"
-                    [disabled]="saving()"
-                    (click)="assign()">
-                    Asignar y avisar
-                  </button>
                   <button
                     type="button"
                     class="btn"
@@ -532,7 +510,6 @@ export class TaskCardComponent {
 
   readonly open = signal(false);
   readonly draft = signal('');
-  readonly assignTo = signal('');
   readonly saving = signal(false);
   readonly drafting = signal(false);
   readonly message = signal<string | undefined>(undefined);
@@ -656,7 +633,7 @@ export class TaskCardComponent {
     this.open.set(true);
     setTimeout(() => {
       const select = document.querySelector<HTMLSelectElement>(
-        `select[name="asignar-${CSS.escape(this.task().id)}"]`
+        `select[name="resp-${CSS.escape(this.task().id)}"]`
       );
       select?.focus();
     });
@@ -705,10 +682,6 @@ export class TaskCardComponent {
   /** Reasignar desde la lista: cambia y avisa sin abrir la tarjeta. */
   reasignar(quien: string): void {
     this.guardar({ asignarA: quien, tarea: this.task() });
-  }
-
-  assign(): void {
-    this.guardar({ asignarA: this.assignTo(), tarea: this.task() });
   }
 
   reply(): void {
@@ -762,7 +735,10 @@ export class TaskCardComponent {
           ...(this.task().origin === 'correo'
             ? { senderKind: e.senderKind as TaskItem['senderKind'] }
             : {})
-        }
+        },
+        // Con lo que tenía, el puente anota en la trazabilidad solo lo que
+        // de verdad cambió.
+        tarea: this.task()
       },
       () => this.editing.set(undefined)
     );

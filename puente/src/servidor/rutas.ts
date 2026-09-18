@@ -31,6 +31,7 @@ import type { Fuentes } from '../ia/tablero.js';
 import {
   anotar,
   conEvento,
+  describirCambios,
   limpiarCambios,
   type Anotacion,
   type Anotaciones,
@@ -1782,12 +1783,12 @@ export function construirRutas(
     }
     if (cuerpo.cambios && typeof cuerpo.cambios === 'object') {
       const limpios = limpiarCambios(cuerpo.cambios);
-      const resumenCambios = Object.entries(limpios)
-        .map(
-          ([k, v]) =>
-            `${k}: ${v === undefined ? '(vacío)' : String(v).slice(0, 60)}`
-        )
-        .join(', ');
+      const resumenCambios = describirCambios(
+        limpios,
+        cuerpo.tarea ??
+          datos.personales.leer().find((t) => t.id === id) ??
+          undefined
+      );
       if (resumenCambios) {
         nota = conEvento(nota, {
           at: ahora,
