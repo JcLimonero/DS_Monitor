@@ -95,6 +95,7 @@ export async function diagnosticar(
   ahora = new Date()
 ): Promise<Diagnostico> {
   const texto = await preguntar(config, {
+    uso: 'diagnosticos',
     sistema: `${CONTEXTO_EMPRESAS}\nEres quien atiende la guardia técnica. Te doy la evidencia de ${clase === 'sitio' ? 'un sitio que el monitoreo marca caído' : 'un despliegue de Vercel que falló'}. Responde SOLO JSON: {"resumen":"qué pasa, en una línea de máx. 120 caracteres","causa":"la causa más probable, máx. 160 caracteres","accion":"qué hacer primero, máx. 160 caracteres"}. Sé concreto: cita el código HTTP, el error o la línea de la bitácora que lo delata. Si la evidencia no alcanza, dilo.`,
     usuario: `Objetivo: ${objetivo}\n\nEvidencia:\n${evidencia}`,
     json: true,

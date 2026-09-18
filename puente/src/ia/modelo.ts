@@ -12,6 +12,8 @@ import { ErrorProveedor } from '../nucleo/errores.js';
  */
 
 export interface Pregunta {
+  /** Para que se llama al modelo; queda en la bitacora. */
+  uso?: string;
   sistema: string;
   usuario: string;
   /** Pedir JSON (el modelo lo respeta mejor con el response_format). */
@@ -21,8 +23,38 @@ export interface Pregunta {
 
 interface RespuestaChat {
   choices?: { message?: { content?: string } }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number };
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    /** OpenRouter lo manda cuando se pide `usage.include`: en USD. */
+    cost?: number;
+  };
   error?: { message?: string };
+}
+
+/** Una llamada al modelo, tal como queda en la bitacora. */
+export interface EntradaBitacora {
+  en: string;
+  uso: string;
+  modelo: string;
+  ms: number;
+  entrada: number;
+  salida: number;
+  /** USD, cuando OpenRouter lo reporta. */
+  costo?: number;
+  /** Lo que se le pidio y lo que contesto, recortados. */
+  pregunta: string;
+  respuesta: string;
+  error?: string;
+}
+
+let bitacora: ((entrada: EntradaBitacora) => void) | undefined;
+
+/** Quien quiera guardar las llamadas (rutas.ts) se engancha aqui. */
+export function establecerBitacora(
+  fn: (entrada: EntradaBitacora) => void
+): void {
+  bitacora = fn;
 }
 
 /** Cuanto se ha gastado desde que arranco el proceso, para la bitacora. */
@@ -32,6 +64,19 @@ export async function preguntar(
   config: ConfiguracionIa,
   pregunta: Pregunta
 ): Promise<string> {
+  const inicio = Date.now();
+  const anotar = (parte: Partial<EntradaBitacora>) =>
+    bitacora?.({
+      en: new Date().toISOString(),
+      uso: pregunta.uso ?? 'otro',
+      modelo: config.modelo,
+      ms: Date.now() - inicio,
+      entrada: 0,
+      salida: 0,
+      pregunta: pregunta.usuario.slice(0, 600),
+      respuesta: '',
+      ...parte
+    });
   const respuesta = await fetch(
     'https://openrouter.ai/api/v1/chat/completions',
     {
@@ -46,6 +91,7 @@ export async function preguntar(
         model: config.modelo,
         temperature: 0,
         max_tokens: pregunta.maxTokens ?? 2000,
+        usage: { include: true },
         ...(pregunta.json ? { response_format: { type: 'json_object' } } : {}),
         messages: [
           { role: 'system', content: pregunta.sistema },
@@ -56,6 +102,9 @@ export async function preguntar(
   );
   const datos = (await respuesta.json().catch(() => ({}))) as RespuestaChat;
   if (!respuesta.ok) {
+    anotar({
+      error: `${respuesta.status}: ${(datos.error?.message ?? '').slice(0, 200)}`
+    });
     throw new ErrorProveedor(
       'openrouter',
       `respondió ${respuesta.status}: ${(datos.error?.message ?? '').slice(0, 200)}`,
@@ -65,7 +114,14 @@ export async function preguntar(
   consumo.llamadas += 1;
   consumo.entrada += datos.usage?.prompt_tokens ?? 0;
   consumo.salida += datos.usage?.completion_tokens ?? 0;
-  return datos.choices?.[0]?.message?.content ?? '';
+  const contenido = datos.choices?.[0]?.message?.content ?? '';
+  anotar({
+    entrada: datos.usage?.prompt_tokens ?? 0,
+    salida: datos.usage?.completion_tokens ?? 0,
+    costo: datos.usage?.cost,
+    respuesta: contenido.slice(0, 600)
+  });
+  return contenido;
 }
 
 /** Saca el objeto JSON aunque el modelo lo envuelva en texto o en ``` */

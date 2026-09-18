@@ -106,6 +106,7 @@ export async function resumirDia(
 ): Promise<ResumenDia> {
   const contexto = contextoDelDia(tablero, alertas, ahora);
   const texto = await preguntar(config, {
+    uso: 'resumen',
     sistema: `${CONTEXTO_EMPRESAS}\nEscribes el resumen de inicio del día para una pantalla que el equipo ve de reojo. Te doy el estado del tablero en JSON: primero di en una línea qué se cerró ayer (si hubo algo), luego lo de hoy y lo que se entrega en los próximos días. Responde SOLO JSON: {"titular":"6 a 8 palabras, lo más importante del día","lineas":["...","...","..."]} con 3 o 4 líneas de máximo 110 caracteres, cada una un hecho concreto con cifras y nombres (qué vence, qué junta, qué está caído, qué alerta). Nada de saludos ni de relleno; si todo está en orden, dilo en una línea.`,
     usuario: JSON.stringify(contexto),
     json: true,

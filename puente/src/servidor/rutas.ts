@@ -100,6 +100,13 @@ import {
 import { Redireccion, Router, type Contexto } from './router.js';
 import { Push, type ColaPush, type Suscripcion } from '../push/push.js';
 import { USOS_POR_OMISION, type UsoIa, type UsosIa } from '../ia/usos.js';
+import { establecerBitacora, type EntradaBitacora } from '../ia/modelo.js';
+import {
+  aplicarAprendido,
+  aprender,
+  pistasParaModelo,
+  type Aprendizajes
+} from '../pendientes/aprendido.js';
 import type { ClavesVapid } from '../push/vapid.js';
 import {
   registrarRutasIa,
@@ -246,6 +253,10 @@ export interface Datos {
   pushAvisados: AlmacenJson<Record<string, string>>;
   /** Donde se permite usar el modelo (Integraciones → IA). */
   iaUsos: AlmacenJson<UsosIa>;
+  /** Bitacora de llamadas al modelo. */
+  iaBitacora: AlmacenJson<EntradaBitacora[]>;
+  /** Lo aprendido de las correcciones a mano, por remitente. */
+  aprendido: AlmacenJson<Aprendizajes>;
   /** Ligas "mis pendientes": token → persona y hasta cuando sirve. */
   ligasEquipo: AlmacenJson<Record<string, { persona: string; vence: string }>>;
   /** Lo que el equipo hizo sobre sus pendientes, para avisar en el monitor. */
@@ -328,6 +339,14 @@ export function abrirDatos(directorio: string): Datos {
     ),
     pushCola: new AlmacenJson(join(directorio, 'push-cola.json'), {}),
     pushAvisados: new AlmacenJson(join(directorio, 'push-avisados.json'), {}),
+    iaBitacora: new AlmacenJson<EntradaBitacora[]>(
+      join(directorio, 'ia-bitacora.json'),
+      []
+    ),
+    aprendido: new AlmacenJson<Aprendizajes>(
+      join(directorio, 'aprendido.json'),
+      {}
+    ),
     iaUsos: new AlmacenJson<UsosIa>(
       join(directorio, 'ia-usos.json'),
       USOS_POR_OMISION
@@ -486,6 +505,13 @@ export function construirRutas(
   const router = new Router();
   const ttl = configInicial.cacheSegundos;
   const acceso = new Acceso(datos.sesiones);
+  // Cada llamada al modelo queda en la bitacora (las ultimas 300).
+  establecerBitacora((entrada) => {
+    void datos.iaBitacora.escribir(
+      [entrada, ...datos.iaBitacora.leer()].slice(0, 300)
+    );
+  });
+
   const push = new Push(
     datos.pushClaves,
     datos.pushSuscripciones,
@@ -1003,7 +1029,12 @@ export function construirRutas(
     const ahora = new Date();
     let resultados: Clasificacion[];
     try {
-      resultados = await clasificarCorreos(ia, lectura.paraIa, ahora);
+      resultados = await clasificarCorreos(
+        ia,
+        lectura.paraIa,
+        ahora,
+        pistasParaModelo(datos.aprendido.leer())
+      );
     } catch (error) {
       // La IA es un extra: si falla, el buzon se sigue leyendo sin ella.
       console.warn(
@@ -1102,9 +1133,12 @@ export function construirRutas(
     }
     porCuenta[cuenta.id] = lista as TaskItem[];
     return conNotas(
-      conRemitente(
-        homologarPendientes(porCuenta)[cuenta.id] ?? [],
-        await equipoCompleto()
+      aplicarAprendido(
+        conRemitente(
+          homologarPendientes(porCuenta)[cuenta.id] ?? [],
+          await equipoCompleto()
+        ),
+        datos.aprendido.leer()
       )
     );
   };
@@ -1663,6 +1697,16 @@ export function construirRutas(
     }
     if (cuerpo.cambios && typeof cuerpo.cambios === 'object') {
       const limpios = limpiarCambios(cuerpo.cambios);
+      // Una correccion a un pendiente de correo enseña al puente para la
+      // proxima vez que escriba ese remitente.
+      const original = Object.values(datos.registroCorreo.leer())
+        .flat()
+        .find((t) => t.id === id);
+      if (original) {
+        await datos.aprendido.escribir(
+          aprender(datos.aprendido.leer(), original, limpios)
+        );
+      }
       // Los propios se editan en su lugar; los demas llevan el cambio encima.
       const propios = datos.personales.leer();
       if (propios.some((t) => t.id === id)) {
@@ -1779,7 +1823,10 @@ export function construirRutas(
       // Lo personal no es del negocio: no entra al resumen ni al correo del
       // equipo.
       return conNotas([
-        ...conRemitente(correo, await equipoCompleto()),
+        ...aplicarAprendido(
+          conRemitente(correo, await equipoCompleto()),
+          datos.aprendido.leer()
+        ),
         ...datos.personales.leer().filter((t) => !t.personal),
         ...pendientesOps(),
         ...odooTareas

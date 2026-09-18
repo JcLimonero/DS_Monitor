@@ -41,6 +41,7 @@ export async function acuerdosDeJunta(
     return [];
   }
   const texto = await preguntar(config, {
+    uso: 'juntas',
     sistema: `${CONTEXTO_EMPRESAS}\nTe doy una junta (título, fecha, asistentes y notas). Extrae los ACUERDOS: compromisos concretos que alguien tiene que hacer después de la junta. No inventes: si las notas no dicen nada accionable, devuelve una lista vacía. Responde SOLO JSON: {"acuerdos":[{"titulo":"verbo + objeto, máx. 80 caracteres","descripcion":"contexto en 1 frase o null","responsable":"nombre o correo de quien lo hace, o null","venceEn":"YYYY-MM-DD o null","prioridad":"baja|media|alta|urgente","empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null"}]}`,
     usuario: JSON.stringify({
       hoy: ahora.toISOString().slice(0, 10),

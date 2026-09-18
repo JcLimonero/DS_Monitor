@@ -66,7 +66,9 @@ Para los que NO son pendientes basta {"id":"...","esPendiente":false,"crm":null}
 export async function clasificarCorreos(
   config: ConfiguracionIa,
   correos: CandidatoIa[],
-  ahora = new Date()
+  ahora = new Date(),
+  /** Lo aprendido de correcciones: "remitente: empresa X: prioridad Y". */
+  pistas: string[] = []
 ): Promise<Clasificacion[]> {
   if (correos.length === 0) {
     return [];
@@ -80,8 +82,14 @@ export async function clasificarCorreos(
     extracto: c.texto.replace(/\s+/g, ' ').trim().slice(0, 400)
   }));
   const texto = await preguntar(config, {
+    uso: 'correo',
     sistema: PROMPT,
-    usuario: `Hoy es ${ahora.toISOString().slice(0, 10)}. Correos:\n${JSON.stringify(entrada)}`,
+    usuario:
+      `Hoy es ${ahora.toISOString().slice(0, 10)}.` +
+      (pistas.length
+        ? ` Lo que ya se sabe de algunos remitentes (respétalo):\n${pistas.join('\n')}\n`
+        : '') +
+      `Correos:\n${JSON.stringify(entrada)}`,
     json: true,
     maxTokens: 4000
   });

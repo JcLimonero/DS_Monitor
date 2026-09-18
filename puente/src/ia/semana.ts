@@ -75,6 +75,7 @@ export async function redactarAperturas(
     return semanas;
   }
   const texto = await preguntar(config, {
+    uso: 'semana',
     sistema: `${CONTEXTO_EMPRESAS}\nEscribes el correo del lunes para cada persona del equipo. Te doy, por persona, sus pendientes, lo vencido y sus juntas de la semana. Para cada una escribe UN párrafo de apertura (2 o 3 frases, máx. 320 caracteres) que la salude por su nombre de pila, le diga en qué conviene concentrarse primero y por qué, y mencione lo vencido sin regañar. Responde SOLO JSON: {"personas":[{"id":"...","apertura":"..."}]}`,
     usuario: JSON.stringify(
       semanas.map((s) => ({

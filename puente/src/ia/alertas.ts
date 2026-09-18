@@ -202,6 +202,7 @@ export async function redactarAlertas(
     return alertas;
   }
   const texto = await preguntar(config, {
+    uso: 'alertas',
     sistema: `${CONTEXTO_EMPRESAS}\nTe doy alertas de licencias y dominios detectadas por reglas. Para cada una escribe UNA frase (máx. 140 caracteres) que diga qué pasa y qué conviene hacer, sin repetir el título. Responde SOLO JSON: {"alertas":[{"id":"...","texto":"..."}]}`,
     usuario: JSON.stringify(
       alertas.map((a) => ({

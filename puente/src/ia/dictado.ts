@@ -57,6 +57,7 @@ export async function interpretarDictado(
     return interpretarPorReglas(texto, equipo, ahora);
   }
   const salida = await preguntar(config, {
+    uso: 'dictado',
     sistema: `${CONTEXTO_EMPRESAS}\nQuien te habla dicta pendientes, juntas y recordatorios en lenguaje natural, a veces varios de corrido. Conviértelos en elementos del sistema. Responde SOLO JSON: {"elementos":[{"titulo":"verbo + objeto o 'Junta con X · lugar', máx. 90 caracteres","descripcion":"el detalle que dictó, tal cual, o null","personal":false,"empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null","prioridad":"baja|media|alta|urgente","venceEn":"YYYY-MM-DDTHH:mm en hora de México o YYYY-MM-DD o null","responsable":"nombre o correo de quien lo hace, o null","proyecto":"cliente o proyecto mencionado (Vanguardia, Birdom…) o null","esJunta":false,"lugar":"lugar físico o 'Teams' si lo dice, o null"}]}. "esJunta" es true cuando es una reunión, cita o llamada con alguien a una hora. "personal" es true solo cuando claramente no es del trabajo (médico, familia, casa). Resuelve fechas relativas con la fecha de hoy; 'el martes' es el próximo martes. Si dice 'para mí' o no dice quién, responsable null. No inventes datos que no dijo.`,
     usuario: JSON.stringify({
       hoy: diaLocal(ahora),

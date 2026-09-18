@@ -10,6 +10,7 @@ import { DominiosConfigComponent } from '../configuracion/dominios-config.compon
 import { EquipoConfigComponent } from '../configuracion/equipo-config.component';
 import { AvisosConfigComponent } from '../ia/avisos-config.component';
 import { IaUsosComponent } from '../ia/ia-usos.component';
+import { IaBitacoraComponent } from '../ia/ia-bitacora.component';
 import { EmisoresConfigComponent } from '../configuracion/emisores-config.component';
 import { IntegracionConfigComponent } from '../configuracion/integracion-config.component';
 import { LicenciasConfigComponent } from '../configuracion/licencias-config.component';
@@ -84,6 +85,7 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
   imports: [
     AvisosConfigComponent,
     IaUsosComponent,
+    IaBitacoraComponent,
     CorreoConfigComponent,
     DominiosConfigComponent,
     EquipoConfigComponent,

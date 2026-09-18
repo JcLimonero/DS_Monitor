@@ -25,6 +25,7 @@ export async function borradorDeRespuesta(
   const de = /^De: (.+)$/m.exec(correo)?.[1]?.trim();
   const asunto = /^Asunto: (.+)$/m.exec(correo)?.[1]?.trim() ?? tarea.title;
   const texto = await preguntar(config, {
+    uso: 'respuestas',
     sistema: `${CONTEXTO_EMPRESAS}\nRedacta la respuesta a un correo en nombre de ${firma}. Tono profesional y cercano, breve (máx. 120 palabras), sin promesas de fechas o precios que el correo no respalde; donde falte un dato pon [entre corchetes] para que quien firma lo llene. Responde SOLO JSON: {"asunto":"Re: ...","cuerpo":"texto plano con saltos de línea"}.`,
     usuario: JSON.stringify({
       pendiente: tarea.title,

@@ -30,6 +30,7 @@ export async function clasificarPendientes(
     return [];
   }
   const texto = await preguntar(config, {
+    uso: 'pendientes',
     sistema: `${CONTEXTO_EMPRESAS}\nTe doy pendientes (título, descripción, proyecto, etiquetas, origen). Para cada uno di a qué empresa pertenece y qué prioridad merece. Responde SOLO JSON: {"pendientes":[{"id":"...","empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null","prioridad":"baja|media|alta|urgente"}]}. Urgente si hay dinero, cliente o servicio en riesgo o vence en menos de 2 días; alta si es de esta semana; media por omisión; baja si es opcional.`,
     usuario: JSON.stringify({
       hoy: ahora.toISOString().slice(0, 10),

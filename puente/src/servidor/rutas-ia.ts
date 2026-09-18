@@ -29,7 +29,7 @@ import {
   idDeIncidente,
   type Diagnostico
 } from '../ia/diagnostico.js';
-import { consumo } from '../ia/modelo.js';
+import { consumo, type EntradaBitacora } from '../ia/modelo.js';
 import {
   aplicarVeredictos,
   clasificarPendientes,
@@ -109,6 +109,7 @@ export interface DependenciasIa {
   cfg: () => Configuracion;
   datos: DatosIa & {
     iaUsos: AlmacenJson<Record<UsoIa, boolean>>;
+    iaBitacora: AlmacenJson<EntradaBitacora[]>;
     anotaciones: AlmacenJson<Anotaciones>;
     iaCorreo: AlmacenJson<Record<string, Clasificacion>>;
     personales: AlmacenJson<TaskItem[]>;
@@ -184,6 +185,27 @@ export function registrarRutasIa(
     }
     return config;
   };
+
+  router.get('/ia/bitacora', async () => {
+    const entradas = d.datos.iaBitacora.leer();
+    const porUso: Record<
+      string,
+      { llamadas: number; costo: number; entrada: number; salida: number }
+    > = {};
+    for (const e of entradas) {
+      const u = (porUso[e.uso] ??= {
+        llamadas: 0,
+        costo: 0,
+        entrada: 0,
+        salida: 0
+      });
+      u.llamadas += 1;
+      u.costo += e.costo ?? 0;
+      u.entrada += e.entrada;
+      u.salida += e.salida;
+    }
+    return { entradas: entradas.slice(0, 100), porUso };
+  });
 
   router.get('/ia/usos', async () => ({
     usos: { ...USOS_POR_OMISION, ...d.datos.iaUsos.leer() },

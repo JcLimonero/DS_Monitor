@@ -81,6 +81,7 @@ export async function resumirRepos(
     };
   }
   const texto = await preguntar(config, {
+    uso: 'repos',
     sistema: `${CONTEXTO_EMPRESAS}\nResumes la semana de trabajo en los repositorios para el equipo. Te doy, por repositorio, los mensajes de commit de los últimos 7 días, los pull requests abiertos y el estado de las revisiones. Responde SOLO JSON: {"proyectos":[{"repo":"...","lineas":["qué se hizo (temas, no lista de commits)","qué quedó abierto o en revisión","qué se atoró o falló, si algo"]}]} con máximo 3 líneas de 120 caracteres por repositorio; omite la tercera si no aplica. Nombra a las personas cuando aporte.`,
     usuario: JSON.stringify(
       conMovimiento.map((a) => ({
