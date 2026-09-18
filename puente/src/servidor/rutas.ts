@@ -2854,6 +2854,11 @@ export function construirRutas(
         );
       }
     }
+    if (mandado) {
+      console.log(
+        `[puente] vigilancia: aviso mandado por Telegram (${texto.split('\n').length - 2} línea(s))`
+      );
+    }
     return mandado;
   };
 
