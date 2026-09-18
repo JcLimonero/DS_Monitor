@@ -172,7 +172,7 @@ export function detectarAlertas(
         id: `dominio:${d.nombre}`,
         tipo: 'dominio',
         gravedad: 'grave',
-        titulo: `${d.nombre} venció hace ${-dias} días`,
+        titulo: `${d.nombre} venció hace ${-dias === 1 ? '1 día' : `${-dias} días`}`,
         detalle: `${d.registrador ?? 'registrador desconocido'}${d.automatico ? ', con renovación automática (verificar que se haya cobrado)' : ', sin renovación automática'}.`,
         producto: d.nombre
       });

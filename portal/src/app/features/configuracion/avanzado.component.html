@@ -29,7 +29,7 @@
       id="puente-url"
       name="puente-url"
       type="url"
-      class="field w-72 font-mono text-xs"
+      class="field w-full max-w-72 font-mono text-xs"
       placeholder="http://localhost:8787"
       [ngModel]="gatewayInput()"
       (ngModelChange)="gatewayInput.set($event)" />
@@ -63,7 +63,7 @@
       name="token-admin"
       type="password"
       autocomplete="off"
-      class="field w-96 font-mono text-xs"
+      class="field w-full max-w-96 font-mono text-xs"
       placeholder="PUENTE_ADMIN_TOKEN"
       [ngModel]="tokenInput()"
       (ngModelChange)="tokenInput.set($event)" />
