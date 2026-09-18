@@ -93,6 +93,23 @@ describe('ejecuciones', () => {
     );
   });
 
+  it('una frecuencia corta no adelanta la regla: más de una hora callada', () => {
+    const { ejecucion } = registrarEjecucion(
+      {},
+      'nexdms',
+      { integracion: 'rapido', estado: 'ok', cadaMinutos: 15 },
+      AHORA
+    );
+    assert.equal(
+      estadoDe(ejecucion, new Date(AHORA.getTime() + 45 * 60_000)),
+      'ok'
+    );
+    assert.equal(
+      estadoDe(ejecucion, new Date(AHORA.getTime() + 61 * 60_000)),
+      'atrasada'
+    );
+  });
+
   it('lista lo que está mal primero', () => {
     let e = registrarEjecucion(
       {},
@@ -151,8 +168,8 @@ describe('avisosPendientes (Telegram)', () => {
       },
       AHORA
     ).ejecuciones;
-    // A los 30 min la pantalla ya la marca atrasada, pero Telegram espera la hora.
-    assert.equal(estadoDe(Object.values(e)[0]!, minutos(30)), 'atrasada');
+    // A los 30 min ni la pantalla ni Telegram dicen nada: la regla es una hora.
+    assert.equal(estadoDe(Object.values(e)[0]!, minutos(30)), 'ok');
     assert.deepEqual(avisosPendientes(e, {}, minutos(30)).lineas, []);
 
     const uno = avisosPendientes(e, {}, minutos(61));

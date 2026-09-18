@@ -62,9 +62,10 @@ const RESULTADOS: ResultadoEjecucion[] = ['ok', 'aviso', 'error'];
 const HOLGURA = 1.5;
 const HOLGURA_MINIMA_MS = 5 * 60_000;
 /**
- * Sin frecuencia declarada, una integracion que lleva mas de una hora sin
- * reportar se da por atrasada; y por Telegram nunca se avisa antes de una
- * hora, aunque la frecuencia declarada sea mas corta.
+ * La regla: mas de una hora sin recibir mensaje de una integracion es un
+ * problema (en pantalla "sin señal", por Telegram un aviso). Solo si la
+ * integracion declaro que corre cada mas de una hora (un respaldo diario) se
+ * le espera vez y media su frecuencia.
  */
 export const SILENCIO_MS = 60 * 60_000;
 
@@ -142,7 +143,11 @@ export function umbralSilencioMs(e: Ejecucion): number {
     return SILENCIO_MS;
   }
   const esperado = e.cadaMinutos * 60_000;
-  return Math.max(esperado * HOLGURA, esperado + HOLGURA_MINIMA_MS);
+  return Math.max(
+    SILENCIO_MS,
+    esperado * HOLGURA,
+    esperado + HOLGURA_MINIMA_MS
+  );
 }
 
 /** Cuanto lleva sin reportar. */
@@ -171,9 +176,9 @@ export type AvisosEjecuciones = Record<string, AvisoEjecucion>;
 /**
  * Que hay que avisar por Telegram en este momento, y como queda el registro
  * de avisados. Cada problema se avisa una vez: el silencio, cuando pasa mas
- * de una hora (o la frecuencia declarada, si es mayor) sin corrida nueva; el
- * error, al primer fallo de una racha. Y cuando vuelve a reportar bien, una
- * vez que volvio.
+ * de una hora sin mensaje (o vez y media la frecuencia declarada, si es
+ * mayor), igual que la pantalla; el error, al primer fallo de una racha. Y
+ * cuando vuelve a reportar bien, una vez que volvio.
  */
 export function avisosPendientes(
   ejecuciones: Ejecuciones,
@@ -186,7 +191,7 @@ export function avisosPendientes(
     const previo = avisadas[e.clave] ?? {};
     const actual: AvisoEjecucion = { ...previo };
     const silencio = silencioMs(e, ahora);
-    const callada = silencio > Math.max(umbralSilencioMs(e), SILENCIO_MS);
+    const callada = silencio > umbralSilencioMs(e);
     const quien = `<b>${escapar(e.nombre)}</b> (${escapar(e.emisor)})`;
 
     if (callada) {
