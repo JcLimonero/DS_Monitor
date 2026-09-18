@@ -58,7 +58,7 @@ function crearReconocedor(): Reconocedor | undefined {
   templateUrl: './dictado.component.html'
 })
 export class DictadoComponent implements OnDestroy {
-  private readonly ia = inject(IaService);
+  readonly ia = inject(IaService);
   private readonly store = inject(PortalStore);
   private reconocedor: Reconocedor | undefined;
 
@@ -154,7 +154,14 @@ export class DictadoComponent implements OnDestroy {
     this.mensaje.set(undefined);
     this.ia.dictar(this.texto()).subscribe({
       next: (r) => {
-        this.propuestas.set(r.propuestas);
+        const calendario = this.ia.calendarios()[0];
+        this.propuestas.set(
+          r.propuestas.map((p) =>
+            p.esJunta && p.venceEn && calendario && !p.agendarEn
+              ? { ...p, agendarEn: calendario.id }
+              : p
+          )
+        );
         this.elegidas.set(r.propuestas.map(() => true));
         this.conIa.set(r.conIa);
         this.procesando.set(false);

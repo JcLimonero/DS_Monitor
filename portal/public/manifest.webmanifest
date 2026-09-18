@@ -3,7 +3,7 @@
   "short_name": "DS Monitor",
   "description": "Pendientes, juntas, plataformas y licencias de Dealer Solutions. Dicta pendientes desde el celular.",
   "lang": "es-MX",
-  "start_url": "/dictado",
+  "start_url": "/hoy",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
@@ -14,6 +14,7 @@
     { "src": "iconos/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "shortcuts": [
+    { "name": "Hoy", "url": "/hoy" },
     { "name": "Dictar", "url": "/dictado", "description": "Dictar pendientes" },
     { "name": "Pendientes", "url": "/pendientes" },
     { "name": "Agenda", "url": "/agenda" }

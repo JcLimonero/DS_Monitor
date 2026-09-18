@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { IaService, describirError } from '../core/ia/ia.service';
-import { Borrador } from '../core/ia/ia.models';
+import { Borrador, EMPRESAS } from '../core/ia/ia.models';
 import {
   TASK_PRIORITY_LABEL,
   TASK_STATUS_LABEL,
@@ -215,6 +215,23 @@ const COMPANY_CLASS: Record<string, string> = {
                     (click)="assign()">
                     Asignar y avisar
                   </button>
+                  <button
+                    type="button"
+                    class="btn"
+                    [disabled]="saving()"
+                    (click)="startEdit()">
+                    Editar
+                  </button>
+                  @if (task().dueDate && ia.calendarios().length > 0) {
+                    <button
+                      type="button"
+                      class="btn"
+                      [disabled]="saving()"
+                      (click)="agendar()">
+                      <pt-icon name="agenda" class="h-4 w-4" />
+                      Agendar
+                    </button>
+                  }
                   @if (task().origin === 'correo' && ia.activa() !== false) {
                     <button
                       type="button"
@@ -226,6 +243,90 @@ const COMPANY_CLASS: Record<string, string> = {
                     </button>
                   }
                 </div>
+              }
+
+              @if (editing(); as e) {
+                <form
+                  class="grid gap-2 rounded-lg bg-surface-muted p-3 sm:grid-cols-2"
+                  (ngSubmit)="saveEdit()">
+                  <label class="sm:col-span-2">
+                    <span class="mb-1 block text-xs font-medium text-ink-muted"
+                      >Título</span
+                    >
+                    <input
+                      class="field"
+                      type="text"
+                      name="e-titulo-{{ task().id }}"
+                      [ngModel]="e.title"
+                      (ngModelChange)="patchEdit({ title: $event })" />
+                  </label>
+                  <label>
+                    <span class="mb-1 block text-xs font-medium text-ink-muted"
+                      >Prioridad</span
+                    >
+                    <select
+                      class="field"
+                      name="e-prio-{{ task().id }}"
+                      [ngModel]="e.priority"
+                      (ngModelChange)="patchEdit({ priority: $event })">
+                      <option value="urgente">Urgente</option>
+                      <option value="alta">Alta</option>
+                      <option value="media">Media</option>
+                      <option value="baja">Baja</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span class="mb-1 block text-xs font-medium text-ink-muted"
+                      >Para cuándo</span
+                    >
+                    <input
+                      class="field"
+                      type="datetime-local"
+                      name="e-fecha-{{ task().id }}"
+                      [ngModel]="e.dueLocal"
+                      (ngModelChange)="patchEdit({ dueLocal: $event })" />
+                  </label>
+                  <label>
+                    <span class="mb-1 block text-xs font-medium text-ink-muted"
+                      >Empresa</span
+                    >
+                    <select
+                      class="field"
+                      name="e-emp-{{ task().id }}"
+                      [ngModel]="e.company"
+                      (ngModelChange)="patchEdit({ company: $event })">
+                      <option value="">Sin empresa</option>
+                      @for (emp of empresas; track emp) {
+                        <option [value]="emp">{{ emp }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label>
+                    <span class="mb-1 block text-xs font-medium text-ink-muted"
+                      >Proyecto / cliente</span
+                    >
+                    <input
+                      class="field"
+                      type="text"
+                      name="e-proy-{{ task().id }}"
+                      [ngModel]="e.project"
+                      (ngModelChange)="patchEdit({ project: $event })" />
+                  </label>
+                  <div class="flex gap-2 sm:col-span-2">
+                    <button
+                      type="submit"
+                      class="btn btn-primary"
+                      [disabled]="saving() || !e.title.trim()">
+                      Guardar cambios
+                    </button>
+                    <button
+                      type="button"
+                      class="btn"
+                      (click)="editing.set(undefined)">
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
               }
 
               @if (message(); as m) {
@@ -321,6 +422,18 @@ export class TaskCardComponent {
   readonly drafting = signal(false);
   readonly message = signal<string | undefined>(undefined);
   readonly borrador = signal<Borrador | undefined>(undefined);
+  readonly empresas = EMPRESAS;
+  /** Copia editable del pendiente mientras el formulario está abierto. */
+  readonly editing = signal<
+    | {
+        title: string;
+        priority: string;
+        dueLocal: string;
+        company: string;
+        project: string;
+      }
+    | undefined
+  >(undefined);
 
   readonly done = computed(() => this.task().status === 'hecho');
   readonly overdue = computed(
@@ -410,6 +523,77 @@ export class TaskCardComponent {
     });
   }
 
+  startEdit(): void {
+    const t = this.task();
+    this.editing.set({
+      title: t.title,
+      priority: t.priority,
+      dueLocal: t.dueDate ? aLocal(t.dueDate) : '',
+      company: t.company ?? '',
+      project: t.project ?? ''
+    });
+  }
+
+  patchEdit(
+    cambio: Partial<NonNullable<ReturnType<typeof this.editing>>>
+  ): void {
+    this.editing.update((e) => (e ? { ...e, ...cambio } : e));
+  }
+
+  saveEdit(): void {
+    const e = this.editing();
+    if (!e || !e.title.trim()) {
+      return;
+    }
+    this.guardar(
+      {
+        cambios: {
+          title: e.title,
+          priority: e.priority as TaskPriority,
+          dueDate: e.dueLocal ? new Date(e.dueLocal).toISOString() : undefined,
+          company: e.company || undefined,
+          project: e.project || undefined
+        }
+      },
+      () => this.editing.set(undefined)
+    );
+  }
+
+  /** Crea la junta en el calendario a la hora del pendiente (una hora). */
+  agendar(): void {
+    const t = this.task();
+    const calendarios = this.ia.calendarios();
+    const cuenta =
+      calendarios.length === 1
+        ? calendarios[0]
+        : calendarios.find((c) => confirm(`¿Agendar en ${c.usuario}?`));
+    if (!cuenta || !t.dueDate) {
+      return;
+    }
+    this.saving.set(true);
+    this.ia
+      .agendar(cuenta.id, {
+        titulo: t.title,
+        inicio: t.dueDate,
+        lugar: t.project,
+        cuerpo: t.description,
+        invitados: t.assignee?.email ? [t.assignee.email] : []
+      })
+      .subscribe({
+        next: (r) => {
+          this.saving.set(false);
+          this.message.set(
+            `Agendada en ${cuenta.usuario}.${r.joinUrl ? ' Con liga de Teams.' : ''}`
+          );
+          this.store.refreshMeetings();
+        },
+        error: (error: unknown) => {
+          this.saving.set(false);
+          this.message.set(describirError(error));
+        }
+      });
+  }
+
   copy(): void {
     const b = this.borrador();
     if (b) {
@@ -454,4 +638,11 @@ export class TaskCardComponent {
       }
     });
   }
+}
+
+/** ISO → valor de un input datetime-local, en hora local. */
+function aLocal(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }

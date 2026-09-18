@@ -1,5 +1,6 @@
 import { accountsOf } from '../../core/util/meetings.util';
 import { IaAcuerdosComponent } from '../ia/ia-acuerdos.component';
+import { IntegracionConfigComponent } from '../configuracion/integracion-config.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -44,6 +45,7 @@ type RangeId = (typeof RANGES)[number]['id'];
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     IaAcuerdosComponent,
+    IntegracionConfigComponent,
     AccountChipComponent,
     EmptyStateComponent,
     FormsModule,

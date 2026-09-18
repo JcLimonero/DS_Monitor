@@ -92,11 +92,13 @@
 
 <!-- Lo general del portal: acceso e inteligencia artificial -->
 @for (estado of integracionesSueltas(); track estado.id) {
-  @if (estado.id === "acceso" || estado.id === "openrouter") {
+  @if (estado.id === "acceso" || estado.id === "openrouter" || estado.id === "telegram") {
     <ng-container
       *ngTemplateOutlet="tarjetaIntegracion; context: { estado: estado }" />
   }
 }
+
+<pt-avisos-config />
 
 <pt-semana-config />
 
@@ -114,6 +116,14 @@
         Entrar al portal con un código de seis dígitos que llega por correo
         (EmailJS, asunto "Access Monitor"). Mientras no esté configurado, la
         aplicación queda abierta.
+      </p>
+    }
+    @if (estado.id === "telegram") {
+      <p class="mt-0.5 text-xs text-ink-muted">
+        Dictar por chat: le escribes al bot lo que hay que hacer y entra igual
+        que desde Dictar (con empresa, fecha y responsable). Crea el bot con
+        &#64;BotFather, pega el token y prueba; luego escríbele al bot para
+        obtener tu id de chat y autorízalo aquí.
       </p>
     }
     @if (estado.id === "openrouter") {

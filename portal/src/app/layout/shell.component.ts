@@ -21,6 +21,7 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
+  { path: '/hoy', label: 'Hoy', icon: 'reloj' },
   { path: '/panel', label: 'Panel', icon: 'panel' },
   { path: '/pendientes', label: 'Pendientes', icon: 'tareas' },
   { path: '/personales', label: 'Personales', icon: 'ok' },

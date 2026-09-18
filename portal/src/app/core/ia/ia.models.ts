@@ -1,4 +1,4 @@
-import { Meeting, Person, TaskPriority } from '../models';
+import { Meeting, Person, TaskItem, TaskPriority } from '../models';
 
 /** Lo que devuelve /ia/resumen: el resumen del día para el carrusel. */
 export interface ResumenDia {
@@ -88,6 +88,10 @@ export interface EstadoIa {
   activa: boolean;
   modelo?: string;
   consumo: { llamadas: number; entrada: number; salida: number };
+  /** Buzones donde se pueden crear juntas (Microsoft). */
+  calendarios: { id: string; usuario: string }[];
+  fireflies: boolean;
+  telegram: boolean;
 }
 
 export type JuntaParaAcuerdos = Pick<
@@ -113,5 +117,26 @@ export interface Propuesta {
   responsable?: string;
   persona?: Person;
   proyecto?: string;
+  esJunta?: boolean;
+  lugar?: string;
+  /** Buzón en cuyo calendario crearla, si se pide. */
+  agendarEn?: string;
   origen: 'ia' | 'reglas';
 }
+
+export interface NuevaJunta {
+  titulo: string;
+  inicio: string;
+  fin?: string;
+  lugar?: string;
+  cuerpo?: string;
+  invitados?: string[];
+  enLinea?: boolean;
+}
+
+export type CambiosPendiente = Partial<
+  Pick<
+    TaskItem,
+    'title' | 'description' | 'priority' | 'dueDate' | 'company' | 'project'
+  >
+>;

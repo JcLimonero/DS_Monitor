@@ -54,6 +54,12 @@ export const routes: Routes = [
           )
       },
       {
+        path: 'hoy',
+        title: 'Hoy | DS Monitor',
+        loadComponent: () =>
+          import('./features/hoy/hoy.component').then((m) => m.HoyComponent)
+      },
+      {
         path: 'dictado',
         title: 'Dictar | DS Monitor',
         loadComponent: () =>

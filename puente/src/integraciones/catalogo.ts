@@ -389,7 +389,8 @@ INTEGRACIONES.push({
       variable: 'OPENROUTER_MAXIMO',
       etiqueta: 'Correos por lectura',
       tipo: 'numero',
-      ayuda: 'Tope de correos nuevos que se mandan al modelo cada vez (40 por omisión).'
+      ayuda:
+        'Tope de correos nuevos que se mandan al modelo cada vez (40 por omisión).'
     }
   ],
   probar: async (config) => {
@@ -398,7 +399,9 @@ INTEGRACIONES.push({
       headers: { authorization: `Bearer ${ia.apiKey}` }
     });
     if (!respuesta.ok) {
-      throw new Error(`OpenRouter respondió ${respuesta.status}: revisa la API key.`);
+      throw new Error(
+        `OpenRouter respondió ${respuesta.status}: revisa la API key.`
+      );
     }
     const datos = (await respuesta.json()) as { data?: { id: string }[] };
     const modelos = datos.data ?? [];
@@ -406,6 +409,63 @@ INTEGRACIONES.push({
     return hay || modelos.length === 0
       ? `Llave válida. Modelo: ${ia.modelo}; ${ia.maximo} correos por lectura, ${ia.dias} días atrás.`
       : `Llave válida, pero el modelo "${ia.modelo}" no aparece entre los ${modelos.length} disponibles: revisa el id en openrouter.ai/models.`;
+  }
+});
+
+INTEGRACIONES.push({
+  id: 'fireflies',
+  etiqueta: 'Fireflies (notas de juntas)',
+  kind: 'fireflies',
+  campos: [
+    {
+      variable: 'FIREFLIES_API_KEY',
+      etiqueta: 'API key',
+      tipo: 'secreto',
+      obligatoria: true,
+      ayuda:
+        'En app.fireflies.ai → Settings → Developer settings → API key. Con ella cada junta del calendario se empareja con su transcripción y los acuerdos salen de las notas reales.'
+    }
+  ],
+  probar: async (config) => {
+    const { transcripcionesRecientes } =
+      await import('../proveedores/fireflies.js');
+    const lista = await transcripcionesRecientes(
+      exigir(config.fireflies, 'la API key de Fireflies'),
+      30,
+      10
+    );
+    return `${lista.length} transcripciones en los últimos 30 días${lista[0] ? `; la última: "${lista[0].titulo}"` : ''}.`;
+  }
+});
+
+INTEGRACIONES.push({
+  id: 'telegram',
+  etiqueta: 'Telegram (dictar por chat)',
+  kind: 'telegram',
+  campos: [
+    {
+      variable: 'TELEGRAM_BOT_TOKEN',
+      etiqueta: 'Token del bot',
+      tipo: 'secreto',
+      obligatoria: true,
+      ayuda:
+        'Crea el bot con @BotFather en Telegram (/newbot) y pega el token. Al probar, el puente registra el webhook solo.'
+    },
+    {
+      variable: 'TELEGRAM_CHATS',
+      etiqueta: 'Chats autorizados',
+      tipo: 'texto',
+      ayuda:
+        'Ids de chat separados por coma. Escríbele cualquier cosa al bot y te responde tu id para ponerlo aquí.'
+    }
+  ],
+  probar: async (config) => {
+    const { quienEsElBot, registrarWebhook } =
+      await import('../proveedores/telegram.js');
+    const telegram = exigir(config.telegram, 'el token del bot de Telegram');
+    const bot = await quienEsElBot(telegram);
+    await registrarWebhook(telegram, `${config.urlPublica}/telegram/webhook`);
+    return `Bot ${bot} listo y webhook registrado. ${telegram.chats.length === 0 ? 'Escríbele al bot para obtener tu id de chat y autorízalo aquí.' : `${telegram.chats.length} chat(s) autorizados.`}`;
   }
 });
 

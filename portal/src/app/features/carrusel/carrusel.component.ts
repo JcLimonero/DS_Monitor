@@ -125,6 +125,13 @@ export class CarruselComponent {
     void this.pantalla.iniciar();
     this.destroyRef.onDestroy(() => void this.pantalla.detener());
 
+    // Modo kiosco: el Pi no recarga solo. Cada diez minutos se mira si hay
+    // una version nueva publicada (cambia el nombre del bundle principal) y,
+    // si la hay, se recarga la pagina entre una diapositiva y la siguiente.
+    interval(10 * 60_000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => void this.recargarSiHayVersionNueva());
+
     interval(TIC_MS)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
@@ -203,6 +210,23 @@ export class CarruselComponent {
         break;
       default:
         break;
+    }
+  }
+  private async recargarSiHayVersionNueva(): Promise<void> {
+    try {
+      const actual = [...document.scripts]
+        .map((sc) => /main-[A-Z0-9]+\.js/i.exec(sc.src)?.[0])
+        .find((x) => x);
+      if (!actual) {
+        return;
+      }
+      const r = await fetch('/index.html', { cache: 'no-store' });
+      const publicado = /main-[A-Z0-9]+\.js/i.exec(await r.text())?.[0];
+      if (publicado && publicado !== actual) {
+        location.reload();
+      }
+    } catch {
+      // Sin red no hay version nueva que cargar.
     }
   }
 }

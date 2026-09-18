@@ -10,7 +10,9 @@ import {
   Borrador,
   Diagnostico,
   EstadoIa,
+  CambiosPendiente,
   JuntaParaAcuerdos,
+  NuevaJunta,
   Propuesta,
   ResumenDia,
   ResumenRepos,
@@ -36,6 +38,9 @@ export class IaService {
   readonly activa = signal<boolean | undefined>(undefined);
   /** El equipo, para asignar. Se pide una vez. */
   readonly equipo = signal<Person[]>([]);
+  /** Buzones donde se pueden crear juntas. */
+  readonly calendarios = signal<{ id: string; usuario: string }[]>([]);
+  readonly fireflies = signal(false);
 
   get disponible(): boolean {
     return !!this.config.gatewayUrl;
@@ -45,9 +50,13 @@ export class IaService {
     if (!this.disponible) {
       return of(undefined);
     }
-    return this.http
-      .get<EstadoIa>(this.url('/ia/estado'))
-      .pipe(tap((e) => this.activa.set(e.activa)));
+    return this.http.get<EstadoIa>(this.url('/ia/estado')).pipe(
+      tap((e) => {
+        this.activa.set(e.activa);
+        this.calendarios.set(e.calendarios ?? []);
+        this.fireflies.set(!!e.fireflies);
+      })
+    );
   }
 
   cargarEquipo(): void {
@@ -81,14 +90,18 @@ export class IaService {
       : of([]);
   }
 
-  acuerdos(
-    junta: JuntaParaAcuerdos
-  ): Observable<{ acuerdos: Acuerdo[]; notas: boolean }> {
-    return this.http.post<{ acuerdos: Acuerdo[]; notas: boolean }>(
-      this.url('/ia/acuerdos'),
-      { junta },
-      { headers: this.headers() }
-    );
+  acuerdos(junta: JuntaParaAcuerdos): Observable<{
+    acuerdos: Acuerdo[];
+    notas: boolean;
+    fuente?: 'fireflies' | 'invitacion' | 'ninguna';
+    urlNotas?: string;
+  }> {
+    return this.http.post<{
+      acuerdos: Acuerdo[];
+      notas: boolean;
+      fuente?: 'fireflies' | 'invitacion' | 'ninguna';
+      urlNotas?: string;
+    }>(this.url('/ia/acuerdos'), { junta }, { headers: this.headers() });
   }
 
   aceptarAcuerdos(
@@ -173,7 +186,9 @@ export class IaService {
     );
   }
 
-  dictar(texto: string): Observable<{ propuestas: Propuesta[]; conIa: boolean }> {
+  dictar(
+    texto: string
+  ): Observable<{ propuestas: Propuesta[]; conIa: boolean }> {
     return this.http.post<{ propuestas: Propuesta[]; conIa: boolean }>(
       this.url('/ia/dictado'),
       { texto },
@@ -191,6 +206,26 @@ export class IaService {
     );
   }
 
+  /** Crea una junta en el calendario del buzón (Microsoft). */
+  agendar(
+    cuentaId: string,
+    junta: NuevaJunta
+  ): Observable<{
+    ok: boolean;
+    id: string;
+    webLink?: string;
+    joinUrl?: string;
+  }> {
+    return this.http.post<{
+      ok: boolean;
+      id: string;
+      webLink?: string;
+      joinUrl?: string;
+    }>(this.url(`/correo/${cuentaId}/juntas/crear`), junta, {
+      headers: this.headers()
+    });
+  }
+
   /** Comentar, marcar hecho o asignar cualquier pendiente. */
   anotar(
     id: string,
@@ -198,6 +233,7 @@ export class IaService {
       comentario?: string;
       hecho?: boolean;
       eliminar?: boolean;
+      cambios?: CambiosPendiente;
       asignarA?: string;
       tarea?: Partial<TaskItem>;
     }

@@ -162,6 +162,30 @@
                     </span>
                   }
                 </label>
+                @if (p.esJunta && ia.calendarios().length > 0) {
+                  <label>
+                    <span class="mb-1 block text-xs font-medium text-ink-muted">Agendar en</span>
+                    <select
+                      class="field"
+                      [ngModel]="p.agendarEn ?? ''"
+                      (ngModelChange)="cambiar($index, { agendarEn: $event || undefined })"
+                      name="agendar-{{ $index }}">
+                      <option value="">No agendar</option>
+                      @for (c of ia.calendarios(); track c.id) {
+                        <option [value]="c.id">{{ c.usuario }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label>
+                    <span class="mb-1 block text-xs font-medium text-ink-muted">Lugar</span>
+                    <input
+                      class="field"
+                      type="text"
+                      [ngModel]="p.lugar ?? ''"
+                      (ngModelChange)="cambiar($index, { lugar: $event || undefined })"
+                      name="lugar-{{ $index }}" />
+                  </label>
+                }
                 <label>
                   <span class="mb-1 block text-xs font-medium text-ink-muted">Proyecto / cliente</span>
                   <input

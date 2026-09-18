@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 /**
  * Configuracion del puente, leida del entorno.
  *
@@ -173,6 +174,16 @@ export interface ConfiguracionIa {
   maximo: number;
 }
 
+export interface ConfiguracionFireflies {
+  apiKey: string;
+}
+
+export interface ConfiguracionTelegram {
+  token: string;
+  chats: string[];
+  secreto: string;
+}
+
 export interface ConfiguracionGithub {
   token: string;
   accountId: string;
@@ -224,6 +235,8 @@ export interface Configuracion {
    */
   microsoftApp?: Omit<ConfiguracionMicrosoft, 'refreshToken' | 'conectadaComo'>;
   ia?: ConfiguracionIa;
+  fireflies?: ConfiguracionFireflies;
+  telegram?: ConfiguracionTelegram;
   /** La aplicacion OAuth de Google que usan todos los buzones de Gmail. */
   googleApp?: Omit<ConfiguracionGoogle, 'refreshToken' | 'conectadaComo'>;
   /** Donde viven el equipo, los dominios y las sesiones. */
@@ -537,6 +550,21 @@ function leer(): Configuracion {
           modelo: texto('OPENROUTER_MODEL') ?? 'anthropic/claude-haiku-4.5',
           dias: numeroCon('OPENROUTER_DIAS', 7),
           maximo: numeroCon('OPENROUTER_MAXIMO', 40)
+        }
+      : undefined,
+    fireflies: texto('FIREFLIES_API_KEY')
+      ? { apiKey: texto('FIREFLIES_API_KEY') as string }
+      : undefined,
+    telegram: texto('TELEGRAM_BOT_TOKEN')
+      ? {
+          token: texto('TELEGRAM_BOT_TOKEN') as string,
+          chats: lista('TELEGRAM_CHATS'),
+          secreto:
+            texto('TELEGRAM_SECRETO') ??
+            createHash('sha256')
+              .update(texto('TELEGRAM_BOT_TOKEN') as string)
+              .digest('hex')
+              .slice(0, 32)
         }
       : undefined,
     googleApp:

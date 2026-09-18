@@ -32,7 +32,10 @@ import { sinEtiquetas } from './mime.js';
  */
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
-const ALCANCES = 'offline_access User.Read Mail.Read Calendars.Read';
+// Calendars.ReadWrite: para crear juntas desde el portal (dictado, pendientes).
+// Las cuentas conectadas antes con Calendars.Read tienen que volver a
+// conectarse para que Microsoft pida el permiso nuevo.
+const ALCANCES = 'offline_access User.Read Mail.Read Calendars.ReadWrite';
 
 /** Cuantos correos como maximo se traen por lectura. */
 const MAXIMO_CORREOS = 6000;
@@ -468,4 +471,79 @@ function persona(
 
 function recortar(texto: string): string {
   return texto.length > 200 ? `${texto.slice(0, 200)}…` : texto;
+}
+
+/** Lo que hace falta para crear una junta en el calendario. */
+export interface NuevaJunta {
+  titulo: string;
+  /** ISO con zona; se manda en hora de Mexico. */
+  inicio: string;
+  fin: string;
+  lugar?: string;
+  cuerpo?: string;
+  /** Correos de los invitados. */
+  invitados?: string[];
+  enLinea?: boolean;
+}
+
+/** Crea el evento en el calendario principal de la cuenta conectada. */
+export async function crearEventoMicrosoft(
+  config: ConfiguracionCorreo,
+  junta: NuevaJunta
+): Promise<{ id: string; webLink?: string; joinUrl?: string }> {
+  const microsoft = config.microsoft;
+  if (!microsoft) {
+    throw new ErrorProveedor('microsoft', 'la cuenta no está conectada', 503);
+  }
+  const token = await tokenDeAcceso(config.id, microsoft);
+  const enMexico = (iso: string) => ({
+    dateTime: new Date(iso)
+      .toLocaleString('sv-SE', { timeZone: 'America/Mexico_City' })
+      .replace(' ', 'T'),
+    timeZone: 'America/Mexico_City'
+  });
+  const respuesta = await fetch(`${GRAPH}/me/events`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      subject: junta.titulo,
+      start: enMexico(junta.inicio),
+      end: enMexico(junta.fin),
+      location: junta.lugar ? { displayName: junta.lugar } : undefined,
+      body: junta.cuerpo
+        ? { contentType: 'text', content: junta.cuerpo }
+        : undefined,
+      attendees: (junta.invitados ?? []).map((email) => ({
+        emailAddress: { address: email },
+        type: 'required'
+      })),
+      isOnlineMeeting: junta.enLinea === true,
+      onlineMeetingProvider: junta.enLinea ? 'teamsForBusiness' : undefined
+    })
+  });
+  const datos = (await respuesta.json().catch(() => ({}))) as {
+    id?: string;
+    webLink?: string;
+    onlineMeeting?: { joinUrl?: string };
+    error?: { code?: string; message?: string };
+  };
+  if (!respuesta.ok || !datos.id) {
+    const detalle = datos.error?.message ?? `respondió ${respuesta.status}`;
+    throw new ErrorProveedor(
+      'microsoft',
+      /Access is denied|ErrorAccessDenied|Forbidden/i.test(detalle) ||
+        respuesta.status === 403
+        ? 'la cuenta no tiene permiso para escribir en el calendario: vuelve a conectarla con Microsoft (pide Calendars.ReadWrite) y en Entra agrega ese permiso a la aplicación.'
+        : detalle,
+      respuesta.status === 403 ? 403 : 502
+    );
+  }
+  return {
+    id: datos.id,
+    webLink: datos.webLink,
+    joinUrl: datos.onlineMeeting?.joinUrl
+  };
 }

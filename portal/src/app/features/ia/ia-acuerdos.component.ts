@@ -113,6 +113,8 @@ export class IaAcuerdosComponent {
   readonly propuestas = signal<Acuerdo[] | undefined>(undefined);
   readonly elegidos = signal<boolean[]>([]);
   readonly sinNotas = signal(false);
+  readonly fuente = signal<string | undefined>(undefined);
+  readonly urlNotas = signal<string | undefined>(undefined);
   readonly cargando = signal(false);
   readonly mensaje = signal<string | undefined>(undefined);
 
@@ -142,6 +144,8 @@ export class IaAcuerdosComponent {
         this.propuestas.set(r.acuerdos);
         this.elegidos.set(r.acuerdos.map(() => true));
         this.sinNotas.set(!r.notas);
+        this.fuente.set(r.fuente);
+        this.urlNotas.set(r.urlNotas);
         this.cargando.set(false);
       },
       error: (e: unknown) => {

@@ -15,10 +15,19 @@ export interface Anotacion {
    * ya se hizo y no hace falta ver mas.
    */
   eliminado?: boolean;
+  /** Lo que se edito desde el portal: titulo, fecha, prioridad, empresa, proyecto. */
+  cambios?: CambiosPendiente;
   comentarios: TaskComment[];
   asignado?: Person;
   actualizadoEn: string;
 }
+
+export type CambiosPendiente = Partial<
+  Pick<
+    TaskItem,
+    'title' | 'description' | 'priority' | 'dueDate' | 'company' | 'project'
+  >
+>;
 
 export type Anotaciones = Record<string, Anotacion>;
 
@@ -36,6 +45,7 @@ export function anotar(
       }
       return {
         ...tarea,
+        ...limpiarCambios(nota.cambios),
         status: nota.hecho
           ? 'hecho'
           : tarea.status === 'hecho' && nota.hecho === false
@@ -50,4 +60,46 @@ export function anotar(
             : tarea.updatedAt
       };
     });
+}
+
+/** Solo los campos permitidos y con valor; `null` en dueDate/company los quita. */
+export function limpiarCambios(
+  cambios: CambiosPendiente | undefined
+): CambiosPendiente {
+  if (!cambios) {
+    return {};
+  }
+  const salida: CambiosPendiente = {};
+  if (typeof cambios.title === 'string' && cambios.title.trim()) {
+    salida.title = cambios.title.trim().slice(0, 160);
+  }
+  if (typeof cambios.description === 'string') {
+    salida.description = cambios.description.trim() || undefined;
+  }
+  if (
+    cambios.priority &&
+    ['baja', 'media', 'alta', 'urgente'].includes(cambios.priority)
+  ) {
+    salida.priority = cambios.priority;
+  }
+  if ('dueDate' in cambios) {
+    salida.dueDate =
+      typeof cambios.dueDate === 'string' &&
+      !Number.isNaN(Date.parse(cambios.dueDate))
+        ? new Date(cambios.dueDate).toISOString()
+        : undefined;
+  }
+  if ('company' in cambios) {
+    salida.company =
+      typeof cambios.company === 'string' && cambios.company.trim()
+        ? cambios.company.trim()
+        : undefined;
+  }
+  if ('project' in cambios) {
+    salida.project =
+      typeof cambios.project === 'string' && cambios.project.trim()
+        ? cambios.project.trim()
+        : undefined;
+  }
+  return salida;
 }

@@ -4,6 +4,12 @@ import type { Dominio } from '../datos/dominios.js';
 import { acuerdosDeJunta, type Acuerdo } from '../ia/acuerdos.js';
 import { interpretarDictado, type Propuesta } from '../ia/dictado.js';
 import {
+  emparejar,
+  notasDe,
+  transcripcion,
+  transcripcionesRecientes
+} from '../proveedores/fireflies.js';
+import {
   detectarAlertas,
   redactarAlertas,
   registrarCostos,
@@ -49,6 +55,7 @@ import type { Clasificacion } from '../proveedores/ia.js';
 import { huella } from '../proveedores/ia.js';
 import { crearLead } from '../proveedores/odoo.js';
 import type { Contexto, Router } from './router.js';
+import type { NuevaJunta } from '../proveedores/microsoft.js';
 
 /**
  * Las rutas de inteligencia artificial, todas bajo /ia.
@@ -103,6 +110,13 @@ export interface DependenciasIa {
     sesion: Sesion | undefined
   ) => Promise<string | undefined>;
   dominios: () => Dominio[];
+  /** Buzones donde se pueden crear juntas (conectados con Microsoft). */
+  calendarios: () => { id: string; usuario: string }[];
+  /** Crea una junta en el calendario del buzon dado (Microsoft). */
+  agendar: (
+    cuentaId: string,
+    junta: NuevaJunta
+  ) => Promise<{ id: string; webLink?: string; joinUrl?: string }>;
 }
 
 const HORAS_RESUMEN = 6;
@@ -143,7 +157,11 @@ export function registrarRutasIa(
     return {
       activa: !!config,
       modelo: config?.modelo,
-      consumo
+      consumo,
+      // Donde se pueden crear juntas: buzones conectados con Microsoft.
+      calendarios: d.calendarios(),
+      fireflies: !!d.cfg().fireflies,
+      telegram: !!d.cfg().telegram
     };
   });
 
@@ -232,7 +250,7 @@ export function registrarRutasIa(
   router.post('/ia/acuerdos', async (contexto) => {
     d.exigirAdmin(contexto);
     const config = exigirIa();
-    const { junta } = (contexto.cuerpo ?? {}) as { junta?: Meeting };
+    let { junta } = (contexto.cuerpo ?? {}) as { junta?: Meeting };
     if (
       !junta ||
       typeof junta.id !== 'string' ||
@@ -240,10 +258,36 @@ export function registrarRutasIa(
     ) {
       throw new ErrorPuente('Falta la junta.', 400);
     }
+    // Con Fireflies, las notas reales de la junta mandan sobre la descripcion
+    // de la invitacion.
+    let fuente: 'fireflies' | 'invitacion' | 'ninguna' = junta.notes
+      ? 'invitacion'
+      : 'ninguna';
+    let urlNotas: string | undefined;
+    const fireflies = d.cfg().fireflies;
+    if (fireflies) {
+      try {
+        const lista = await transcripcionesRecientes(fireflies, 45);
+        const t = emparejar(junta, lista);
+        if (t) {
+          const completa = await transcripcion(fireflies, t.id);
+          junta = { ...junta, notes: notasDe(completa) };
+          fuente = 'fireflies';
+          urlNotas = completa.url;
+        }
+      } catch (error) {
+        console.warn(`[puente] Fireflies: ${(error as Error).message}`);
+      }
+    }
     const clave = `${junta.id}:${huella(junta.notes ?? '')}`;
     const guardados = d.datos.iaAcuerdos.leer();
     if (guardados[clave]) {
-      return { acuerdos: guardados[clave], notas: !!junta.notes };
+      return {
+        acuerdos: guardados[clave],
+        notas: !!junta.notes,
+        fuente,
+        urlNotas
+      };
     }
     const equipo = await d.fuentes.equipo();
     const acuerdos = await acuerdosDeJunta(config, junta, equipo);
@@ -252,7 +296,7 @@ export function registrarRutasIa(
       ...Object.fromEntries(recorte),
       [clave]: acuerdos
     });
-    return { acuerdos, notas: !!junta.notes };
+    return { acuerdos, notas: !!junta.notes, fuente, urlNotas };
   });
 
   router.post('/ia/acuerdos/aceptar', async (contexto) => {
@@ -390,6 +434,31 @@ export function registrarRutasIa(
         } catch (error) {
           avisos.push(`${tarea.title}: ${(error as Error).message}`);
         }
+      }
+    }
+    // Lo que se pidio agendar se crea en el calendario de la cuenta dicha.
+    for (const [i, p] of lista.entries()) {
+      const tarea = nuevos[i];
+      const cuenta = typeof p.agendarEn === 'string' ? p.agendarEn : undefined;
+      if (!tarea || !cuenta || !tarea.dueDate) {
+        continue;
+      }
+      try {
+        const r = await d.agendar(cuenta, {
+          titulo: tarea.title,
+          inicio: tarea.dueDate,
+          fin: new Date(Date.parse(tarea.dueDate) + 3_600_000).toISOString(),
+          lugar: typeof p.lugar === 'string' ? p.lugar : undefined,
+          cuerpo: tarea.description,
+          invitados: p.persona?.email ? [p.persona.email] : []
+        });
+        avisos.push(
+          `${tarea.title}: agendada en ${cuenta}${r.joinUrl ? ' (Teams)' : ''}.`
+        );
+      } catch (error) {
+        avisos.push(
+          `${tarea.title}: no se pudo agendar: ${(error as Error).message}`
+        );
       }
     }
     d.olvidarCache();

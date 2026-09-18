@@ -20,15 +20,24 @@ import type {
   TaskItem
 } from '../nucleo/contrato.js';
 import type { Fuentes } from '../ia/tablero.js';
-import { anotar, type Anotaciones } from '../pendientes/anotaciones.js';
+import {
+  anotar,
+  limpiarCambios,
+  type Anotaciones,
+  type CambiosPendiente
+} from '../pendientes/anotaciones.js';
 import { registrar, type Registro } from '../pendientes/registro.js';
 import { homologarPendientes, idsDelGrupo } from '../pendientes/homologar.js';
 import { enviarPorEmailJs } from '../acceso/acceso.js';
 import type {
   ClienteIngesta,
+  ConfiguracionFireflies,
   ConfiguracionOdoo,
   ConfiguracionVercel
 } from '../config/entorno.js';
+import { transcripcionesRecientes } from '../proveedores/fireflies.js';
+import { leerUpdate, responder } from '../proveedores/telegram.js';
+import { interpretarDictado } from '../ia/dictado.js';
 import {
   AlmacenIntegraciones,
   Configurador
@@ -45,6 +54,8 @@ import {
 import {
   canjearCodigo,
   leerCorreoMicrosoft,
+  crearEventoMicrosoft,
+  type NuevaJunta,
   olvidarAcceso,
   quienSoy,
   urlDeAutorizacion
@@ -76,6 +87,8 @@ import {
   licenciasVercel
 } from '../proveedores/vercel.js';
 import { Redireccion, Router, type Contexto } from './router.js';
+import { Push, type ColaPush, type Suscripcion } from '../push/push.js';
+import type { ClavesVapid } from '../push/vapid.js';
 import {
   registrarRutasIa,
   type DatosIa,
@@ -212,12 +225,19 @@ export interface Datos {
   iaRepos: DatosIa['iaRepos'];
   iaSemana: DatosIa['iaSemana'];
   iaPendientes: DatosIa['iaPendientes'];
+  /** Avisos push: llaves VAPID, dispositivos suscritos, cola y ya avisados. */
+  pushClaves: AlmacenJson<ClavesVapid | null>;
+  pushSuscripciones: AlmacenJson<Suscripcion[]>;
+  pushCola: AlmacenJson<ColaPush>;
+  pushAvisados: AlmacenJson<Record<string, string>>;
 }
 
 /** Lee todos los almacenes del disco; se llama una vez al arrancar. */
 export async function cargarDatos(datos: Datos): Promise<void> {
   await Promise.all(
-    Object.values(datos).map((almacen) => (almacen as AlmacenJson<unknown>).cargar())
+    Object.values(datos).map((almacen) =>
+      (almacen as AlmacenJson<unknown>).cargar()
+    )
   );
 }
 
@@ -260,7 +280,14 @@ export function abrirDatos(directorio: string): Datos {
     ),
     iaRepos: new AlmacenJson(join(directorio, 'ia-repos.json'), null),
     iaSemana: new AlmacenJson(join(directorio, 'ia-semana.json'), {}),
-    iaPendientes: new AlmacenJson(join(directorio, 'ia-pendientes.json'), {})
+    iaPendientes: new AlmacenJson(join(directorio, 'ia-pendientes.json'), {}),
+    pushClaves: new AlmacenJson(join(directorio, 'push-claves.json'), null),
+    pushSuscripciones: new AlmacenJson(
+      join(directorio, 'push-suscripciones.json'),
+      []
+    ),
+    pushCola: new AlmacenJson(join(directorio, 'push-cola.json'), {}),
+    pushAvisados: new AlmacenJson(join(directorio, 'push-avisados.json'), {})
   };
 }
 
@@ -380,6 +407,12 @@ export function construirRutas(
   const router = new Router();
   const ttl = configInicial.cacheSegundos;
   const acceso = new Acceso(datos.sesiones);
+  const push = new Push(
+    datos.pushClaves,
+    datos.pushSuscripciones,
+    datos.pushCola,
+    () => cfg().acceso?.correos[0] ?? 'monitor@dealersolutions.com.mx'
+  );
   // Se asigna mas abajo, cuando ya existen las fuentes que necesita; las
   // rutas lo usan en tiempo de peticion, cuando ya esta.
   let ia: ServiciosIa | undefined;
@@ -410,7 +443,13 @@ export function construirRutas(
   // tokens) exige una sesion. Sin eso configurado, el puente queda abierto,
   // que es lo comodo en desarrollo.
 
-  const LIBRES = new Set(['salud', 'acceso', 'ingesta', 'recibido']);
+  const LIBRES = new Set([
+    'salud',
+    'acceso',
+    'ingesta',
+    'recibido',
+    'telegram'
+  ]);
   router.proteger((segmentos, contexto) => {
     const config = cfg();
     if (!config.acceso) {
@@ -421,6 +460,14 @@ export function construirRutas(
       return;
     }
     if (segmentos[0] === 'correo' && segmentos[1] === 'oauth') {
+      return;
+    }
+    // El service worker recoge sus avisos sin sesion: se identifica con su
+    // endpoint, que es una URL impredecible que solo el navegador conoce.
+    if (
+      segmentos[0] === 'push' &&
+      (segmentos[1] === 'clave' || segmentos[1] === 'pendientes')
+    ) {
       return;
     }
     const token = tokenDe(contexto);
@@ -908,11 +955,7 @@ export function construirRutas(
       // Lo detectado se registra: un pendiente no desaparece porque el
       // correo que lo origino ya sea viejo.
       const registro = datos.registroCorreo.leer();
-      const actual = registrar(
-        registro[cuenta.id] ?? [],
-        detectados,
-        hechos()
-      );
+      const actual = registrar(registro[cuenta.id] ?? [], detectados, hechos());
       await datos.registroCorreo.escribir({ ...registro, [cuenta.id]: actual });
       return { ...lectura, pendientes: actual };
     });
@@ -1381,7 +1424,6 @@ export function construirRutas(
     conNotas(await conIa(pendientesOps()))
   );
 
-
   // --- Anotar un pendiente: comentario, hecho, asignacion ---
   //
   // Vale para cualquier pendiente, venga del correo, de Ops, de Odoo o de los
@@ -1402,7 +1444,8 @@ export function construirRutas(
     const nota = todas[id] ?? { comentarios: [], actualizadoEn: '' };
     const buscado = quien.trim().toLowerCase();
     const persona = (await equipoCompleto()).find(
-      (p) => p.id.toLowerCase() === buscado || p.email?.toLowerCase() === buscado
+      (p) =>
+        p.id.toLowerCase() === buscado || p.email?.toLowerCase() === buscado
     );
     if (!persona) {
       throw new ErrorPuente(`No hay nadie en el equipo con "${quien}".`, 400);
@@ -1410,6 +1453,25 @@ export function construirRutas(
     nota.asignado = persona;
     nota.actualizadoEn = new Date().toISOString();
     await datos.anotaciones.escribir({ ...todas, [id]: nota });
+    if (persona.email) {
+      void push.avisar(
+        {
+          titulo: `Te asignaron: ${tarea.title ?? id}`,
+          cuerpo: [
+            tarea.priority ? `Prioridad ${tarea.priority}` : undefined,
+            tarea.dueDate
+              ? `vence ${new Date(tarea.dueDate).toLocaleDateString('es-MX', { dateStyle: 'medium', timeZone: 'America/Mexico_City' })}`
+              : undefined,
+            sesion ? `de ${sesion.correo}` : undefined
+          ]
+            .filter((x) => x)
+            .join(' · '),
+          url: '/pendientes',
+          etiqueta: `asignado:${id}`
+        },
+        persona.email
+      );
+    }
     const config = cfg();
     if (!persona.email) {
       return 'Asignado; esa persona no tiene correo en el equipo, no se le avisó.';
@@ -1423,7 +1485,9 @@ export function construirRutas(
       `<p style="font-size:20px"><strong>${escapar(t.title ?? id)}</strong></p>` +
       (t.description ? `<p>${escapar(t.description)}</p>` : '') +
       `<p>Prioridad: ${escapar(t.priority ?? 'media')}` +
-      (t.dueDate ? ` · Vence: ${new Date(t.dueDate).toLocaleDateString('es-MX', { dateStyle: 'long', timeZone: 'America/Mexico_City' })}` : '') +
+      (t.dueDate
+        ? ` · Vence: ${new Date(t.dueDate).toLocaleDateString('es-MX', { dateStyle: 'long', timeZone: 'America/Mexico_City' })}`
+        : '') +
       (t.project ? ` · Proyecto: ${escapar(t.project)}` : '') +
       `</p>` +
       (nota.comentarios.length > 0
@@ -1448,6 +1512,7 @@ export function construirRutas(
       comentario?: string;
       hecho?: boolean;
       eliminar?: boolean;
+      cambios?: CambiosPendiente;
       asignarA?: string;
       tarea?: Partial<TaskItem>;
     };
@@ -1467,6 +1532,20 @@ export function construirRutas(
     }
     if (typeof cuerpo.hecho === 'boolean') {
       nota.hecho = cuerpo.hecho;
+    }
+    if (cuerpo.cambios && typeof cuerpo.cambios === 'object') {
+      const limpios = limpiarCambios(cuerpo.cambios);
+      // Los propios se editan en su lugar; los demas llevan el cambio encima.
+      const propios = datos.personales.leer();
+      if (propios.some((t) => t.id === id)) {
+        await datos.personales.escribir(
+          propios.map((t) =>
+            t.id === id ? { ...t, ...limpios, updatedAt: ahora } : t
+          )
+        );
+      } else {
+        nota.cambios = { ...(nota.cambios ?? {}), ...limpios };
+      }
     }
     if (cuerpo.eliminar === true) {
       // Un pendiente propio se borra de verdad; los demas se esconden.
@@ -1501,7 +1580,11 @@ export function construirRutas(
         const actual = datos.anotaciones.leer();
         await datos.anotaciones.escribir({
           ...actual,
-          [id]: { ...(actual[id] ?? nota), asignado: undefined, actualizadoEn: ahora }
+          [id]: {
+            ...(actual[id] ?? nota),
+            asignado: undefined,
+            actualizadoEn: ahora
+          }
         });
       } else {
         aviso = await asignarPendiente(id, quien, cuerpo.tarea ?? {}, sesion);
@@ -1544,10 +1627,8 @@ export function construirRutas(
     return salida;
   };
 
-  const siHay = async <T>(
-    hay: unknown,
-    f: () => Promise<T[]>
-  ): Promise<T[]> => (hay ? f() : []);
+  const siHay = async <T>(hay: unknown, f: () => Promise<T[]>): Promise<T[]> =>
+    hay ? f() : [];
 
   const fuentes: Fuentes = {
     pendientes: async () => {
@@ -1595,7 +1676,9 @@ export function construirRutas(
           licenciasFigma(exigir(cfg().figma, 'figma'))
         )
       ).catch(() => [])),
-      ...(cfg().vercel ? licenciasVercel(cfg().vercel as ConfiguracionVercel) : [])
+      ...(cfg().vercel
+        ? licenciasVercel(cfg().vercel as ConfiguracionVercel)
+        : [])
     ],
     dominios: () => datos.dominios.leer(),
     monitoreo: () =>
@@ -1629,7 +1712,168 @@ export function construirRutas(
     pendientesDeCorreo: () =>
       conNotas(Object.values(datos.registroCorreo.leer()).flat()),
     asignar: asignarPendiente,
-    dominios: () => datos.dominios.leer()
+    dominios: () => datos.dominios.leer(),
+    calendarios: () =>
+      buzones_(cfg(), almacenCorreo)
+        .filter((c) => metodoDe(c, cfg()) === 'graph')
+        .map((c) => ({ id: c.id, usuario: c.usuario })),
+    agendar: (cuentaId, junta) => {
+      const cuenta = buzon(cuentaId);
+      if (metodoDe(cuenta, cfg()) !== 'graph') {
+        throw new ErrorConfiguracion(
+          `El buzón "${cuentaId}" no está conectado con Microsoft; solo ahí se pueden crear juntas.`
+        );
+      }
+      return crearEventoMicrosoft(cuenta, junta);
+    }
+  });
+
+  // --- Juntas: crear en el calendario de una cuenta de Microsoft ---
+
+  router.post('/correo/:id/juntas/crear', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const cuenta = buzon(contexto.segmentos[1] as string);
+    if (metodoDe(cuenta, cfg()) !== 'graph') {
+      throw new ErrorConfiguracion(
+        `El buzón "${cuenta.id}" no está conectado con Microsoft; solo ahí se pueden crear juntas.`
+      );
+    }
+    const j = (contexto.cuerpo ?? {}) as Partial<NuevaJunta>;
+    if (!j.titulo || !j.inicio || Number.isNaN(Date.parse(j.inicio))) {
+      throw new ErrorPuente('Faltan el título o el inicio de la junta.', 400);
+    }
+    const fin =
+      j.fin && !Number.isNaN(Date.parse(j.fin))
+        ? j.fin
+        : new Date(Date.parse(j.inicio) + 3_600_000).toISOString();
+    const creada = await crearEventoMicrosoft(cuenta, {
+      titulo: j.titulo.trim().slice(0, 200),
+      inicio: new Date(j.inicio).toISOString(),
+      fin,
+      lugar: j.lugar,
+      cuerpo: j.cuerpo,
+      invitados: Array.isArray(j.invitados)
+        ? j.invitados.filter(
+            (x): x is string => typeof x === 'string' && x.includes('@')
+          )
+        : [],
+      enLinea: j.enLinea === true
+    });
+    cache.olvidar(`correo:${cuenta.id}`);
+    return { ok: true, ...creada };
+  });
+
+  // --- Fireflies: notas de juntas ---
+
+  router.get('/fireflies/transcripciones', async () =>
+    cfg().fireflies
+      ? cache.obtener('fireflies:lista', 300, () =>
+          transcripcionesRecientes(
+            cfg().fireflies as ConfiguracionFireflies,
+            45
+          )
+        )
+      : []
+  );
+
+  // --- Telegram: dictar por chat ---
+  //
+  // Publica (Telegram no tiene sesion): se identifica con el secreto del
+  // webhook y solo atiende chats autorizados. Un chat desconocido recibe su
+  // id para que lo autoricen desde Equipo → Configuración.
+
+  router.post('/telegram/webhook', async (contexto) => {
+    const telegram = cfg().telegram;
+    if (!telegram) {
+      return { ok: true };
+    }
+    if (
+      contexto.encabezados['x-telegram-bot-api-secret-token'] !==
+      telegram.secreto
+    ) {
+      throw new ErrorPuente('Webhook no reconocido.', 403);
+    }
+    const mensaje = leerUpdate(contexto.cuerpo);
+    if (!mensaje) {
+      return { ok: true };
+    }
+    const contestar = (texto: string) =>
+      responder(telegram, mensaje.chatId, texto).catch((error) =>
+        console.warn(`[puente] telegram: ${(error as Error).message}`)
+      );
+    if (!telegram.chats.includes(mensaje.chatId)) {
+      await contestar(
+        `Hola${mensaje.nombre ? ` ${mensaje.nombre}` : ''}. Este chat no está autorizado. Tu id es <code>${mensaje.chatId}</code>: agrégalo en DS Monitor → Equipo → Configuración → Telegram.`
+      );
+      return { ok: true };
+    }
+    if (!mensaje.texto) {
+      await contestar(
+        mensaje.voz
+          ? 'Todavía no transcribo audios: mándame el pendiente escrito (o dicta con el micrófono del teclado).'
+          : 'Mándame texto con lo que hay que hacer.'
+      );
+      return { ok: true };
+    }
+    if (/^\/start/.test(mensaje.texto)) {
+      await contestar(
+        'Listo. Escríbeme los pendientes tal cual los dictarías: "Junta con Felipe el lunes a las 12 en Italian Coffee, es de OperativAI. Y que Efrén revise el alta de proveedores de Vanguardia, urgente."'
+      );
+      return { ok: true };
+    }
+    try {
+      const equipo = await equipoCompleto();
+      const propuestas = await interpretarDictado(
+        cfg().ia,
+        mensaje.texto,
+        equipo
+      );
+      if (propuestas.length === 0) {
+        await contestar('No encontré nada que convertir en pendiente.');
+        return { ok: true };
+      }
+      const ahora = new Date().toISOString();
+      const nuevos: TaskItem[] = propuestas.map((p, i) => ({
+        id: `local-telegram-${Date.now()}-${i}`,
+        title: p.titulo.slice(0, 120),
+        description: p.descripcion,
+        status: 'pendiente',
+        priority: p.prioridad,
+        dueDate: p.venceEn,
+        accountId: 'mios',
+        origin: 'local',
+        project: p.proyecto,
+        company: p.personal ? undefined : p.empresa,
+        personal: p.personal ? true : undefined,
+        tags: ['dictado', 'telegram'],
+        updatedAt: ahora
+      }));
+      await datos.personales.escribir([...nuevos, ...datos.personales.leer()]);
+      const lineas: string[] = [];
+      for (const [i, p] of propuestas.entries()) {
+        const t = nuevos[i] as TaskItem;
+        let extra = '';
+        if (p.persona?.email || p.persona?.id) {
+          const aviso = await asignarPendiente(
+            t.id,
+            p.persona.email ?? p.persona.id,
+            t,
+            undefined
+          ).catch((error) => (error as Error).message);
+          extra = ` → ${p.persona.name}${aviso?.includes('avisó') ? ' ✉️' : ''}`;
+        }
+        lineas.push(
+          `• <b>${escapar(t.title)}</b>${t.company ? ` · ${t.company}` : ''}${t.personal ? ' · personal' : ''}${t.dueDate ? ` · ${new Date(t.dueDate).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Mexico_City' })}` : ''} · ${t.priority}${extra}`
+        );
+      }
+      cache.olvidar();
+      await contestar(
+        `Agregué ${nuevos.length}:\n${lineas.join('\n')}\n\nRevísalos en ${cfg().urlPublica.replace(/\/api\/portal$/, '')}/pendientes`
+      );
+    } catch (error) {
+      await contestar(`No pude procesarlo: ${(error as Error).message}`);
+    }
+    return { ok: true };
   });
 
   // Releer los buzones cada tanto, sin que nadie abra el portal: asi los
@@ -1659,6 +1903,161 @@ export function construirRutas(
     },
     ...ia.programables
   );
+
+  // --- Avisos push al celular ---
+
+  router.get('/push/clave', async () => ({ clave: await push.clavePublica() }));
+
+  router.post('/push/suscribir', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { endpoint } = (contexto.cuerpo ?? {}) as { endpoint?: string };
+    if (typeof endpoint !== 'string' || !/^https:\/\//.test(endpoint)) {
+      throw new ErrorPuente('Falta el endpoint de la suscripción.', 400);
+    }
+    const sesion = acceso.sesionDe(tokenDe(contexto));
+    const sub = await push.suscribir(
+      endpoint,
+      sesion?.correo,
+      contexto.encabezados['user-agent']?.slice(0, 120)
+    );
+    return { ok: true, id: sub.id, correo: sub.correo };
+  });
+
+  router.post('/push/olvidar', async (contexto) => {
+    const { endpoint } = (contexto.cuerpo ?? {}) as { endpoint?: string };
+    if (typeof endpoint === 'string') {
+      await push.olvidar(endpoint);
+    }
+    return { ok: true };
+  });
+
+  router.post('/push/pendientes', async (contexto) => {
+    const { endpoint } = (contexto.cuerpo ?? {}) as { endpoint?: string };
+    return typeof endpoint === 'string' ? push.recoger(endpoint) : [];
+  });
+
+  router.get('/push/estado', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    return {
+      dispositivos: push.lista().map((s) => ({
+        id: s.id,
+        correo: s.correo,
+        agente: s.agente,
+        creadoEn: s.creadoEn,
+        ultimoEnvio: s.ultimoEnvio
+      }))
+    };
+  });
+
+  router.post('/push/probar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const sesion = acceso.sesionDe(tokenDe(contexto));
+    const r = await push.avisar(
+      {
+        titulo: 'DS Monitor',
+        cuerpo: 'Los avisos en este dispositivo funcionan.',
+        url: '/hoy',
+        etiqueta: 'prueba'
+      },
+      sesion?.correo
+    );
+    return {
+      ok: r.enviados > 0,
+      mensaje:
+        r.enviados > 0
+          ? `Aviso mandado a ${r.enviados} dispositivo(s).`
+          : `No se pudo mandar: ${r.errores.join('; ') || 'no hay dispositivos suscritos con tu correo'}.`
+    };
+  });
+
+  // Lo que se avisa solo: pendientes que vencen hoy (a su responsable, o a
+  // todos si no tiene) y sitios caidos (a todos). Cada cosa se avisa una vez.
+  programables.push({
+    nombre: 'avisos push',
+    cadaMinutos: 15,
+    correr: async () => {
+      if (push.lista().length === 0) {
+        return;
+      }
+      const ahora = new Date();
+      const avisados = { ...datos.pushAvisados.leer() };
+      const hoy = ahora.toLocaleDateString('en-CA', {
+        timeZone: 'America/Mexico_City'
+      });
+      const hora = Number(
+        ahora.toLocaleTimeString('en-GB', {
+          timeZone: 'America/Mexico_City',
+          hour: '2-digit',
+          hour12: false
+        })
+      );
+      let cambio = false;
+      if (hora >= 7) {
+        const pendientes = await fuentes
+          .pendientes()
+          .catch(() => [] as TaskItem[]);
+        for (const t of pendientes) {
+          if (t.status === 'hecho' || !t.dueDate) {
+            continue;
+          }
+          const dia = new Date(t.dueDate).toLocaleDateString('en-CA', {
+            timeZone: 'America/Mexico_City'
+          });
+          const clave = `vence:${t.id}:${dia}`;
+          if (dia !== hoy || avisados[clave]) {
+            continue;
+          }
+          await push.avisar(
+            {
+              titulo: `Vence hoy: ${t.title}`,
+              cuerpo: [t.company, t.project, `prioridad ${t.priority}`]
+                .filter((x) => x)
+                .join(' · '),
+              url: '/pendientes',
+              etiqueta: `vence:${t.id}`
+            },
+            t.assignee?.email
+          );
+          avisados[clave] = ahora.toISOString();
+          cambio = true;
+        }
+      }
+      const monitoreo = await fuentes.monitoreo().catch(() => []);
+      for (const m of monitoreo) {
+        if (m.status !== 'caido') {
+          continue;
+        }
+        const clave = `caido:${m.id}:${m.lastCheck ?? ''}`;
+        if (
+          avisados[clave] ||
+          Object.keys(avisados).some(
+            (k) =>
+              k.startsWith(`caido:${m.id}:`) &&
+              ahora.getTime() - Date.parse(avisados[k] as string) <
+                6 * 3_600_000
+          )
+        ) {
+          continue;
+        }
+        await push.avisar({
+          titulo: `Caído: ${m.name}`,
+          cuerpo: m.incident ?? m.url,
+          url: '/monitoreo',
+          etiqueta: `caido:${m.id}`
+        });
+        avisados[clave] = ahora.toISOString();
+        cambio = true;
+      }
+      if (cambio) {
+        const limite = ahora.getTime() - 7 * 86_400_000;
+        await datos.pushAvisados.escribir(
+          Object.fromEntries(
+            Object.entries(avisados).filter(([, en]) => Date.parse(en) > limite)
+          )
+        );
+      }
+    }
+  });
 
   // --- Lo que se recibe en lugar de ir a buscarlo ---
 
