@@ -31,7 +31,7 @@ const CLASE_REVISION: Record<RepoCheckState, string> = {
   exitoso:
     'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200',
   fallido: 'bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200',
-  en_curso: 'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200',
+  en_curso: 'bg-sky-100 text-sky-800 dark:bg-stone-500/20 dark:text-stone-200',
   sin_revision: 'bg-surface-muted text-ink-muted'
 };
 

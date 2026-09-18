@@ -27,7 +27,7 @@ const CLASE_TARJETA: Record<MonitorStatus, string> = {
   caido:
     'border-rose-400 bg-rose-50 dark:border-rose-500/50 dark:bg-rose-500/10',
   mantenimiento:
-    'border-sky-400 bg-sky-50 dark:border-sky-500/50 dark:bg-sky-500/10',
+    'border-sky-400 bg-sky-50 dark:border-stone-400/50 dark:bg-stone-500/10',
   desconocido: 'border-line'
 };
 

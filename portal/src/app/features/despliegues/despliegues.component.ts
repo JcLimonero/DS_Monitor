@@ -32,7 +32,7 @@ import { DayPipe, RelativePipe, TimePipe } from '../../ui/portal.pipes';
 const CLASE_ESTADO: Record<DeploymentState, string> = {
   listo:
     'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200',
-  construyendo: 'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200',
+  construyendo: 'bg-sky-100 text-sky-800 dark:bg-stone-500/20 dark:text-stone-200',
   en_cola:
     'bg-slate-200 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300',
   error: 'bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200',

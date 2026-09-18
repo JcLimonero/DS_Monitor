@@ -181,7 +181,7 @@ const COMPANY_CLASS: Record<string, string> = {
                   kind === 'por_identificar'
                     ? 'bg-amber-100 text-amber-800'
                     : kind === 'equipo'
-                      ? 'bg-sky-100 text-sky-800'
+                      ? 'bg-sky-100 text-sky-800 dark:bg-stone-500/20 dark:text-stone-200'
                       : 'bg-surface-muted text-ink-muted'
                 ">
                 {{ senderLabel[kind] }}

@@ -35,7 +35,7 @@ const CLASE_ESTADO: Record<DeploymentState, string> = {
 
 const BORDE_ESTADO: Record<DeploymentState, string> = {
   listo: 'border-line',
-  construyendo: 'border-sky-400 dark:border-sky-500/50',
+  construyendo: 'border-sky-400 dark:border-stone-400/60',
   en_cola: 'border-line',
   error:
     'border-rose-400 bg-rose-50 dark:border-rose-500/50 dark:bg-rose-500/10',

@@ -211,7 +211,7 @@ export class ConfiguracionBase {
       case 'envio':
         return {
           label: 'Por barrido',
-          clase: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'
+          clase: 'bg-sky-100 text-sky-700 dark:bg-stone-500/20 dark:text-stone-200'
         };
       default:
         return {
@@ -1079,7 +1079,7 @@ export class ConfiguracionBase {
       case 'error':
         return 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300';
       case 'sincronizando':
-        return 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300';
+        return 'bg-sky-100 text-sky-700 dark:bg-stone-500/20 dark:text-stone-200';
       default:
         return 'bg-slate-200 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300';
     }

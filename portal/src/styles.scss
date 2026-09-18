@@ -33,22 +33,26 @@
 }
 
 .dark {
-  --app: 4 18 31;
-  --surface: 10 37 64;
-  --surface-muted: 18 54 90;
-  --line: 29 74 114;
-  --ink: 232 241 248;
-  --ink-muted: 157 180 200;
-  --ink-subtle: 107 130 153;
-  --brand: 125 190 235;
-  --brand-soft: 18 58 92;
-  --accent: 34 211 238;
-  --accent-soft: 12 68 87;
-  --ok: 74 222 128;
-  --warn: 251 191 36;
-  --danger: 248 113 113;
-  --info: 125 190 235;
-
+  /*
+   * Grafito y cobre, no azul: el modo oscuro deja el azul marino a la marca
+   * en claro y aquí usa neutros cálidos con un acento cobre/dorado, para no
+   * parecerse a la mitad de los tableros del mercado.
+   */
+  --app: 14 15 17;
+  --surface: 24 26 29;
+  --surface-muted: 33 36 40;
+  --line: 50 54 60;
+  --ink: 236 235 231;
+  --ink-muted: 170 173 170;
+  --ink-subtle: 118 122 127;
+  --brand: 204 122 60;
+  --brand-soft: 56 40 30;
+  --accent: 222 170 80;
+  --accent-soft: 68 52 26;
+  --ok: 110 205 140;
+  --warn: 240 180 60;
+  --danger: 240 110 110;
+  --info: 200 185 160;
   color-scheme: dark;
 }
 
@@ -87,7 +91,7 @@ body {
 
   /* El primario de la marca: cyan con texto oscuro, como en el sitio. */
   .btn-primary {
-    @apply border-transparent bg-accent text-[#04202B] hover:bg-[#3DCBE3];
+    @apply border-transparent bg-accent text-[#04202B] hover:brightness-110;
   }
 
   .field {
