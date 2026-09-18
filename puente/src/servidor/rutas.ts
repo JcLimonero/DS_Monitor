@@ -1392,14 +1392,17 @@ export function construirRutas(
     );
     // Acceso y la aplicacion de Microsoft no son conexiones del portal: su
     // estado sale de la configuracion misma.
+    const config = cfg();
+    const sueltas: Record<string, boolean> = {
+      acceso: config.acceso !== undefined,
+      microsoft: config.microsoftApp !== undefined,
+      google: config.googleApp !== undefined,
+      openrouter: config.ia !== undefined,
+      fireflies: config.fireflies !== undefined,
+      telegram: config.telegram !== undefined
+    };
     const configurada =
-      id === 'acceso'
-        ? cfg().acceso !== undefined
-        : id === 'microsoft'
-          ? cfg().microsoftApp !== undefined
-          : id === 'google'
-            ? cfg().googleApp !== undefined
-            : (estado?.configurada ?? false);
+      id in sueltas ? (sueltas[id] as boolean) : (estado?.configurada ?? false);
     return {
       id,
       etiqueta: definicion.etiqueta,
