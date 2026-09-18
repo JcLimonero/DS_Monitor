@@ -157,9 +157,7 @@ const COMPANY_CLASS: Record<string, string> = {
                   class="h-7 max-w-40 rounded border border-line bg-surface px-1 text-xs text-ink"
                   [class.text-ink-subtle]="!task().assignee"
                   [disabled]="saving()"
-                  [ngModel]="
-                    task().assignee?.email ?? task().assignee?.id ?? ''
-                  "
+                  [ngModel]="responsableValor()"
                   (ngModelChange)="reasignar($event)"
                   name="resp-{{ task().id }}"
                   aria-label="Responsable">
@@ -593,6 +591,26 @@ export class TaskCardComponent {
       'bg-surface-muted text-ink-muted'
   );
   readonly statusLabel = computed(() => TASK_STATUS_LABEL[this.task().status]);
+
+  /**
+   * El valor del selector de responsable: la persona del equipo que
+   * corresponde al asignado, buscada por id o por correo (sin importar
+   * mayúsculas), para que no salga en blanco cuando el pendiente guardó al
+   * asignado con otro dato del que trae el equipo.
+   */
+  readonly responsableValor = computed(() => {
+    const a = this.task().assignee;
+    if (!a) {
+      return '';
+    }
+    const correo = a.email?.toLowerCase();
+    const p = this.ia
+      .equipo()
+      .find(
+        (q) => q.id === a.id || (!!correo && q.email?.toLowerCase() === correo)
+      );
+    return p ? (p.email ?? p.id) : (a.email ?? a.id ?? '');
+  });
   readonly statusClass = computed(() => STATUS_CLASS[this.task().status]);
   readonly barClass = computed(
     () =>
