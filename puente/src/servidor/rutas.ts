@@ -16,6 +16,7 @@ import {
 import type {
   LicenseUsage,
   Meeting,
+  MonitorTarget,
   Person,
   TaskItem,
   TaskStatus
@@ -94,6 +95,7 @@ import {
   type AvisosEjecuciones,
   type Ejecuciones
 } from '../ingesta/ejecuciones.js';
+import { avisosDeSitios, type SitiosAvisados } from '../nucleo/vigilancia.js';
 import { Cache } from '../nucleo/cache.js';
 import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
 import { licenciasAnthropic } from '../proveedores/anthropic.js';
@@ -273,6 +275,8 @@ export interface Datos {
   pushAvisados: AlmacenJson<Record<string, string>>;
   /** Por integracion, que problema ya se aviso por Telegram. */
   ejecucionesAvisadas: AlmacenJson<AvisosEjecuciones>;
+  /** Sitios monitoreados que ya se avisaron como caidos por Telegram. */
+  sitiosAvisados: AlmacenJson<SitiosAvisados>;
   /** Donde se permite usar el modelo (Integraciones → IA). */
   iaUsos: AlmacenJson<UsosIa>;
   /** Bitacora de llamadas al modelo. */
@@ -369,6 +373,10 @@ export function abrirDatos(directorio: string): Datos {
     pushAvisados: new AlmacenJson(join(directorio, 'push-avisados.json'), {}),
     ejecucionesAvisadas: new AlmacenJson<AvisosEjecuciones>(
       join(directorio, 'ejecuciones-avisadas.json'),
+      {}
+    ),
+    sitiosAvisados: new AlmacenJson<SitiosAvisados>(
+      join(directorio, 'sitios-avisados.json'),
       {}
     ),
     iaBitacora: new AlmacenJson<EntradaBitacora[]>(
@@ -2822,44 +2830,61 @@ export function construirRutas(
 
   // --- Lo que corrio cada integracion (se lee con sesion) ---
 
-  // Vigilancia: si un servicio lleva mas de una hora sin reportar (o mas de
-  // su frecuencia declarada) o su ultima corrida fallo, se avisa por
-  // Telegram a los chats autorizados, una vez por problema, y otra cuando
-  // vuelve.
-  programables.push({
-    nombre: 'vigilancia de ejecuciones',
-    cadaMinutos: 10,
-    correr: async () => {
-      const { lineas, avisadas } = avisosPendientes(
-        datos.ejecuciones.leer(),
-        datos.ejecucionesAvisadas.leer()
+  // Vigilancia por Telegram, a los chats autorizados, una vez por problema y
+  // otra cuando vuelve:
+  //  - un sitio monitoreado que esta caido;
+  //  - una integracion que lleva mas de una hora sin reportar (o mas de su
+  //    frecuencia declarada) o cuya ultima corrida fallo.
+  const mandarTelegram = async (texto: string): Promise<boolean> => {
+    const telegram = cfg().telegram;
+    if (!telegram || telegram.chats.length === 0) {
+      console.warn(
+        '[puente] vigilancia: hay avisos pero Telegram no está configurado'
       );
+      return false;
+    }
+    let mandado = false;
+    for (const chat of telegram.chats) {
+      try {
+        await responder(telegram, chat, texto);
+        mandado = true;
+      } catch (error) {
+        console.warn(
+          `[puente] telegram (vigilancia): ${(error as Error).message}`
+        );
+      }
+    }
+    return mandado;
+  };
+
+  programables.push({
+    nombre: 'vigilancia de servicios',
+    cadaMinutos: 5,
+    correr: async () => {
+      const ahora = new Date();
+      const sitios = cfg().monitoreo
+        ? await fuentes.monitoreo().catch(() => [] as MonitorTarget[])
+        : [];
+      const deSitios = avisosDeSitios(
+        sitios,
+        datos.sitiosAvisados.leer(),
+        ahora
+      );
+      const deEjecuciones = avisosPendientes(
+        datos.ejecuciones.leer(),
+        datos.ejecucionesAvisadas.leer(),
+        ahora
+      );
+      const lineas = [...deSitios.lineas, ...deEjecuciones.lineas];
       if (lineas.length === 0) {
         return;
       }
-      const telegram = cfg().telegram;
-      if (!telegram || telegram.chats.length === 0) {
-        console.warn(
-          `[puente] ejecuciones: ${lineas.length} aviso(s) sin Telegram configurado`
-        );
-        return;
-      }
-      const texto = `<b>DS Monitor · servicios</b>\n${lineas.join('\n')}\n${cfg().urlPortal}/ejecuciones`;
-      let mandado = false;
-      for (const chat of telegram.chats) {
-        try {
-          await responder(telegram, chat, texto);
-          mandado = true;
-        } catch (error) {
-          console.warn(
-            `[puente] telegram (ejecuciones): ${(error as Error).message}`
-          );
-        }
-      }
+      const texto = `<b>DS Monitor · servicios</b>\n${lineas.join('\n')}\n${cfg().urlPortal}/${deSitios.lineas.length > 0 ? 'monitoreo' : 'ejecuciones'}`;
       // Solo se da por avisado lo que de verdad salio; si Telegram fallo se
       // vuelve a intentar en la siguiente vuelta.
-      if (mandado) {
-        await datos.ejecucionesAvisadas.escribir(avisadas);
+      if (await mandarTelegram(texto)) {
+        await datos.sitiosAvisados.escribir(deSitios.avisados);
+        await datos.ejecucionesAvisadas.escribir(deEjecuciones.avisadas);
       }
     }
   });
