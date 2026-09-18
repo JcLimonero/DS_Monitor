@@ -61,6 +61,8 @@ export interface Person {
   email?: string;
   /** Puesto o rol, se muestra en la vista de equipo. */
   role?: string;
+  /** Se le pide estatus de sus pendientes (correo con su liga personal). */
+  pedirEstatus?: boolean;
 }
 
 /** Estado de la última sincronización de una fuente. */

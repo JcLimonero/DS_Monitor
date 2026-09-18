@@ -34,9 +34,18 @@
             placeholder="Rol"
             [ngModel]="p.role"
             (ngModelChange)="updatePersona($index, { role: $event })" />
-          <button type="button" class="btn" (click)="removePersona($index)">
-            <pt-icon name="basura" class="h-4 w-4" /> Quitar
-          </button>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-1.5 text-xs text-ink-muted" title="Cada día hábil a las 9 recibe un correo con sus pendientes y una liga para actualizarlos">
+              <input
+                type="checkbox"
+                [checked]="p.pedirEstatus === true"
+                (change)="updatePersona($index, { pedirEstatus: !p.pedirEstatus })" />
+              Pedir estatus
+            </label>
+            <button type="button" class="btn" (click)="removePersona($index)">
+              <pt-icon name="basura" class="h-4 w-4" /> Quitar
+            </button>
+          </div>
         </li>
       }
       <li class="grid gap-2 py-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
@@ -78,6 +87,17 @@
         (click)="saveEquipo()">
         Guardar equipo
       </button>
+      <button
+        type="button"
+        class="btn"
+        [disabled]="ocupado() === 'estatus'"
+        title="Manda ahora el correo de estatus a las personas marcadas"
+        (click)="solicitarEstatus()">
+        Pedir estatus ahora
+      </button>
+      @if (estatusMensaje(); as m) {
+        <span class="text-xs text-ink-muted">{{ m }}</span>
+      }
       @if (equipoMensaje(); as m) {
         <span
           class="text-xs"

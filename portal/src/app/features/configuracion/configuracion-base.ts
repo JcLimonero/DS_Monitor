@@ -606,7 +606,6 @@ export class ConfiguracionBase {
       : undefined
   );
 
-
   /** Integraciones del puente que no corresponden a ninguna conexión (Acceso). */
   readonly integracionesSueltas = computed(() => {
     const kinds = new Set(
@@ -668,6 +667,33 @@ export class ConfiguracionBase {
 
   updateNuevaPersona(patch: Partial<Person>): void {
     this.nuevaPersona.update((p) => ({ ...p, ...patch }));
+  }
+
+  readonly estatusMensaje = signal<string | undefined>(undefined);
+
+  /** Manda el correo de estatus a quienes tienen la marca. */
+  solicitarEstatus(): void {
+    this.ocupado.set('estatus');
+    this.estatusMensaje.set(undefined);
+    this.admin.solicitarEstatus().subscribe({
+      next: (r) => {
+        this.ocupado.set(undefined);
+        this.estatusMensaje.set(
+          r.enviados.length
+            ? `Pedido a ${r.enviados.join(', ')}.`
+            : 'Nadie marcado con pendientes abiertos (o sin correo).'
+        );
+        if (r.errores.length) {
+          this.estatusMensaje.update(
+            (m) => `${m} Errores: ${r.errores.join('; ')}`
+          );
+        }
+      },
+      error: (error: unknown) => {
+        this.ocupado.set(undefined);
+        this.estatusMensaje.set(describeHttp(error));
+      }
+    });
   }
 
   saveEquipo(): void {

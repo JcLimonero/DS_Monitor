@@ -195,6 +195,16 @@ export class PuenteAdminService {
     );
   }
 
+  solicitarEstatus(
+    ids?: string[]
+  ): Observable<{ enviados: string[]; errores: string[] }> {
+    return this.http.post<{ enviados: string[]; errores: string[] }>(
+      this.url('/equipo/solicitar-estatus'),
+      { ids },
+      { headers: this.headers() }
+    );
+  }
+
   dominios(): Observable<Dominio[]> {
     return this.http.get<Dominio[]>(this.url('/dominios'));
   }

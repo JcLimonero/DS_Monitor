@@ -1,4 +1,6 @@
 import { IaService } from '../core/ia/ia.service';
+import { Aviso, AvisosService } from '../core/avisos/avisos.service';
+import { Router } from '@angular/router';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -56,12 +58,17 @@ export class ShellComponent {
 
   readonly store = inject(PortalStore);
   readonly sesion = inject(SesionService);
+  readonly avisos = inject(AvisosService);
+  private readonly router = inject(Router);
   readonly nav = NAV;
+  readonly avisosAbiertos = signal(false);
 
   constructor() {
     // Una sola vez: si el puente tiene IA, para que las pantallas enseñen o
     // escondan sus botones.
-    inject(IaService).estado().subscribe({ error: () => undefined });
+    inject(IaService)
+      .estado()
+      .subscribe({ error: () => undefined });
   }
 
   /** Menu lateral en pantallas chicas. En escritorio siempre esta visible. */
@@ -75,6 +82,16 @@ export class ShellComponent {
       ? 'Cambiar a tema claro'
       : 'Cambiar a tema oscuro'
   );
+
+  /** Marca el aviso leído y lleva al pendiente, abierto en su detalle. */
+  irAlAviso(a: Aviso): void {
+    this.avisos.marcarLeidos([a.id]);
+    this.avisosAbiertos.set(false);
+    this.avisos.abrir.set(a.tareaId);
+    void this.router.navigate(['/pendientes'], {
+      queryParams: { abrir: a.tareaId }
+    });
+  }
 
   toggleTheme(): void {
     this.theme.toggle();

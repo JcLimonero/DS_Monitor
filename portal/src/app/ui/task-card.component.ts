@@ -8,6 +8,8 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { IaService, describirError } from '../core/ia/ia.service';
+import { AvisosService } from '../core/avisos/avisos.service';
+import { ElementRef, effect } from '@angular/core';
 import { Borrador, EMPRESAS } from '../core/ia/ia.models';
 import {
   TASK_PRIORITY_LABEL,
@@ -465,8 +467,24 @@ export class TaskCardComponent {
     return `mailto:${encodeURIComponent(b.para ?? '')}?subject=${encodeURIComponent(b.asunto)}&body=${encodeURIComponent(b.cuerpo)}`;
   });
 
+  private readonly avisos = inject(AvisosService);
+  private readonly host = inject(ElementRef<HTMLElement>);
+
   constructor() {
     this.ia.cargarEquipo();
+    // Si este es el pendiente que un aviso pidio abrir, se abre y se enseña.
+    effect(() => {
+      if (this.avisos.abrir() === this.task().id) {
+        this.open.set(true);
+        this.avisos.abrir.set(undefined);
+        setTimeout(() => {
+          this.host.nativeElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          });
+        }, 50);
+      }
+    });
   }
 
   /**

@@ -15,6 +15,8 @@ import {
   TaskStatus
 } from '../../core/models';
 import { EMPRESAS } from '../../core/ia/ia.models';
+import { AvisosService } from '../../core/avisos/avisos.service';
+import { ActivatedRoute } from '@angular/router';
 import { CURRENT_USER } from '../../core/sources/demo/demo-people';
 import { LocalTaskStore } from '../../core/sources/local/local-task.store';
 import {
@@ -57,6 +59,18 @@ import { EmisoresConfigComponent } from '../configuracion/emisores-config.compon
 export class PendientesComponent {
   private readonly store = inject(PortalStore);
   private readonly local = inject(LocalTaskStore);
+  private readonly avisos = inject(AvisosService);
+
+  constructor() {
+    // Llegar desde un aviso (o desde una liga en el correo) abre ese
+    // pendiente aunque este hecho o no pase los filtros.
+    const abrir = inject(ActivatedRoute).snapshot.queryParamMap.get('abrir');
+    if (abrir) {
+      this.avisos.abrir.set(abrir);
+      this.includeDone.set(true);
+      this.clearFiltersSuave();
+    }
+  }
 
   readonly bucketLabel = DUE_BUCKET_LABEL;
   readonly originLabel = ORIGIN_LABEL;
@@ -188,6 +202,14 @@ export class PendientesComponent {
     this.newTitle.set('');
     this.newDueDate.set('');
     this.store.refreshTasks();
+  }
+
+  private clearFiltersSuave(): void {
+    this.search.set('');
+    this.owner.set('todos');
+    this.origin.set('todos');
+    this.priority.set('todas');
+    this.company.set('todas');
   }
 
   clearFilters(): void {

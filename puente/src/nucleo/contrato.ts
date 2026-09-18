@@ -17,6 +17,8 @@ export interface Person {
   name: string;
   email?: string;
   role?: string;
+  /** Se le pide estatus de sus pendientes (correo con su liga personal). */
+  pedirEstatus?: boolean;
 }
 
 // --- Pendientes ---

@@ -403,3 +403,19 @@ Realizar pruebas integradas el martes o miércoles próximos (12:05)
     assert.equal(acuerdos[3]?.responsable, undefined);
   });
 });
+
+describe('liga personal', () => {
+  it('vence a las tres de la tarde del dia, o del siguiente si ya pasaron', async () => {
+    const { proximasTres } = await import('../servidor/rutas.js');
+    // 10:00 CDMX (16:00Z) → hoy 15:00 CDMX (21:00Z)
+    assert.equal(
+      proximasTres(new Date('2026-09-17T16:00:00Z')),
+      '2026-09-17T21:00:00.000Z'
+    );
+    // 16:30 CDMX (22:30Z) → mañana 15:00 CDMX
+    assert.equal(
+      proximasTres(new Date('2026-09-17T22:30:00Z')),
+      '2026-09-18T21:00:00.000Z'
+    );
+  });
+});

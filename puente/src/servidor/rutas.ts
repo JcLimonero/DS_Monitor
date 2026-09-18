@@ -234,12 +234,28 @@ export interface Datos {
   pushSuscripciones: AlmacenJson<Suscripcion[]>;
   pushCola: AlmacenJson<ColaPush>;
   pushAvisados: AlmacenJson<Record<string, string>>;
-  /** Token por persona del equipo para su liga "mis pendientes". */
-  ligasEquipo: AlmacenJson<Record<string, string>>;
+  /** Ligas "mis pendientes": token → persona y hasta cuando sirve. */
+  ligasEquipo: AlmacenJson<Record<string, { persona: string; vence: string }>>;
+  /** Lo que el equipo hizo sobre sus pendientes, para avisar en el monitor. */
+  avisos: AlmacenJson<Aviso[]>;
+  /** Ultimo dia en que se pidio estatus, para no repetir. */
+  estatusPedido: AlmacenJson<{ dia?: string }>;
   /** Transcripciones de Fireflies ya convertidas en pendientes. */
   firefliesProcesadas: AlmacenJson<
     Record<string, { en: string; titulo: string; pendientes: number }>
   >;
+}
+
+/** Un aviso en el monitor: alguien del equipo movio un pendiente. */
+export interface Aviso {
+  id: string;
+  tipo: 'comento' | 'termino' | 'reabrio';
+  persona: string;
+  tareaId: string;
+  titulo: string;
+  texto?: string;
+  en: string;
+  leido: boolean;
 }
 
 /** Lee todos los almacenes del disco; se llama una vez al arrancar. */
@@ -299,6 +315,8 @@ export function abrirDatos(directorio: string): Datos {
     pushCola: new AlmacenJson(join(directorio, 'push-cola.json'), {}),
     pushAvisados: new AlmacenJson(join(directorio, 'push-avisados.json'), {}),
     ligasEquipo: new AlmacenJson(join(directorio, 'ligas-equipo.json'), {}),
+    avisos: new AlmacenJson(join(directorio, 'avisos.json'), []),
+    estatusPedido: new AlmacenJson(join(directorio, 'estatus-pedido.json'), {}),
     firefliesProcesadas: new AlmacenJson(
       join(directorio, 'fireflies-procesadas.json'),
       {}
@@ -346,6 +364,29 @@ function faltanteDe(correo: ConfiguracionCorreo): string {
 }
 
 /** El token de administracion, para las rutas que editan buzones. */
+/**
+ * La liga personal sirve hasta las tres de la tarde (hora del centro) del
+ * dia en que se mando; si se mando despues de las tres, hasta las tres del
+ * dia siguiente.
+ */
+export function proximasTres(ahora: Date): string {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false
+  }).formatToParts(ahora);
+  const v = (t: string) => partes.find((p) => p.type === t)?.value ?? '';
+  const hora = Number(v('hour'));
+  const dia = new Date(`${v('year')}-${v('month')}-${v('day')}T15:00:00-06:00`);
+  if (hora >= 15) {
+    dia.setUTCDate(dia.getUTCDate() + 1);
+  }
+  return dia.toISOString();
+}
+
 function escapar(texto: string): string {
   return texto
     .replace(/&/g, '&amp;')
@@ -674,7 +715,8 @@ export function construirRutas(
         role:
           typeof p['role'] === 'string' && p['role'].trim()
             ? p['role'].trim()
-            : undefined
+            : undefined,
+        pedirEstatus: p['pedirEstatus'] === true ? true : undefined
       };
     });
     return datos.equipo.escribir(limpias);
@@ -1451,12 +1493,17 @@ export function construirRutas(
    * vez y no caduca; se puede renovar borrandolo de datos/ligas-equipo.json.
    */
   const ligaDe = async (persona: Person): Promise<string> => {
-    const ligas = datos.ligasEquipo.leer();
-    let token = ligas[persona.id];
-    if (!token) {
-      token = randomBytes(18).toString('base64url');
-      await datos.ligasEquipo.escribir({ ...ligas, [persona.id]: token });
-    }
+    const ahora = new Date();
+    const token = randomBytes(18).toString('base64url');
+    const vigentes = Object.fromEntries(
+      Object.entries(datos.ligasEquipo.leer()).filter(
+        ([, l]) => Date.parse(l.vence) > ahora.getTime()
+      )
+    );
+    await datos.ligasEquipo.escribir({
+      ...vigentes,
+      [token]: { persona: persona.id, vence: proximasTres(ahora) }
+    });
     return `${cfg().urlPublica.replace(/\/api\/portal$/, '')}/mio/${token}`;
   };
 
@@ -2043,12 +2090,17 @@ export function construirRutas(
   // lo que tiene asignado.
 
   const personaDeLiga = async (token: string): Promise<Person> => {
-    const id = Object.entries(datos.ligasEquipo.leer()).find(
-      ([, t]) => t === token
-    )?.[0];
-    const persona = id
-      ? (await equipoCompleto()).find((p) => p.id === id)
-      : undefined;
+    const liga = datos.ligasEquipo.leer()[token];
+    if (!liga) {
+      throw new ErrorPuente('Esta liga no es válida.', 404);
+    }
+    if (Date.parse(liga.vence) < Date.now()) {
+      throw new ErrorPuente(
+        'Esta liga venció (sirve hasta las 3 de la tarde del día en que se mandó). Pide una nueva a quien te asignó el pendiente.',
+        410
+      );
+    }
+    const persona = (await equipoCompleto()).find((p) => p.id === liga.persona);
     if (!persona) {
       throw new ErrorPuente('Esta liga ya no es válida.', 404);
     }
@@ -2100,28 +2152,147 @@ export function construirRutas(
     nota.actualizadoEn = ahora;
     await datos.anotaciones.escribir({ ...todas, [id]: nota });
     cache.olvidar();
-    // Quien asigna se entera por push.
+    // Quien asigna se entera: aviso en el monitor y push.
     const tarea = mias.find((t) => t.id === id) as TaskItem;
+    const aviso: Aviso = {
+      id: randomBytes(8).toString('hex'),
+      tipo:
+        cuerpo.hecho === true
+          ? 'termino'
+          : cuerpo.hecho === false
+            ? 'reabrio'
+            : 'comento',
+      persona: persona.name,
+      tareaId: id,
+      titulo: tarea.title,
+      texto:
+        typeof cuerpo.comentario === 'string'
+          ? cuerpo.comentario.trim().slice(0, 200)
+          : undefined,
+      en: ahora,
+      leido: false
+    };
+    await datos.avisos.escribir([aviso, ...datos.avisos.leer()].slice(0, 200));
     void push.avisar({
       titulo: `${persona.name}: ${cuerpo.hecho === true ? 'terminó' : cuerpo.hecho === false ? 'reabrió' : 'comentó'} ${tarea.title}`,
       cuerpo:
         typeof cuerpo.comentario === 'string'
           ? cuerpo.comentario.slice(0, 140)
           : '',
-      url: '/pendientes',
+      url: `/pendientes?abrir=${encodeURIComponent(id)}`,
       etiqueta: `mio:${id}`
     });
     return { ok: true, anotacion: nota };
   });
 
-  router.get('/equipo/ligas', async (contexto) => {
-    exigirAdmin(contexto, cfg(), acceso);
-    const equipo = await equipoCompleto();
-    const salida: Record<string, string> = {};
-    for (const p of equipo) {
-      salida[p.id] = await ligaDe(p);
+  // --- Avisos del monitor: lo que el equipo movio ---
+
+  router.get('/avisos', async () => datos.avisos.leer());
+
+  router.post('/avisos/leer', async (contexto) => {
+    const { ids } = (contexto.cuerpo ?? {}) as { ids?: string[] };
+    const marcar = Array.isArray(ids) ? new Set(ids) : undefined;
+    await datos.avisos.escribir(
+      datos.avisos
+        .leer()
+        .map((a) => (!marcar || marcar.has(a.id) ? { ...a, leido: true } : a))
+    );
+    return { ok: true };
+  });
+
+  // --- Solicitar estatus: correo a cada quien con lo suyo y su liga ---
+
+  const solicitarEstatus = async (
+    ids?: string[]
+  ): Promise<{ enviados: string[]; errores: string[] }> => {
+    const config = cfg();
+    if (!config.acceso) {
+      throw new ErrorConfiguracion(
+        'Para pedir estatus hace falta el acceso (EmailJS) en Equipo → Configuración.'
+      );
     }
-    return salida;
+    const equipo = (await equipoCompleto()).filter(
+      (p) => p.email && (ids ? ids.includes(p.id) : p.pedirEstatus)
+    );
+    const enviados: string[] = [];
+    const errores: string[] = [];
+    for (const persona of equipo) {
+      const mias = (await pendientesDe(persona)).filter(
+        (t) => t.status !== 'hecho'
+      );
+      if (mias.length === 0) {
+        continue;
+      }
+      const liga = await ligaDe(persona);
+      const html =
+        `<p>Hola ${escapar(persona.name.split(' ')[0] ?? persona.name)}, ¿cómo van estos pendientes? Marca los que ya terminaste y deja un comentario en los que siguen:</p>` +
+        `<ul>${mias
+          .map(
+            (t) =>
+              `<li><strong>${escapar(t.title)}</strong>${t.company ? ` · ${escapar(t.company)}` : ''}${t.project ? ` · ${escapar(t.project)}` : ''}${t.dueDate ? ` · vence ${new Date(t.dueDate).toLocaleDateString('es-MX', { dateStyle: 'medium', timeZone: 'America/Mexico_City' })}` : ''}</li>`
+          )
+          .join('')}</ul>` +
+        `<p><a href="${liga}" style="display:inline-block;padding:10px 16px;background:#04202B;color:#fff;text-decoration:none;border-radius:6px">Actualizar mis pendientes</a></p>` +
+        `<p style="color:#666;font-size:12px">La liga sirve hasta las 3 de la tarde de hoy.</p>`;
+      try {
+        await enviarPorEmailJs(
+          config.acceso,
+          persona.email as string,
+          '',
+          false,
+          {
+            titulo: `Estatus de tus pendientes · ${mias.length}`,
+            html
+          }
+        );
+        enviados.push(persona.email as string);
+      } catch (error) {
+        errores.push(`${persona.email}: ${(error as Error).message}`);
+      }
+    }
+    return { enviados, errores };
+  };
+
+  router.post('/equipo/solicitar-estatus', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { ids } = (contexto.cuerpo ?? {}) as { ids?: string[] };
+    return solicitarEstatus(
+      Array.isArray(ids) && ids.length > 0 ? ids : undefined
+    );
+  });
+
+  // Entre semana a las 9, a quien tenga la marca "pedir estatus".
+  programables.push({
+    nombre: 'solicitud de estatus',
+    cadaMinutos: 15,
+    correr: async () => {
+      const ahora = new Date();
+      const local = new Date(
+        ahora.toLocaleString('en-US', { timeZone: 'America/Mexico_City' })
+      );
+      const dia = local.toISOString().slice(0, 10);
+      if (
+        local.getDay() === 0 ||
+        local.getDay() === 6 ||
+        local.getHours() < 9
+      ) {
+        return;
+      }
+      if (datos.estatusPedido.leer().dia === dia || !cfg().acceso) {
+        return;
+      }
+      const marcados = (await equipoCompleto()).some(
+        (p) => p.pedirEstatus && p.email
+      );
+      await datos.estatusPedido.escribir({ dia });
+      if (!marcados) {
+        return;
+      }
+      const r = await solicitarEstatus();
+      console.log(
+        `[puente] estatus pedido a ${r.enviados.length}${r.errores.length ? `, ${r.errores.length} con error` : ''}`
+      );
+    }
   });
 
   // --- Avisos push al celular ---
