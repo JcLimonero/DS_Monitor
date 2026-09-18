@@ -383,7 +383,8 @@ export function candidatosParaIa(
         new Date(e.fecha).getTime() >= desde &&
         !reconocidos.has(e.uid) &&
         !PUBLICIDAD.test(e.asunto) &&
-        !SIN_RESPUESTA.test(e.remitente)
+        !SIN_RESPUESTA.test(e.remitente) &&
+        !DEL_MONITOR.test(e.asunto)
     )
     .sort((a, b) => b.fecha.localeCompare(a.fecha))
     .map((encabezado) => ({
@@ -393,6 +394,13 @@ export function candidatosParaIa(
     .filter((c) => !opciones.yaAnalizado(c.clave))
     .slice(0, opciones.maximo);
 }
+
+/**
+ * Lo que manda el propio monitor (codigos de acceso, asignaciones, la liga
+ * del equipo, el correo del lunes): si entrara a la IA, cada aviso de un
+ * pendiente se volveria otro pendiente.
+ */
+const DEL_MONITOR = /^\s*(re:\s*)?access monitor\b/i;
 
 /** Remitentes automaticos que nunca piden nada. */
 const SIN_RESPUESTA =

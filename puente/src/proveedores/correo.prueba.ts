@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  candidatosParaIa,
   detectarLicencias,
   detectarLicenciasConEvidencia,
   detectarPendientes,
@@ -349,5 +350,40 @@ describe('detectarLicenciasConEvidencia', () => {
     );
     assert.equal(zoom?.ultimo.fecha, '2026-08-25T00:00:00.000Z');
     assert.equal(zoom?.licencia.renewsAt, '2026-09-25T00:00:00.000Z');
+  });
+});
+
+describe('candidatosParaIa', () => {
+  const opciones = { dias: 7, maximo: 10, yaAnalizado: () => false };
+
+  it('deja fuera lo que manda el propio monitor', () => {
+    const encabezados = [
+      correo(
+        'DS Monitor <hola@totalone.mx>',
+        'Access Monitor',
+        '2026-09-16T10:00:00Z'
+      ),
+      correo(
+        'DS Monitor <hola@totalone.mx>',
+        'RE: Access Monitor',
+        '2026-09-16T10:30:00Z'
+      ),
+      correo(
+        'Ken <ken@cliente.com>',
+        'Formulario de Javier',
+        '2026-09-16T11:00:00Z'
+      )
+    ];
+    const candidatos = candidatosParaIa(
+      encabezados,
+      new Set(),
+      'correo-nexus',
+      opciones,
+      AHORA
+    );
+    assert.deepEqual(
+      candidatos.map((c) => c.encabezado.asunto),
+      ['Formulario de Javier']
+    );
   });
 });

@@ -122,7 +122,7 @@ const COMPANY_CLASS: Record<string, string> = {
 
           @if (task().description) {
             <p
-              class="mt-1 whitespace-pre-line text-sm text-ink-muted"
+              class="mt-1 whitespace-pre-line break-words text-sm text-ink-muted"
               [class.line-clamp-2]="!open()">
               {{ task().description }}
             </p>
