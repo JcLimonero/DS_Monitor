@@ -32,7 +32,7 @@ export const DIAPOSITIVAS: Diapositiva[] = [
   },
   {
     id: 'pendientes',
-    titulo: 'Pendientes críticos',
+    titulo: 'Pendientes',
     corto: 'Pendientes',
     icono: 'tareas'
   },

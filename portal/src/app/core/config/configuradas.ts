@@ -39,6 +39,13 @@ export function provideCuentasConfiguradas(config: PortalConfig) {
       return;
     }
     const http = inject(HttpClient);
+    // Todo lo que se inyecta va antes del primer await: despues ya no hay
+    // contexto de inyeccion.
+    const localesAgregados = new Set(
+      inject(LocalSettingsStore)
+        .addedAccounts()
+        .map((a) => a.id)
+    );
     let salud: Salud;
     try {
       salud = await firstValueFrom(
@@ -70,11 +77,6 @@ export function provideCuentasConfiguradas(config: PortalConfig) {
       (salud.conexiones ?? [])
         .map((c) => c.conexion)
         .filter((c) => c.startsWith('correo-'))
-    );
-    const localesAgregados = new Set(
-      inject(LocalSettingsStore)
-        .addedAccounts()
-        .map((a) => a.id)
     );
     const quitar = new Set(
       config.accounts
