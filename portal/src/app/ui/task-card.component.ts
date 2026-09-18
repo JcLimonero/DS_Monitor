@@ -83,16 +83,6 @@ const COMPANY_CLASS: Record<string, string> = {
       [class.border-brand]="open()">
       <span class="account-bar" [class]="barClass()"></span>
       <div class="flex items-start gap-3 pl-2">
-        <button
-          type="button"
-          class="mt-0.5 h-4 w-4 shrink-0 rounded border border-line transition hover:border-brand"
-          [class.bg-brand]="done()"
-          [class.border-brand]="done()"
-          [disabled]="saving()"
-          [attr.aria-label]="
-            done() ? 'Marcar como pendiente' : 'Marcar como hecho'
-          "
-          (click)="toggle()"></button>
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
             <button
@@ -144,7 +134,22 @@ const COMPANY_CLASS: Record<string, string> = {
             @for (cuenta of task().alsoIn ?? []; track cuenta) {
               <pt-account-chip [accountId]="cuenta" />
             }
-            <span [class]="statusClass()">{{ statusLabel() }}</span>
+            @if (ia.disponible) {
+              <select
+                class="h-7 rounded border border-line bg-surface px-1 text-xs font-medium"
+                [class]="statusClass()"
+                [disabled]="saving()"
+                [ngModel]="task().status"
+                (ngModelChange)="cambiarEstado($event)"
+                name="estado-{{ task().id }}"
+                aria-label="Estado">
+                @for (e of estados; track e) {
+                  <option [value]="e">{{ statusLabels[e] }}</option>
+                }
+              </select>
+            } @else {
+              <span [class]="statusClass()">{{ statusLabel() }}</span>
+            }
             @if (ia.disponible && ia.equipo().length > 0) {
               <label class="inline-flex items-center gap-1">
                 <pt-icon name="equipo" class="h-3.5 w-3.5" />
@@ -204,6 +209,37 @@ const COMPANY_CLASS: Record<string, string> = {
 
           @if (open()) {
             <div class="mt-3 space-y-3 border-t border-line pt-3">
+              @if (historial().length > 0) {
+                <details class="rounded-lg bg-surface-muted p-3">
+                  <summary
+                    class="cursor-pointer text-xs font-bold uppercase tracking-wide text-ink-subtle">
+                    Trazabilidad · {{ historial().length }}
+                  </summary>
+                  <ol class="mt-2 space-y-1.5 border-l border-line pl-3">
+                    @for (h of historial(); track h.at + h.kind) {
+                      <li class="relative text-xs">
+                        <span
+                          class="absolute -left-[0.95rem] top-1.5 h-2 w-2 rounded-full"
+                          [class]="
+                            h.kind === 'estado'
+                              ? 'bg-brand'
+                              : h.kind === 'asignacion'
+                                ? 'bg-amber-500'
+                                : h.kind === 'eliminado'
+                                  ? 'bg-danger'
+                                  : 'bg-ink-subtle'
+                          "></span>
+                        <span class="text-ink">{{ h.text }}</span>
+                        <span class="ml-1 text-ink-subtle"
+                          >· {{ h.by ?? 'alguien' }} ·
+                          {{ h.at | relativo }}</span
+                        >
+                      </li>
+                    }
+                  </ol>
+                </details>
+              }
+
               @if (comments().length > 0) {
                 <ul class="space-y-1.5">
                   @for (c of comments(); track c.at) {
@@ -308,6 +344,19 @@ const COMPANY_CLASS: Record<string, string> = {
                       name="e-titulo-{{ task().id }}"
                       [ngModel]="e.title"
                       (ngModelChange)="patchEdit({ title: $event })" />
+                  </label>
+                  <label class="sm:col-span-2">
+                    <span class="mb-1 block text-xs font-medium text-ink-muted"
+                      >Descripción</span
+                    >
+                    <textarea
+                      class="field min-h-24"
+                      name="e-desc-{{ task().id }}"
+                      placeholder="El detalle: lo que se capturó de referencia se puede completar aquí"
+                      [ngModel]="e.description"
+                      (ngModelChange)="
+                        patchEdit({ description: $event })
+                      "></textarea>
                   </label>
                   <label>
                     <span class="mb-1 block text-xs font-medium text-ink-muted"
@@ -439,18 +488,6 @@ const COMPANY_CLASS: Record<string, string> = {
         <div class="flex shrink-0 items-center gap-1">
           <button
             type="button"
-            class="btn h-8 px-2 text-xs"
-            [class.btn-primary]="!done()"
-            [disabled]="saving()"
-            [title]="done() ? 'Volver a abrir' : 'Dar por concluido'"
-            (click)="toggle()">
-            <pt-icon name="ok" class="h-4 w-4" />
-            <span class="hidden sm:inline">{{
-              done() ? 'Reabrir' : 'Hecho'
-            }}</span>
-          </button>
-          <button
-            type="button"
             class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
             [attr.aria-label]="
               open() ? 'Cerrar detalle' : 'Comentar, asignar o marcar'
@@ -508,6 +545,7 @@ export class TaskCardComponent {
   readonly editing = signal<
     | {
         title: string;
+        description: string;
         priority: string;
         dueLocal: string;
         company: string;
@@ -522,6 +560,16 @@ export class TaskCardComponent {
     () => !this.done() && isOverdue(this.task().dueDate)
   );
   readonly comments = computed(() => this.task().comments ?? []);
+  readonly historial = computed(() =>
+    [...(this.task().history ?? [])].sort((a, b) => b.at.localeCompare(a.at))
+  );
+  readonly estados: TaskStatus[] = [
+    'pendiente',
+    'en_progreso',
+    'bloqueado',
+    'hecho'
+  ];
+  readonly statusLabels = TASK_STATUS_LABEL;
   readonly clasePlazo = computed(() =>
     this.task().dueDate
       ? CLASE_PLAZO[tonoPlazo(this.task().dueDate as string)]
@@ -596,6 +644,21 @@ export class TaskCardComponent {
     });
   }
 
+  /** El estado se elige del selector; Hecho y reabrir son dos de sus valores. */
+  cambiarEstado(estado: TaskStatus): void {
+    if (estado === this.task().status) {
+      return;
+    }
+    this.store.marcarRecienHecho(this.task().id, estado === 'hecho');
+    this.guardar({ estado }, () =>
+      this.message.set(
+        estado === 'hecho'
+          ? 'Marcado como hecho. Si fue un error, cambia el estado.'
+          : `Estado: ${TASK_STATUS_LABEL[estado]}.`
+      )
+    );
+  }
+
   toggle(): void {
     const hecho = !this.done();
     this.store.marcarRecienHecho(this.task().id, hecho);
@@ -649,6 +712,7 @@ export class TaskCardComponent {
     const t = this.task();
     this.editing.set({
       title: t.title,
+      description: t.description ?? '',
       priority: t.priority,
       dueLocal: t.dueDate ? aLocal(t.dueDate) : '',
       company: t.company ?? '',
@@ -672,6 +736,7 @@ export class TaskCardComponent {
       {
         cambios: {
           title: e.title,
+          description: e.description,
           priority: e.priority as TaskPriority,
           dueDate: e.dueLocal ? new Date(e.dueLocal).toISOString() : undefined,
           company: e.company || undefined,

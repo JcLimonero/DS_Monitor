@@ -67,6 +67,30 @@
 
         @if (expanded() === load.person.id) {
           <div class="space-y-2 border-t border-line p-3 sm:p-4">
+            <!-- La liga con la que esta persona ve y actualiza lo suyo, sin entrar al monitor -->
+            <div
+              class="flex flex-wrap items-center gap-2 rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-muted">
+              <span>Liga personal (vale hasta las 3 pm):</span>
+              <button
+                type="button"
+                class="btn h-8 px-2 text-xs"
+                [disabled]="ligaOcupada() === load.person.id"
+                (click)="copiarLiga(load.person.id)">
+                Copiar liga
+              </button>
+              <button
+                type="button"
+                class="btn h-8 px-2 text-xs"
+                [disabled]="
+                  ligaOcupada() === load.person.id || !load.person.email
+                "
+                (click)="mandarLiga(load.person.id)">
+                Mandar por correo
+              </button>
+              @if (ligaMensaje()[load.person.id]; as m) {
+                <span class="text-ink">{{ m }}</span>
+              }
+            </div>
             @for (task of openTasksOf(load.person.id); track task.id) {
               <pt-task-card [task]="task" />
             } @empty {
@@ -96,7 +120,8 @@
     <span>
       <span class="block text-sm font-semibold text-ink">Sin asignar</span>
       <span class="block text-xs text-ink-muted">
-        {{ unassigned().length }} pendientes abiertos que nadie tiene a su nombre
+        {{ unassigned().length }} pendientes abiertos que nadie tiene a su
+        nombre
       </span>
     </span>
     <span class="text-sm text-brand">Ver en Pendientes →</span>
@@ -106,5 +131,10 @@
 <p class="mt-4 text-xs text-ink-muted">
   Las personas del equipo, el estatus programado y el correo del lunes se
   administran en
-  <a routerLink="/integraciones" [queryParams]="{ tab: 'equipo' }" class="text-brand hover:underline">Integraciones → Equipo</a>.
+  <a
+    routerLink="/integraciones"
+    [queryParams]="{ tab: 'equipo' }"
+    class="text-brand hover:underline"
+    >Integraciones → Equipo</a
+  >.
 </p>

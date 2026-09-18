@@ -32,6 +32,41 @@ export class EquipoComponent {
 
   /** Persona cuyo detalle está abierto. Solo una a la vez. */
   readonly expanded = signal<string | undefined>(undefined);
+  readonly ligaOcupada = signal<string | undefined>(undefined);
+  readonly ligaMensaje = signal<Record<string, string>>({});
+
+  /** Genera la liga de la persona y la deja en el portapapeles (WhatsApp, etc.). */
+  copiarLiga(id: string): void {
+    this.ligaOcupada.set(id);
+    this.admin.ligaDe(id, false).subscribe({
+      next: (r) => {
+        void navigator.clipboard?.writeText(r.url);
+        this.ligaOcupada.set(undefined);
+        this.ligaMensaje.update((m) => ({
+          ...m,
+          [id]: 'Liga copiada; vale hasta las 3 pm.'
+        }));
+      },
+      error: (e: unknown) => {
+        this.ligaOcupada.set(undefined);
+        this.ligaMensaje.update((m) => ({ ...m, [id]: describeHttp(e) }));
+      }
+    });
+  }
+
+  mandarLiga(id: string): void {
+    this.ligaOcupada.set(id);
+    this.admin.ligaDe(id, true).subscribe({
+      next: (r) => {
+        this.ligaOcupada.set(undefined);
+        this.ligaMensaje.update((m) => ({ ...m, [id]: r.aviso ?? 'Enviada.' }));
+      },
+      error: (e: unknown) => {
+        this.ligaOcupada.set(undefined);
+        this.ligaMensaje.update((m) => ({ ...m, [id]: describeHttp(e) }));
+      }
+    });
+  }
 
   /** El equipo tal como se administra en Ajustes, si hay puente. */
   readonly roster = signal<Person[]>([]);
@@ -138,4 +173,9 @@ export class EquipoComponent {
       .map((part) => part.charAt(0).toUpperCase())
       .join('');
   }
+}
+
+function describeHttp(error: unknown): string {
+  const http = error as { error?: { error?: string }; message?: string };
+  return http?.error?.error ?? http?.message ?? String(error);
 }

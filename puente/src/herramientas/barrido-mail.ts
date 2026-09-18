@@ -347,7 +347,11 @@ async function principal(): Promise<void> {
     for (const p of detectados) {
       const mensaje = await mensajeDeMail(cuenta, p.encabezado.uid);
       p.tarea.description = descripcionDeCorreo(
-        { ...p.encabezado, para: mensaje.para || undefined, cc: mensaje.cc || undefined },
+        {
+          ...p.encabezado,
+          para: mensaje.para || undefined,
+          cc: mensaje.cc || undefined
+        },
         mensaje.cuerpo
       );
     }

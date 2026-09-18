@@ -17,12 +17,22 @@ import type {
   LicenseUsage,
   Meeting,
   Person,
-  TaskItem
+  TaskItem,
+  TaskStatus
 } from '../nucleo/contrato.js';
+
+const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
+  pendiente: 'Pendiente',
+  en_progreso: 'En progreso',
+  bloqueado: 'Bloqueado',
+  hecho: 'Hecho'
+};
 import type { Fuentes } from '../ia/tablero.js';
 import {
   anotar,
+  conEvento,
   limpiarCambios,
+  type Anotacion,
   type Anotaciones,
   type CambiosPendiente
 } from '../pendientes/anotaciones.js';
@@ -1613,7 +1623,14 @@ export function construirRutas(
     }
     nota.asignado = persona;
     nota.actualizadoEn = new Date().toISOString();
-    await datos.anotaciones.escribir({ ...todas, [id]: nota });
+    await datos.anotaciones.escribir({
+      ...todas,
+      [id]: conEvento(nota, {
+        by: sesion?.correo ?? 'administración',
+        kind: 'asignacion',
+        text: `Asignado a ${persona.name}`
+      })
+    });
     if (persona.email) {
       void push.avisar(
         {
@@ -1673,6 +1690,8 @@ export function construirRutas(
       id?: string;
       comentario?: string;
       hecho?: boolean;
+      /** Estado elegido a mano: pendiente, en_progreso, bloqueado o hecho. */
+      estado?: TaskStatus;
       eliminar?: boolean;
       cambios?: CambiosPendiente;
       asignarA?: string;
@@ -1684,19 +1703,66 @@ export function construirRutas(
     }
     const sesion = acceso.sesionDe(tokenDe(contexto));
     const todas = datos.anotaciones.leer();
-    const nota = todas[id] ?? { comentarios: [], actualizadoEn: '' };
+    let nota: Anotacion = todas[id] ?? { comentarios: [], actualizadoEn: '' };
     const ahora = new Date().toISOString();
+    const quienEscribe = sesion?.correo ?? 'administración';
     if (typeof cuerpo.comentario === 'string' && cuerpo.comentario.trim()) {
       nota.comentarios = [
         ...nota.comentarios,
         { text: cuerpo.comentario.trim(), at: ahora, by: sesion?.correo }
       ];
+      nota = conEvento(nota, {
+        at: ahora,
+        by: quienEscribe,
+        kind: 'comentario',
+        text: cuerpo.comentario.trim()
+      });
     }
-    if (typeof cuerpo.hecho === 'boolean') {
-      nota.hecho = cuerpo.hecho;
+    // "estado" es la forma nueva; "hecho" sigue valiendo para la casilla.
+    const estado: TaskStatus | undefined =
+      cuerpo.estado &&
+      ['pendiente', 'en_progreso', 'bloqueado', 'hecho'].includes(cuerpo.estado)
+        ? cuerpo.estado
+        : typeof cuerpo.hecho === 'boolean'
+          ? cuerpo.hecho
+            ? 'hecho'
+            : 'pendiente'
+          : undefined;
+    if (estado) {
+      nota.estado = estado;
+      nota.hecho = estado === 'hecho';
+      nota = conEvento(nota, {
+        at: ahora,
+        by: quienEscribe,
+        kind: 'estado',
+        text: `Estado: ${TASK_STATUS_LABEL[estado]}`
+      });
+      // Los propios guardan el estado en su lugar.
+      const propios = datos.personales.leer();
+      if (propios.some((t) => t.id === id)) {
+        await datos.personales.escribir(
+          propios.map((t) =>
+            t.id === id ? { ...t, status: estado, updatedAt: ahora } : t
+          )
+        );
+      }
     }
     if (cuerpo.cambios && typeof cuerpo.cambios === 'object') {
       const limpios = limpiarCambios(cuerpo.cambios);
+      const resumenCambios = Object.entries(limpios)
+        .map(
+          ([k, v]) =>
+            `${k}: ${v === undefined ? '(vacío)' : String(v).slice(0, 60)}`
+        )
+        .join(', ');
+      if (resumenCambios) {
+        nota = conEvento(nota, {
+          at: ahora,
+          by: quienEscribe,
+          kind: 'edicion',
+          text: resumenCambios
+        });
+      }
       // Una correccion a un pendiente de correo enseña al puente para la
       // proxima vez que escriba ese remitente.
       const original = Object.values(datos.registroCorreo.leer())
@@ -1723,6 +1789,12 @@ export function construirRutas(
       // Un pendiente propio se borra de verdad; los demas se esconden.
       nota.eliminado = true;
       nota.hecho = true;
+      nota = conEvento(nota, {
+        at: ahora,
+        by: quienEscribe,
+        kind: 'eliminado',
+        text: 'Eliminado'
+      });
       await datos.personales.escribir(
         datos.personales.leer().filter((t) => t.id !== id)
       );
@@ -1740,6 +1812,7 @@ export function construirRutas(
       conGrupo[otro] = {
         ...previa,
         hecho: nota.hecho ?? previa.hecho,
+        estado: nota.estado ?? previa.estado,
         eliminado: nota.eliminado ?? previa.eliminado,
         actualizadoEn: ahora
       };
@@ -1752,11 +1825,19 @@ export function construirRutas(
         const actual = datos.anotaciones.leer();
         await datos.anotaciones.escribir({
           ...actual,
-          [id]: {
-            ...(actual[id] ?? nota),
-            asignado: undefined,
-            actualizadoEn: ahora
-          }
+          [id]: conEvento(
+            {
+              ...(actual[id] ?? nota),
+              asignado: undefined,
+              actualizadoEn: ahora
+            },
+            {
+              at: ahora,
+              by: quienEscribe,
+              kind: 'asignacion',
+              text: 'Sin asignar'
+            }
+          )
         });
       } else {
         aviso = await asignarPendiente(id, quien, cuerpo.tarea ?? {}, sesion);
@@ -2245,6 +2326,43 @@ export function construirRutas(
     );
   };
 
+  // La liga de alguien, a pedido: para copiarla (WhatsApp) o mandarla por
+  // correo. Vence a las tres de la tarde como todas.
+  router.post('/equipo/:id/liga', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const id = contexto.segmentos[1] as string;
+    const persona = (await equipoCompleto()).find((p) => p.id === id);
+    if (!persona) {
+      throw new ErrorPuente('No hay nadie con ese id en el equipo.', 404);
+    }
+    const { enviar } = (contexto.cuerpo ?? {}) as { enviar?: boolean };
+    const url = await ligaDe(persona);
+    const vence = proximasTres(new Date());
+    let aviso: string | undefined;
+    if (enviar === true) {
+      const config = cfg();
+      if (!persona.email) {
+        aviso = 'Esa persona no tiene correo; copia la liga y mándasela.';
+      } else if (!config.acceso) {
+        aviso =
+          'Sin acceso (EmailJS) no se puede mandar por correo; copia la liga.';
+      } else {
+        const mias = (await pendientesDe(persona)).filter(
+          (t) => t.status !== 'hecho'
+        );
+        await enviarPorEmailJs(config.acceso, persona.email, '', false, {
+          titulo: `Tus pendientes en DS Monitor · ${mias.length}`,
+          html:
+            `<p>Hola ${escapar(persona.name.split(' ')[0] ?? persona.name)}, aquí puedes ver tus pendientes, cambiar su estado y dejar comentarios:</p>` +
+            `<p><a href="${url}" style="display:inline-block;padding:10px 16px;background:#04202B;color:#fff;text-decoration:none;border-radius:6px">Abrir mis pendientes</a></p>` +
+            `<p style="color:#666;font-size:12px">La liga es personal y sirve hasta las 3 de la tarde de hoy.</p>`
+        });
+        aviso = `Liga enviada a ${persona.email}.`;
+      }
+    }
+    return { url, vence, aviso };
+  });
+
   router.get('/mio/:token/tasks', async ({ segmentos }) => {
     const persona = await personaDeLiga(segmentos[1] as string);
     return {
@@ -2259,23 +2377,45 @@ export function construirRutas(
       id?: string;
       comentario?: string;
       hecho?: boolean;
+      estado?: TaskStatus;
     };
+    if (
+      cuerpo.estado &&
+      ['pendiente', 'en_progreso', 'bloqueado', 'hecho'].includes(cuerpo.estado)
+    ) {
+      cuerpo.hecho = cuerpo.estado === 'hecho';
+    }
     const id = (cuerpo.id ?? '').trim();
     const mias = await pendientesDe(persona);
     if (!id || !mias.some((t) => t.id === id)) {
       throw new ErrorPuente('Ese pendiente no está a tu nombre.', 403);
     }
     const todas = datos.anotaciones.leer();
-    const nota = todas[id] ?? { comentarios: [], actualizadoEn: '' };
+    let nota: Anotacion = todas[id] ?? { comentarios: [], actualizadoEn: '' };
     const ahora = new Date().toISOString();
     if (typeof cuerpo.comentario === 'string' && cuerpo.comentario.trim()) {
       nota.comentarios = [
         ...nota.comentarios,
         { text: cuerpo.comentario.trim(), at: ahora, by: persona.name }
       ];
+      nota = conEvento(nota, {
+        at: ahora,
+        by: persona.name,
+        kind: 'comentario',
+        text: cuerpo.comentario.trim()
+      });
     }
     if (typeof cuerpo.hecho === 'boolean') {
-      nota.hecho = cuerpo.hecho;
+      const estado: TaskStatus =
+        cuerpo.estado ?? (cuerpo.hecho ? 'hecho' : 'pendiente');
+      nota.hecho = estado === 'hecho';
+      nota.estado = estado;
+      nota = conEvento(nota, {
+        at: ahora,
+        by: persona.name,
+        kind: 'estado',
+        text: `Estado: ${TASK_STATUS_LABEL[estado]}`
+      });
     }
     nota.actualizadoEn = ahora;
     await datos.anotaciones.escribir({ ...todas, [id]: nota });

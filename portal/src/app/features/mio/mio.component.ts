@@ -12,7 +12,9 @@ import { PORTAL_CONFIG } from '../../core/config/portal-config.token';
 import {
   TASK_PRIORITY_LABEL,
   TASK_PRIORITY_WEIGHT,
-  TaskItem
+  TASK_STATUS_LABEL,
+  TaskItem,
+  TaskStatus
 } from '../../core/models';
 import { BrandLogoComponent } from '../../ui/brand-logo.component';
 import { IconComponent } from '../../ui/icon.component';
@@ -119,9 +121,27 @@ export class MioComponent {
     this.anotar(t, { hecho });
   }
 
+  cambiarEstado(t: TaskItem, estado: TaskStatus): void {
+    if (estado !== t.status) {
+      this.anotar(t, { estado });
+    }
+  }
+
+  readonly estados: TaskStatus[] = [
+    'pendiente',
+    'en_progreso',
+    'bloqueado',
+    'hecho'
+  ];
+  readonly statusLabel = TASK_STATUS_LABEL;
+
+  historial(t: TaskItem) {
+    return [...(t.history ?? [])].sort((a, b) => b.at.localeCompare(a.at));
+  }
+
   private anotar(
     t: TaskItem,
-    cambio: { comentario?: string; hecho?: boolean },
+    cambio: { comentario?: string; hecho?: boolean; estado?: TaskStatus },
     luego?: () => void
   ): void {
     this.ocupado.set(t.id);

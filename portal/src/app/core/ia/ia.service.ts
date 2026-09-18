@@ -3,7 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Observable, of, tap } from 'rxjs';
 import { PORTAL_CONFIG } from '../config/portal-config.token';
 import { PuenteAdminService } from '../sources/gateway/puente-admin.service';
-import { Person, TaskItem } from '../models';
+import { Person, TaskItem, TaskStatus } from '../models';
 import {
   Acuerdo,
   Alerta,
@@ -253,12 +253,24 @@ export class IaService {
     });
   }
 
+  /** La ventana de la IA: una conversación corta sobre el tablero. */
+  preguntar(
+    conversacion: { rol: 'usuario' | 'asistente'; texto: string }[]
+  ): Observable<{ respuesta: string }> {
+    return this.http.post<{ respuesta: string }>(
+      this.url('/ia/preguntar'),
+      { conversacion },
+      { headers: this.headers() }
+    );
+  }
+
   /** Comentar, marcar hecho o asignar cualquier pendiente. */
   anotar(
     id: string,
     cambio: {
       comentario?: string;
       hecho?: boolean;
+      estado?: TaskStatus;
       eliminar?: boolean;
       cambios?: CambiosPendiente;
       asignarA?: string;

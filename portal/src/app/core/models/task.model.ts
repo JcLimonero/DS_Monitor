@@ -22,12 +22,22 @@ export interface TaskComment {
   by?: string;
 }
 
+/** Un movimiento en la vida de un pendiente: quien, cuando y que. */
+export interface TaskEvent {
+  at: string;
+  by?: string;
+  kind: 'comentario' | 'estado' | 'asignacion' | 'edicion' | 'eliminado';
+  text: string;
+}
+
 export interface TaskItem {
   id: string;
   title: string;
   description?: string;
   /** Comentarios capturados en el portal, el más reciente al final. */
   comments?: TaskComment[];
+  /** Trazabilidad: comentarios, cambios de estado, asignaciones y ediciones. */
+  history?: TaskEvent[];
   /** Empresa a la que pertenece: Itech Dev, Dealer Solutions, NexusQTech, OperativAI. */
   company?: string;
   /**

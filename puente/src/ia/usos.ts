@@ -13,7 +13,8 @@ export const USOS_IA = [
   'repos',
   'diagnosticos',
   'pendientes',
-  'semana'
+  'semana',
+  'asistente'
 ] as const;
 
 export type UsoIa = (typeof USOS_IA)[number];
@@ -30,7 +31,8 @@ export const USOS_POR_OMISION: UsosIa = {
   repos: false,
   diagnosticos: false,
   pendientes: false,
-  semana: false
+  semana: false,
+  asistente: true
 };
 
 export const ETIQUETA_USO: Record<UsoIa, { titulo: string; detalle: string }> =
@@ -78,6 +80,11 @@ export const ETIQUETA_USO: Record<UsoIa, { titulo: string; detalle: string }> =
     semana: {
       titulo: 'Apertura del correo del lunes',
       detalle: 'Un párrafo por persona en el resumen semanal.'
+    },
+    asistente: {
+      titulo: 'Ventana de la IA',
+      detalle:
+        'Preguntarle lo que sea sobre el tablero o pedirle redacciones (botón ✦).'
     }
   };
 

@@ -10,6 +10,7 @@ import {
 import type { Dominio } from '../datos/dominios.js';
 import { acuerdosDeJunta, type Acuerdo } from '../ia/acuerdos.js';
 import { interpretarDictado, type Propuesta } from '../ia/dictado.js';
+import { responderAsistente, type Turno } from '../ia/asistente.js';
 import {
   emparejar,
   notasDe,
@@ -564,6 +565,38 @@ export function registrarRutasIa(
     }
     d.olvidarCache();
     return { agregados: nuevos.length, avisos };
+  });
+
+  // --- La ventana de la IA ---
+
+  router.post('/ia/preguntar', async (contexto) => {
+    d.exigirAdmin(contexto);
+    const config = exigirIa('asistente');
+    const { conversacion } = (contexto.cuerpo ?? {}) as {
+      conversacion?: Turno[];
+    };
+    const turnos = (Array.isArray(conversacion) ? conversacion : [])
+      .filter(
+        (t) =>
+          t &&
+          (t.rol === 'usuario' || t.rol === 'asistente') &&
+          typeof t.texto === 'string'
+      )
+      .slice(-12);
+    if (turnos.length === 0) {
+      throw new ErrorPuente('Falta la pregunta.', 400);
+    }
+    const ahora = new Date();
+    const tablero = await armarTablero(d.fuentes, ahora);
+    const alertas = await alertasActuales(ahora);
+    const respuesta = await responderAsistente(
+      config,
+      tablero,
+      alertas,
+      turnos,
+      ahora
+    );
+    return { respuesta };
   });
 
   // --- Borrador de respuesta a un correo ---

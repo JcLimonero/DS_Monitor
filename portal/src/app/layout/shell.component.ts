@@ -1,5 +1,5 @@
 import { IaService } from '../core/ia/ia.service';
-import { AyudaIaComponent } from '../features/ia/ayuda-ia.component';
+import { VentanaIaComponent } from '../features/ia/ventana-ia.component';
 import { Aviso, AvisosService } from '../core/avisos/avisos.service';
 import { Router } from '@angular/router';
 import {
@@ -52,7 +52,7 @@ const NAV: NavItem[] = [
   selector: 'pt-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    AyudaIaComponent,
+    VentanaIaComponent,
     BrandLogoComponent,
     IconComponent,
     RelativePipe,

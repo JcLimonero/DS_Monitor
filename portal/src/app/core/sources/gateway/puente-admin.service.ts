@@ -195,6 +195,18 @@ export class PuenteAdminService {
     );
   }
 
+  /** La liga personal de alguien del equipo; con `enviar` también va por correo. */
+  ligaDe(
+    id: string,
+    enviar: boolean
+  ): Observable<{ url: string; vence: string; aviso?: string }> {
+    return this.http.post<{ url: string; vence: string; aviso?: string }>(
+      this.url(`/equipo/${encodeURIComponent(id)}/liga`),
+      { enviar },
+      { headers: this.headers() }
+    );
+  }
+
   estatusConfig(): Observable<{ dias: number[]; hora: number }> {
     return this.http.get<{ dias: number[]; hora: number }>(
       this.url('/equipo/estatus-config')

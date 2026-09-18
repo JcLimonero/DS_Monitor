@@ -1,4 +1,10 @@
-import type { Person, TaskComment, TaskItem } from '../nucleo/contrato.js';
+import type {
+  Person,
+  TaskComment,
+  TaskEvent,
+  TaskItem,
+  TaskStatus
+} from '../nucleo/contrato.js';
 
 /**
  * Lo que se le agrega a un pendiente desde el portal, venga de donde venga:
@@ -9,6 +15,10 @@ import type { Person, TaskComment, TaskItem } from '../nucleo/contrato.js';
  */
 export interface Anotacion {
   hecho?: boolean;
+  /** Estado elegido a mano; manda sobre el de la fuente. */
+  estado?: TaskStatus;
+  /** Todo lo que se le ha hecho, en orden. */
+  historial?: TaskEvent[];
   /**
    * Borrado desde el portal. La fuente lo puede seguir mandando (un correo
    * no se va), pero ya no se sirve: es la forma de sacar de la lista lo que
@@ -54,10 +64,12 @@ export function anotar(
         ...limpiarCambios(nota.cambios),
         status: nota.hecho
           ? 'hecho'
-          : tarea.status === 'hecho' && nota.hecho === false
-            ? 'pendiente'
-            : tarea.status,
+          : (nota.estado ??
+            (tarea.status === 'hecho' && nota.hecho === false
+              ? 'pendiente'
+              : tarea.status)),
         assignee: nota.asignado ?? tarea.assignee,
+        history: nota.historial?.length ? nota.historial : tarea.history,
         comments:
           nota.comentarios.length > 0 ? nota.comentarios : tarea.comments,
         updatedAt:
@@ -114,4 +126,19 @@ export function limpiarCambios(
         : undefined;
   }
   return salida;
+}
+
+/** Agrega un movimiento al historial de la anotacion (las ultimas 200). */
+export function conEvento(
+  nota: Anotacion,
+  evento: Omit<TaskEvent, 'at'> & { at?: string }
+): Anotacion {
+  const entrada: TaskEvent = {
+    at: evento.at ?? new Date().toISOString(),
+    ...evento
+  };
+  return {
+    ...nota,
+    historial: [...(nota.historial ?? []), entrada].slice(-200)
+  };
 }
