@@ -8,11 +8,10 @@ import {
 import { ThemeService } from '../core/theme/theme.service';
 
 /**
- * Logo de Dealer Solutions.
- *
- * Hay dos archivos porque el logo original es para fondo claro: sobre navy sus
- * grises casi desaparecen. La variante oscura es el mismo trazo con las dos
- * tintas aclaradas.
+ * Logo de Dealer Solutions: el toro solo, como isotipo (el logotipo completo
+ * con el nombre sigue en `dealer-solutions*.png` por si hace falta en un
+ * correo). Hay dos archivos porque el original es para fondo claro; la
+ * variante oscura lleva la tinta aclarada.
  */
 @Component({
   selector: 'pt-brand-logo',
@@ -34,7 +33,7 @@ export class BrandLogoComponent {
 
   readonly src = computed(() =>
     this.theme.theme() === 'oscuro'
-      ? 'dealer-solutions-oscuro.png'
-      : 'dealer-solutions.png'
+      ? 'toro-oscuro.png'
+      : 'toro.png'
   );
 }
