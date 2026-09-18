@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, provideAppInitializer } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { LocalSettingsStore } from './local-settings.store';
 import { PortalConfig } from './portal-config.model';
 
 /** Lo que responde `GET /salud` del backend. */
@@ -61,6 +62,41 @@ export function provideCuentasConfiguradas(config: PortalConfig) {
       if (conBackend.has(account.id)) {
         account.enabled = configuradas.has(account.id);
       }
+    }
+    // Un buzón que el backend ya no tiene (se quitó desde otro navegador o
+    // desde el celular) no debe reaparecer aquí como "error": se saca de la
+    // configuración, igual que si se hubiera quitado en este navegador.
+    const buzonesDelBackend = new Set(
+      (salud.conexiones ?? [])
+        .map((c) => c.conexion)
+        .filter((c) => c.startsWith('correo-'))
+    );
+    const localesAgregados = new Set(
+      inject(LocalSettingsStore)
+        .addedAccounts()
+        .map((a) => a.id)
+    );
+    const quitar = new Set(
+      config.accounts
+        .filter(
+          (a) =>
+            a.id.startsWith('correo-') &&
+            !buzonesDelBackend.has(a.id) &&
+            !localesAgregados.has(a.id)
+        )
+        .map((a) => a.id)
+    );
+    if (quitar.size > 0) {
+      config.accounts.splice(
+        0,
+        config.accounts.length,
+        ...config.accounts.filter((a) => !quitar.has(a.id))
+      );
+      config.connections.splice(
+        0,
+        config.connections.length,
+        ...config.connections.filter((c) => !quitar.has(c.accountId))
+      );
     }
   });
 }
