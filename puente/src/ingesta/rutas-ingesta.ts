@@ -3,6 +3,11 @@ import type { MonitorTarget } from '../nucleo/contrato.js';
 import { ErrorPuente } from '../nucleo/errores.js';
 import type { Contexto, Router } from '../servidor/router.js';
 import { AlmacenIngesta, origenValido } from './almacen.js';
+import {
+  registrarEjecucion,
+  type Ejecuciones,
+  type EnvioEjecucion
+} from './ejecuciones.js';
 import { TIPOS_INGESTA, type TipoIngesta } from './modelos.js';
 import {
   MAXIMO_HISTORIAL,
@@ -21,6 +26,7 @@ import { validarSobre } from './validar.js';
  * Las rutas para recibir datos y para devolverlos.
  *
  * Recibir:  POST /ingesta/{tipo}            con Authorization: Bearer <token>
+ *           POST /ingesta/ejecuciones       la ultima corrida de una integracion
  * Devolver: GET  /recibido/{origen}/{recurso}
  *
  * El origen sale del token, no del cuerpo: asi nadie puede escribir en el
@@ -39,10 +45,13 @@ const RECURSOS_POR_TIPO: Record<TipoIngesta, string[]> = {
   repos: ['repos']
 };
 
+/** Los tipos que puede tener un emisor: los de datos y el de ejecuciones. */
+export const TIPOS_EMISOR: string[] = [...TIPOS_INGESTA, 'ejecuciones'];
+
 function autenticar(
   contexto: Contexto,
   clientes: ClienteIngesta[],
-  tipo: TipoIngesta
+  tipo: string
 ): ClienteIngesta {
   const encabezado = contexto.encabezados['authorization'] ?? '';
   const token = encabezado.toLowerCase().startsWith('bearer ')
@@ -173,12 +182,46 @@ export function registrarRutasIngesta(
   config: Configuracion,
   almacen: AlmacenIngesta,
   /** Los emisores creados desde la aplicacion, ademas de los del entorno. */
-  emisores: () => ClienteIngesta[] = () => []
+  emisores: () => ClienteIngesta[] = () => [],
+  /** Donde se guarda la ultima corrida de cada integracion. */
+  ejecuciones?: {
+    leer: () => Ejecuciones;
+    escribir: (e: Ejecuciones) => Promise<unknown>;
+  }
 ): void {
   const clientes = (): ClienteIngesta[] => [
     ...config.clientesIngesta,
     ...emisores()
   ];
+
+  // --- La ultima corrida de cada integracion ---
+  //
+  // No es un envio de datos: es "corri, y me fue asi". Va antes del ciclo de
+  // tipos para que no lo tape la ruta generica.
+
+  if (ejecuciones) {
+    router.post('/ingesta/ejecuciones', async (contexto) => {
+      const cliente = autenticar(contexto, clientes(), 'ejecuciones');
+      const cuerpo = (contexto.cuerpo ?? {}) as EnvioEjecucion;
+      if (typeof cuerpo !== 'object' || Array.isArray(cuerpo)) {
+        throw new ErrorPuente('El cuerpo debe ser un objeto JSON.', 400);
+      }
+      const { ejecuciones: nuevas, ejecucion } = registrarEjecucion(
+        ejecuciones.leer(),
+        cliente.nombre,
+        cuerpo
+      );
+      await ejecuciones.escribir(nuevas);
+      return {
+        recibido: true,
+        integracion: ejecucion.integracion,
+        resultado: ejecucion.resultado,
+        corridas: ejecucion.corridas,
+        erroresSeguidos: ejecucion.erroresSeguidos,
+        recibidoEn: ejecucion.recibidoEn
+      };
+    });
+  }
 
   // --- Recibir ---
 

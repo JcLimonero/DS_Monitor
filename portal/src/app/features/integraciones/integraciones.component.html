@@ -3,7 +3,9 @@
   subtitle="Todo lo que se conecta al monitor, en un solo lugar" />
 
 <div class="grid gap-4 lg:grid-cols-[14rem_1fr]">
-  <nav class="flex gap-1 overflow-x-auto lg:flex-col" aria-label="Integraciones">
+  <nav
+    class="flex gap-1 overflow-x-auto lg:flex-col"
+    aria-label="Integraciones">
     @for (p of pestanas; track p.id) {
       <button
         type="button"
@@ -27,34 +29,40 @@
 
   <div class="min-w-0 -mt-4">
     @switch (activa()) {
-      @case ('equipo') {
+      @case ("equipo") {
         <pt-equipo-config />
       }
-      @case ('avisos') {
+      @case ("avisos") {
         <pt-avisos-config />
       }
-      @case ('dominios') {
+      @case ("dominios") {
         <pt-dominios-config />
       }
-      @case ('correo') {
+      @case ("correo") {
         <pt-correo-config />
       }
-      @case ('ia') {
-        <pt-integracion-config [kinds]="['openrouter', 'fireflies', 'telegram']" />
+      @case ("ia") {
+        <pt-integracion-config
+          [kinds]="['openrouter', 'fireflies', 'telegram']" />
         <pt-ia-usos />
         <pt-ia-bitacora />
       }
-      @case ('acceso') {
+      @case ("acceso") {
         <pt-integracion-config [kinds]="['acceso']" />
       }
-      @case ('servicios') {
-        <pt-integracion-config [kinds]="['vercel', 'github', 'odoo', 'monitor']" />
+      @case ("servicios") {
+        <pt-integracion-config
+          [kinds]="['vercel', 'github', 'odoo', 'monitor']" />
       }
-      @case ('licencias') {
+      @case ("licencias") {
         <pt-licencias-config />
         <pt-integracion-config [kinds]="['anthropic', 'cursor', 'figma']" />
       }
-      @case ('ingesta') {
+      @case ("ingesta") {
+        <pt-emisores-config
+          titulo="API de ejecuciones: la última corrida de cada integración"
+          descripcion="Cada aplicación que corre (una sincronía, un barrido, un cron) manda al terminar cómo le fue a POST /ingesta/ejecuciones con su token, y en Ejecuciones se ve la última corrida de cada una."
+          [tipos]="['ejecuciones']" />
         <pt-emisores-config
           titulo="API para alimentar los pendientes"
           descripcion="Otro sistema (el tablero de Ops, un CI, un script) manda sus pendientes con su token a POST /ingesta/pendientes y aparecen con origen Ops."

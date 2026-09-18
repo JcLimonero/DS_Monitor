@@ -19,6 +19,29 @@
     <pt-ia-resumen />
   </div>
 
+  @if (ejecucionesMal().length > 0) {
+    <a
+      routerLink="/ejecuciones"
+      class="mt-4 flex items-center gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900 transition hover:brightness-95 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+      <pt-icon name="alerta" class="h-4 w-4 shrink-0" />
+      <span class="min-w-0 flex-1">
+        <span class="block font-medium">
+          {{ ejecucionesMal().length }}
+          {{ ejecucionesMal().length === 1 ? "integración" : "integraciones" }}
+          sin correr bien
+        </span>
+        <span class="block truncate text-xs opacity-80">
+          @for (e of ejecucionesMal(); track e.clave; let last = $last) {
+            {{ e.nombre }} ({{ e.estado === "error" ? "falló" : "atrasada" }}){{
+              last ? "" : " · "
+            }}
+          }
+        </span>
+      </span>
+      <span class="shrink-0 text-xs">Ver →</span>
+    </a>
+  }
+
   <section class="card mt-4">
     <div class="flex items-center gap-2 border-b border-line px-4 py-3">
       <pt-icon name="agenda" class="h-4 w-4 text-brand" />

@@ -88,13 +88,33 @@
       <pre
         class="mt-2 overflow-x-auto rounded bg-surface-muted p-2 font-mono text-[11px] text-ink"
         >{{ ejemplo() }}</pre>
-      <p class="mt-2">
-        Con <code class="font-mono">"modo":"reemplazar"</code> (por omisión)
-        cada envío es la lista completa; con
-        <code class="font-mono">"modo":"agregar"</code> se mezcla por
-        identificador. Los campos completos están en
-        <code class="font-mono">puente/INGESTA.md</code>.
-      </p>
+      @if (deEjecuciones()) {
+        <p class="mt-2">
+          Un envío por corrida, al terminar.
+          <code class="font-mono">estado</code> es
+          <code class="font-mono">ok</code>,
+          <code class="font-mono">aviso</code> o
+          <code class="font-mono">error</code> (también vale
+          <code class="font-mono">"ok": true/false</code>);
+          <code class="font-mono">mensaje</code> es una línea,
+          <code class="font-mono">detalle</code> el texto largo (el error
+          completo), <code class="font-mono">duracionMs</code> o
+          <code class="font-mono">empezoEn</code>/<code class="font-mono"
+            >terminoEn</code
+          >
+          en ISO, y <code class="font-mono">cadaMinutos</code> cada cuánto
+          debería correr: si se pasa, se marca atrasada. Se guarda solo la
+          última corrida por integración.
+        </p>
+      } @else {
+        <p class="mt-2">
+          Con <code class="font-mono">"modo":"reemplazar"</code> (por omisión)
+          cada envío es la lista completa; con
+          <code class="font-mono">"modo":"agregar"</code> se mezcla por
+          identificador. Los campos completos están en
+          <code class="font-mono">puente/INGESTA.md</code>.
+        </p>
+      }
     </details>
   </section>
 }

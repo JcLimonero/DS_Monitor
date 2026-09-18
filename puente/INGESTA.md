@@ -343,6 +343,67 @@ token de GitHub. Si prefieres que el puente vaya por ellos, configura
 `integracion`: `exitoso` · `fallido` · `en_curso` · `sin_revision`
 `revision`: `aprobado` · `cambios_solicitados` · `sin_revisar`
 
+### Ejecuciones — `POST /ingesta/ejecuciones`
+
+No es un envío de datos: es "corrí, y me fue así". Cada aplicación que corre
+(una sincronía con Odoo, un barrido de correo, un cron, un job de CI) lo manda
+al terminar y el puente guarda **solo la última corrida** de cada integración,
+con cuántas veces ha corrido y cuántas seguidas ha fallado. Se ve en el portal
+en **Ejecuciones**, y las que fallan o se atrasan salen en **Hoy**.
+
+El emisor necesita el tipo `ejecuciones`. El cuerpo no lleva `version` ni
+`datos`: es un objeto plano.
+
+```json
+{
+  "integracion": "odoo-sync",
+  "nombre": "Sincronía con Odoo",
+  "estado": "ok",
+  "mensaje": "48 facturas, 3 nuevas",
+  "detalle": "Texto largo opcional: el error completo, cifras, lo que quieras dejar.",
+  "duracionMs": 1520,
+  "cadaMinutos": 60
+}
+```
+
+- `integracion` (obligatorio): identificador corto y estable, se normaliza a
+  minúsculas con guiones. La misma integración desde dos emisores son dos
+  renglones.
+- `estado` (obligatorio): `ok` · `aviso` · `error`. También vale `"ok": true`
+  o `"ok": false`, o `resultado` en lugar de `estado`.
+- `nombre`: cómo se muestra; si no viene se usa el identificador (o el nombre
+  que se mandó antes).
+- `mensaje`: una línea (hasta 240 caracteres). `detalle`: hasta 4 000.
+- `duracionMs`, o bien `empezoEn` y `terminoEn` en ISO 8601 (se calcula).
+  Si no mandas `terminoEn`, cuenta la hora en que llegó.
+- `cadaMinutos`: cada cuánto debería correr. Si pasa vez y media ese tiempo
+  (mínimo cinco minutos de holgura) sin una corrida nueva, se marca
+  **atrasada**. Se recuerda entre envíos: basta mandarlo una vez.
+
+Respuesta:
+
+```json
+{
+  "recibido": true,
+  "integracion": "odoo-sync",
+  "resultado": "ok",
+  "corridas": 12,
+  "erroresSeguidos": 0,
+  "recibidoEn": "2026-09-18T07:30:00.000Z"
+}
+```
+
+Con `curl`, desde cualquier script:
+
+```bash
+curl -sS -X POST "$PUENTE/ingesta/ejecuciones" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"integracion":"barrido-correo","ok":true,"duracionMs":812,"cadaMinutos":15}'
+```
+
+El portal lo lee en `GET /ejecuciones` (con sesión), ya con el estado
+calculado (`ok`, `aviso`, `error` o `atrasada`) y lo que está mal primero.
+
 ---
 
 ## Leer lo recibido

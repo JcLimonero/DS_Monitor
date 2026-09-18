@@ -34,6 +34,8 @@ export class EmisoresConfigComponent {
   readonly tipos = input.required<string[]>();
   /** Cuenta del portal con la que se marcan los datos del emisor. */
   readonly cuenta = input('ops');
+  /** Si el panel es el de ejecuciones, la nota de "cómo se manda" es otra. */
+  readonly deEjecuciones = computed(() => this.tipos()[0] === 'ejecuciones');
 
   readonly disponible = this.admin.disponible;
   readonly apiUrl = this.admin.apiUrl;
@@ -57,7 +59,9 @@ export class EmisoresConfigComponent {
     const cuerpo =
       tipo === 'equipo'
         ? '{"version":1,"datos":[{"nombre":"Ana Robles","correo":"ana@empresa.com","rol":"Frontend"}]}'
-        : '{"version":1,"datos":[{"id":"482","titulo":"Reintentos del envío","prioridad":"alta","venceEn":"2026-09-20T13:00:00Z"}]}';
+        : tipo === 'ejecuciones'
+          ? '{"integracion":"odoo-sync","nombre":"Sincronía con Odoo","estado":"ok","mensaje":"48 facturas","duracionMs":1520,"cadaMinutos":60}'
+          : '{"version":1,"datos":[{"id":"482","titulo":"Reintentos del envío","prioridad":"alta","venceEn":"2026-09-20T13:00:00Z"}]}';
     return `curl -X POST ${this.apiUrl}/ingesta/${tipo} \\\\\n  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \\\\\n  -d '${cuerpo}'`;
   });
 

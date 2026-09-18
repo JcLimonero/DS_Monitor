@@ -49,6 +49,28 @@ export interface CredencialesBuzon {
   clientSecret?: string;
 }
 
+/** La última corrida de una integración, tal como la sirve el puente. */
+export interface Ejecucion {
+  clave: string;
+  integracion: string;
+  nombre: string;
+  emisor: string;
+  resultado: 'ok' | 'aviso' | 'error';
+  /** Lo que se muestra: el resultado, o "atrasada" si ya debía haber corrido. */
+  estado: 'ok' | 'aviso' | 'error' | 'atrasada';
+  mensaje?: string;
+  detalle?: string;
+  duracionMs?: number;
+  empezoEn?: string;
+  terminoEn: string;
+  recibidoEn: string;
+  cadaMinutos?: number;
+  corridas: number;
+  ultimoOkEn?: string;
+  ultimoErrorEn?: string;
+  erroresSeguidos: number;
+}
+
 export interface ResultadoPrueba {
   ok: boolean;
   mensaje: string;
@@ -268,6 +290,19 @@ export class PuenteAdminService {
     return this.http.post<{ ok: boolean }>(
       this.url('/emisores/borrar'),
       { nombre },
+      { headers: this.headers() }
+    );
+  }
+
+  /** La última corrida de cada integración, las que están mal primero. */
+  ejecuciones(): Observable<Ejecucion[]> {
+    return this.http.get<Ejecucion[]>(this.url('/ejecuciones'));
+  }
+
+  borrarEjecucion(clave: string): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(
+      this.url('/ejecuciones/borrar'),
+      { clave },
       { headers: this.headers() }
     );
   }

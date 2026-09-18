@@ -37,6 +37,7 @@ const NAV: NavItem[] = [
   // El negocio de un vistazo y sus fuentes.
   { path: '/panel', label: 'Panel', icon: 'panel', separador: true },
   { path: '/monitoreo', label: 'Monitoreo', icon: 'monitoreo' },
+  { path: '/ejecuciones', label: 'Ejecuciones', icon: 'reloj' },
   { path: '/despliegues', label: 'Despliegues', icon: 'despliegue' },
   { path: '/repos', label: 'Repositorios', icon: 'rama' },
   { path: '/crm', label: 'CRM', icon: 'crm' },

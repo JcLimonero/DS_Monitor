@@ -84,9 +84,11 @@ import {
 import { AlmacenIngesta } from '../ingesta/almacen.js';
 import {
   registrarRutasIngesta,
+  TIPOS_EMISOR,
   servirRecibido
 } from '../ingesta/rutas-ingesta.js';
 import type { TipoIngesta } from '../ingesta/modelos.js';
+import { listarEjecuciones, type Ejecuciones } from '../ingesta/ejecuciones.js';
 import { Cache } from '../nucleo/cache.js';
 import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
 import { licenciasAnthropic } from '../proveedores/anthropic.js';
@@ -241,6 +243,8 @@ export interface Datos {
   personales: AlmacenJson<TaskItem[]>;
   /** Emisores de la API de ingesta creados desde la aplicacion. */
   emisores: AlmacenJson<ClienteIngesta[]>;
+  /** La ultima corrida de cada integracion, por emisor/integracion. */
+  ejecuciones: AlmacenJson<Ejecuciones>;
   /** Comentarios, hecho y asignacion por pendiente, venga de donde venga. */
   anotaciones: AlmacenJson<Anotaciones>;
   /** Pendientes detectados en el correo, registrados por cuenta. */
@@ -317,6 +321,10 @@ export function abrirDatos(directorio: string): Datos {
     emisores: new AlmacenJson<ClienteIngesta[]>(
       join(directorio, 'emisores.json'),
       []
+    ),
+    ejecuciones: new AlmacenJson<Ejecuciones>(
+      join(directorio, 'ejecuciones.json'),
+      {}
     ),
     anotaciones: new AlmacenJson<Anotaciones>(
       join(directorio, 'anotaciones.json'),
@@ -693,8 +701,14 @@ export function construirRutas(
       vigenciaSegundos: e.vigenciaSegundos,
       deEntorno: cfg().clientesIngesta.some((c) => c.nombre === e.nombre),
       ultimoEnvio:
-        e.tipos
-          .map((t) => almacen.leer(t as TipoIngesta, e.nombre)?.recibidoEn)
+        [
+          ...e.tipos.map(
+            (t) => almacen.leer(t as TipoIngesta, e.nombre)?.recibidoEn
+          ),
+          ...Object.values(datos.ejecuciones.leer())
+            .filter((x) => x.emisor === e.nombre)
+            .map((x) => x.recibidoEn)
+        ]
           .filter((x): x is string => !!x)
           .sort()
           .pop() ?? undefined
@@ -720,18 +734,7 @@ export function construirRutas(
     if (todosLosEmisores().some((e) => e.nombre === nombre)) {
       throw new ErrorPuente(`Ya hay un emisor llamado "${nombre}".`, 400);
     }
-    const tipos = (cuerpo.tipos ?? []).filter((t) =>
-      [
-        'pendientes',
-        'equipo',
-        'juntas',
-        'monitoreo',
-        'crm',
-        'licencias',
-        'despliegues',
-        'repos'
-      ].includes(t)
-    );
+    const tipos = (cuerpo.tipos ?? []).filter((t) => TIPOS_EMISOR.includes(t));
     if (tipos.length === 0) {
       throw new ErrorPuente(
         'El emisor necesita al menos un tipo de envío.',
@@ -2795,9 +2798,34 @@ export function construirRutas(
 
   // --- Lo que se recibe en lugar de ir a buscarlo ---
 
-  registrarRutasIngesta(router, configInicial, almacen, () =>
-    datos.emisores.leer()
+  registrarRutasIngesta(
+    router,
+    configInicial,
+    almacen,
+    () => datos.emisores.leer(),
+    {
+      leer: () => datos.ejecuciones.leer(),
+      escribir: (e) => datos.ejecuciones.escribir(e)
+    }
   );
+
+  // --- Lo que corrio cada integracion (se lee con sesion) ---
+
+  router.get('/ejecuciones', async () =>
+    listarEjecuciones(datos.ejecuciones.leer())
+  );
+
+  router.post('/ejecuciones/borrar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { clave } = (contexto.cuerpo ?? {}) as { clave?: string };
+    const todas = { ...datos.ejecuciones.leer() };
+    if (!clave || !todas[clave]) {
+      throw new ErrorPuente('No hay una ejecución con esa clave.', 404);
+    }
+    delete todas[clave];
+    await datos.ejecuciones.escribir(todas);
+    return { ok: true };
+  });
 
   return router;
 }

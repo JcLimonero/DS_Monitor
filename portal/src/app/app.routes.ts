@@ -75,6 +75,14 @@ export const routes: Routes = [
           )
       },
       {
+        path: 'ejecuciones',
+        title: 'Ejecuciones | DS Monitor',
+        loadComponent: () =>
+          import('./features/ejecuciones/ejecuciones.component').then(
+            (m) => m.EjecucionesComponent
+          )
+      },
+      {
         path: 'monitoreo',
         title: 'Monitoreo | DS Monitor',
         loadComponent: () =>

@@ -1,0 +1,207 @@
+<pt-page-header title="Ejecuciones" [subtitle]="subtitulo()" />
+
+@if (!disponible) {
+  <div class="card">
+    <pt-empty-state
+      icon="monitoreo"
+      title="Sin puente"
+      hint="Las ejecuciones se guardan en el puente; conéctalo en Integraciones." />
+  </div>
+} @else {
+  <div class="mb-4 flex flex-wrap items-center gap-2">
+    <button
+      type="button"
+      class="chip cursor-pointer"
+      [class.bg-brand]="filtro() === 'todas'"
+      [class.text-white]="filtro() === 'todas'"
+      [class.bg-surface-muted]="filtro() !== 'todas'"
+      [class.text-ink-muted]="filtro() !== 'todas'"
+      (click)="filtro.set('todas')">
+      Todas
+    </button>
+    @for (estado of estados; track estado) {
+      <button
+        type="button"
+        class="chip cursor-pointer"
+        [class.bg-brand]="filtro() === estado"
+        [class.text-white]="filtro() === estado"
+        [class.bg-surface-muted]="filtro() !== estado"
+        [class.text-ink-muted]="filtro() !== estado"
+        (click)="filtro.set(estado)">
+        {{ etiqueta[estado] }} · {{ conteo()[estado] }}
+      </button>
+    }
+    <button
+      type="button"
+      class="btn ml-auto px-2 py-1.5"
+      title="Volver a pedir"
+      aria-label="Volver a pedir"
+      (click)="cargar()">
+      <pt-icon name="refrescar" class="h-4 w-4" />
+    </button>
+  </div>
+
+  @if (error(); as e) {
+    <p
+      class="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200">
+      {{ e }}
+    </p>
+  }
+
+  @if (visibles().length > 0) {
+    <section class="card">
+      <!-- Encabezado de la tabla, solo en pantallas anchas -->
+      <div
+        class="hidden grid-cols-[1.2rem_2fr_1fr_1.5fr_1fr_5rem] items-center gap-3 border-b border-line px-4 py-2 text-xs font-medium uppercase tracking-wide text-ink-subtle md:grid">
+        <span></span>
+        <span>Integración</span>
+        <span>Estado</span>
+        <span>Última corrida</span>
+        <span>Duración</span>
+        <span class="text-right">Corridas</span>
+      </div>
+      <ul class="divide-y divide-line">
+        @for (e of visibles(); track e.clave) {
+          <li>
+            <button
+              type="button"
+              class="grid w-full grid-cols-[1.2rem_1fr] items-start gap-3 px-4 py-3 text-left transition hover:bg-surface-muted md:grid-cols-[1.2rem_2fr_1fr_1.5fr_1fr_5rem] md:items-center"
+              [attr.aria-expanded]="abierta() === e.clave"
+              (click)="alternar(e.clave)">
+              <span
+                class="mt-1.5 h-2.5 w-2.5 rounded-full md:mt-0"
+                [class]="punto(e)"></span>
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-medium text-ink">
+                  {{ e.nombre }}
+                </span>
+                <span class="block truncate text-xs text-ink-muted">
+                  {{ e.emisor }} / {{ e.integracion }}
+                  @if (frecuencia(e)) {
+                    · {{ frecuencia(e) }}
+                  }
+                </span>
+                @if (e.mensaje) {
+                  <span class="mt-0.5 block truncate text-xs text-ink-muted">
+                    {{ e.mensaje }}
+                  </span>
+                }
+                <!-- En el celular, lo de las demás columnas en un renglón -->
+                <span
+                  class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted md:hidden">
+                  <span class="chip" [class]="claseEstado(e)">{{
+                    etiqueta[e.estado]
+                  }}</span>
+                  <span>{{ e.terminoEn | relativo }}</span>
+                  @if (duracion(e)) {
+                    <span>· {{ duracion(e) }}</span>
+                  }
+                  <span>· {{ e.corridas }} corridas</span>
+                </span>
+              </span>
+              <span class="hidden md:block">
+                <span class="chip" [class]="claseEstado(e)">{{
+                  etiqueta[e.estado]
+                }}</span>
+                @if (e.erroresSeguidos > 1) {
+                  <span class="ml-1 text-xs text-danger"
+                    >×{{ e.erroresSeguidos }}</span
+                  >
+                }
+              </span>
+              <span class="hidden text-sm text-ink md:block">
+                {{ e.terminoEn | relativo }}
+                <span class="block text-xs text-ink-muted">
+                  {{ e.terminoEn | date: "d MMM, HH:mm" }}
+                </span>
+              </span>
+              <span class="hidden text-sm tabular-nums text-ink md:block">
+                {{ duracion(e) || "—" }}
+              </span>
+              <span
+                class="hidden text-right text-sm tabular-nums text-ink md:block">
+                {{ e.corridas }}
+              </span>
+            </button>
+
+            @if (abierta() === e.clave) {
+              <div
+                class="border-t border-line bg-surface-muted/40 px-4 py-3 text-sm md:pl-[calc(1.2rem+0.75rem+1rem)]">
+                <dl
+                  class="grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2 lg:grid-cols-3">
+                  <div>
+                    <dt class="text-ink-subtle">Último resultado</dt>
+                    <dd class="text-ink">{{ etiqueta[e.resultado] }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-ink-subtle">Recibido</dt>
+                    <dd class="text-ink">{{ e.recibidoEn | relativo }}</dd>
+                  </div>
+                  @if (e.empezoEn) {
+                    <div>
+                      <dt class="text-ink-subtle">Empezó</dt>
+                      <dd class="text-ink">
+                        {{ e.empezoEn | date: "d MMM, HH:mm:ss" }}
+                      </dd>
+                    </div>
+                  }
+                  @if (e.ultimoOkEn) {
+                    <div>
+                      <dt class="text-ink-subtle">Última vez bien</dt>
+                      <dd class="text-ink">{{ e.ultimoOkEn | relativo }}</dd>
+                    </div>
+                  }
+                  @if (e.ultimoErrorEn) {
+                    <div>
+                      <dt class="text-ink-subtle">Último error</dt>
+                      <dd class="text-ink">{{ e.ultimoErrorEn | relativo }}</dd>
+                    </div>
+                  }
+                  @if (e.erroresSeguidos > 0) {
+                    <div>
+                      <dt class="text-ink-subtle">Errores seguidos</dt>
+                      <dd class="text-danger">{{ e.erroresSeguidos }}</dd>
+                    </div>
+                  }
+                </dl>
+                @if (e.detalle) {
+                  <pre
+                    class="mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-surface p-2 font-mono text-[11px] text-ink"
+                    >{{ e.detalle }}</pre>
+                }
+                <div class="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    class="btn px-2 py-1 text-xs"
+                    (click)="borrar(e)">
+                    <pt-icon name="basura" class="h-3.5 w-3.5" />
+                    Quitar de la lista
+                  </button>
+                </div>
+              </div>
+            }
+          </li>
+        }
+      </ul>
+    </section>
+  } @else if (ejecuciones() && ejecuciones()!.length === 0) {
+    <div class="card">
+      <pt-empty-state
+        icon="monitoreo"
+        title="Todavía no corre nada"
+        hint="Crea un token en Integraciones → API de ingesta y haz que cada aplicación mande su corrida a POST /ingesta/ejecuciones." />
+      <p class="pb-4 text-center text-xs">
+        <a
+          class="text-brand hover:underline"
+          routerLink="/integraciones"
+          [queryParams]="{ tab: 'ingesta' }"
+          >Ir a la API de ingesta →</a
+        >
+      </p>
+    </div>
+  } @else if (ejecuciones()) {
+    <div class="card">
+      <pt-empty-state icon="ok" title="Nada con ese estado" />
+    </div>
+  }
+}
