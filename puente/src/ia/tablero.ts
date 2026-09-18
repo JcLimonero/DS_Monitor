@@ -157,3 +157,29 @@ export function juntasEntre(
     )
     .sort((a, b) => a.start.localeCompare(b.start));
 }
+
+/** Hechos ayer (segun su ultima actualizacion, en hora local). */
+export function cerradosAyer(pendientes: TaskItem[], ahora: Date): TaskItem[] {
+  const ayer = diaLocal(new Date(ahora.getTime() - 86_400_000));
+  return pendientes.filter(
+    (t) => t.status === 'hecho' && diaLocal(t.updatedAt) === ayer
+  );
+}
+
+/** Abiertos con fecha despues de hoy, los mas proximos primero. */
+export function proximasEntregas(
+  pendientes: TaskItem[],
+  ahora: Date,
+  dias = 30
+): TaskItem[] {
+  const hoy = diaLocal(ahora);
+  const limite = ahora.getTime() + dias * 86_400_000;
+  return abiertos(pendientes)
+    .filter(
+      (t) =>
+        t.dueDate &&
+        diaLocal(t.dueDate) > hoy &&
+        Date.parse(t.dueDate) <= limite
+    )
+    .sort((a, b) => (a.dueDate as string).localeCompare(b.dueDate as string));
+}

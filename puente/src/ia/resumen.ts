@@ -9,10 +9,12 @@ import {
 } from './modelo.js';
 import {
   abiertos,
+  cerradosAyer,
   diaLocal,
   diasHasta,
   juntasDelDia,
   paraHoy,
+  proximasEntregas,
   vencidos,
   type Tablero
 } from './tablero.js';
@@ -67,6 +69,14 @@ export function contextoDelDia(
       urgentes: urgentes.length,
       porEmpresa
     },
+    cerradosAyer: cerradosAyer(tablero.pendientes, ahora)
+      .slice(0, 10)
+      .map((t) => `${t.title}${t.assignee ? ` (${t.assignee.name})` : ''}`),
+    proximasEntregas: proximasEntregas(tablero.pendientes, ahora, 14)
+      .slice(0, 8)
+      .map(
+        (t) => `${cita(t)} · en ${diasHasta(t.dueDate as string, ahora)} días`
+      ),
     vencidosLista: venc.slice(0, 8).map(cita),
     paraHoyLista: hoy.slice(0, 8).map(cita),
     urgentesLista: urgentes.slice(0, 6).map(cita),
@@ -96,7 +106,7 @@ export async function resumirDia(
 ): Promise<ResumenDia> {
   const contexto = contextoDelDia(tablero, alertas, ahora);
   const texto = await preguntar(config, {
-    sistema: `${CONTEXTO_EMPRESAS}\nEscribes el resumen del día para una pantalla que el equipo ve de reojo. Te doy el estado del tablero en JSON. Responde SOLO JSON: {"titular":"6 a 8 palabras, lo más importante del día","lineas":["...","...","..."]} con 3 o 4 líneas de máximo 110 caracteres, cada una un hecho concreto con cifras y nombres (qué vence, qué junta, qué está caído, qué alerta). Nada de saludos ni de relleno; si todo está en orden, dilo en una línea.`,
+    sistema: `${CONTEXTO_EMPRESAS}\nEscribes el resumen de inicio del día para una pantalla que el equipo ve de reojo. Te doy el estado del tablero en JSON: primero di en una línea qué se cerró ayer (si hubo algo), luego lo de hoy y lo que se entrega en los próximos días. Responde SOLO JSON: {"titular":"6 a 8 palabras, lo más importante del día","lineas":["...","...","..."]} con 3 o 4 líneas de máximo 110 caracteres, cada una un hecho concreto con cifras y nombres (qué vence, qué junta, qué está caído, qué alerta). Nada de saludos ni de relleno; si todo está en orden, dilo en una línea.`,
     usuario: JSON.stringify(contexto),
     json: true,
     maxTokens: 600

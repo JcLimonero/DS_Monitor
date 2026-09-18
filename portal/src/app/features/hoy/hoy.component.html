@@ -17,6 +17,37 @@
     <pt-ia-resumen />
   </div>
 
+  @if (ayer().length > 0 || movimientosAyer().length > 0) {
+    <section class="card mt-4">
+      <div class="flex items-center gap-2 border-b border-line px-4 py-3">
+        <pt-icon name="ok" class="h-4 w-4 text-ok" />
+        <h2 class="text-sm font-semibold text-ink">Ayer</h2>
+        <span class="chip bg-surface-muted text-ink-muted">{{ ayer().length }} cerrados</span>
+      </div>
+      <ul class="divide-y divide-line">
+        @for (t of ayer(); track t.id) {
+          <li class="flex items-center gap-3 px-4 py-2 text-sm">
+            <pt-icon name="ok" class="h-4 w-4 shrink-0 text-ok" />
+            <span class="min-w-0 flex-1 truncate text-ink">{{ t.title }}</span>
+            @if (t.assignee) {
+              <span class="shrink-0 text-xs text-ink-muted">{{ t.assignee.name }}</span>
+            }
+          </li>
+        }
+        @for (a of movimientosAyer(); track a.id) {
+          <li class="px-4 py-2 text-sm text-ink-muted">
+            <span class="font-medium text-ink">{{ a.persona }}</span>
+            {{ a.tipo === "termino" ? "terminó" : a.tipo === "reabrio" ? "reabrió" : "comentó" }}
+            {{ a.titulo }}
+            @if (a.texto) {
+              · “{{ a.texto }}”
+            }
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
   <section class="card mt-4">
     <div class="flex items-center gap-2 border-b border-line px-4 py-3">
       <pt-icon name="agenda" class="h-4 w-4 text-brand" />
@@ -91,6 +122,40 @@
           <pt-task-card [task]="t" />
         }
       </div>
+    </section>
+  }
+
+  @if (proximas().length > 0) {
+    <section class="card mt-4">
+      <div class="flex items-center gap-2 border-b border-line px-4 py-3">
+        <pt-icon name="reloj" class="h-4 w-4 text-brand" />
+        <h2 class="text-sm font-semibold text-ink">Próximas entregas</h2>
+        <span class="chip bg-surface-muted text-ink-muted">{{ proximas().length }}</span>
+        <span class="ml-auto hidden items-center gap-3 text-[10px] uppercase tracking-wide text-ink-subtle sm:flex">
+          <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-orange-500"></span>≤ 2 días</span>
+          <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-amber-500"></span>semana</span>
+          <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>después</span>
+        </span>
+      </div>
+      <ul class="divide-y divide-line">
+        @for (p of proximas(); track p.t.id) {
+          <li class="flex items-center gap-3 px-4 py-2 text-sm">
+            <span class="h-2.5 w-2.5 shrink-0 rounded-full" [class]="p.punto"></span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-ink">{{ p.t.title }}</span>
+              <span class="block text-xs text-ink-muted">
+                {{ p.t.company ?? "" }}
+                @if (p.t.assignee) {
+                  · {{ p.t.assignee.name }}
+                }
+              </span>
+            </span>
+            <span class="shrink-0 text-right text-xs font-medium" [class]="p.clase">
+              {{ p.t.dueDate | dia }}<br />{{ p.texto }}
+            </span>
+          </li>
+        }
+      </ul>
     </section>
   }
 

@@ -31,6 +31,7 @@ export function leerUpdate(cuerpo: unknown): MensajeTelegram | undefined {
       from?: { first_name?: string; username?: string };
       text?: string;
       voice?: { file_id?: string };
+      audio?: { file_id?: string };
     };
   };
   const m = u.message;
@@ -41,7 +42,7 @@ export function leerUpdate(cuerpo: unknown): MensajeTelegram | undefined {
     chatId: String(m.chat.id),
     texto: m.text,
     nombre: m.from?.first_name ?? m.from?.username,
-    voz: m.voice?.file_id
+    voz: m.voice?.file_id ?? m.audio?.file_id
   };
 }
 
@@ -102,4 +103,34 @@ export async function quienEsElBot(
   return datos.result?.username
     ? `@${datos.result.username}`
     : (datos.result?.first_name ?? 'bot');
+}
+
+/** Baja un archivo de Telegram (una nota de voz) por su file_id. */
+export async function bajarArchivo(
+  config: ConfiguracionTelegram,
+  fileId: string
+): Promise<Buffer> {
+  const r = await fetch(
+    `${BASE}/bot${config.token}/getFile?file_id=${encodeURIComponent(fileId)}`
+  );
+  const datos = (await r.json().catch(() => ({}))) as {
+    ok?: boolean;
+    result?: { file_path?: string; file_size?: number };
+  };
+  if (!r.ok || !datos.ok || !datos.result?.file_path) {
+    throw new ErrorProveedor('telegram', 'no se pudo localizar el audio');
+  }
+  if ((datos.result.file_size ?? 0) > 5_000_000) {
+    throw new ErrorProveedor('telegram', 'el audio pesa más de 5 MB');
+  }
+  const archivo = await fetch(
+    `${BASE}/file/bot${config.token}/${datos.result.file_path}`
+  );
+  if (!archivo.ok) {
+    throw new ErrorProveedor(
+      'telegram',
+      `no se pudo bajar el audio (${archivo.status})`
+    );
+  }
+  return Buffer.from(await archivo.arrayBuffer());
 }

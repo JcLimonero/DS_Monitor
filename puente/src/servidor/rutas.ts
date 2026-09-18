@@ -41,7 +41,12 @@ import {
   transcripcionesRecientes
 } from '../proveedores/fireflies.js';
 import { pendientesDeTranscripcion } from '../ia/juntas-fireflies.js';
-import { leerUpdate, responder } from '../proveedores/telegram.js';
+import {
+  bajarArchivo,
+  leerUpdate,
+  responder
+} from '../proveedores/telegram.js';
+import { transcribir } from '../ia/transcribir.js';
 import { interpretarDictado } from '../ia/dictado.js';
 import {
   AlmacenIntegraciones,
@@ -1812,6 +1817,7 @@ export function construirRutas(
     asignar: asignarPendiente,
     dominios: () => datos.dominios.leer(),
     ligaDe,
+    push,
     calendarios: () =>
       buzones_(cfg(), almacenCorreo)
         .filter((c) => metodoDe(c, cfg()) === 'graph')
@@ -2007,14 +2013,38 @@ export function construirRutas(
       );
       return { ok: true };
     }
-    if (!mensaje.texto) {
+    // Nota de voz: se baja y se transcribe con la IA; de ahi sigue igual que
+    // el texto.
+    let dictado = mensaje.texto;
+    if (!dictado && mensaje.voz) {
+      const iaConfig = cfg().ia;
+      if (!iaConfig) {
+        await contestar(
+          'Para transcribir audios hace falta la IA activa; mándame el pendiente escrito.'
+        );
+        return { ok: true };
+      }
+      try {
+        dictado = await transcribir(
+          iaConfig,
+          await bajarArchivo(telegram, mensaje.voz),
+          'ogg'
+        );
+        await contestar(`Escuché: <i>${escapar(dictado)}</i>`);
+      } catch (error) {
+        await contestar(
+          `No pude transcribir el audio: ${escapar((error as Error).message)}. Mándalo escrito.`
+        );
+        return { ok: true };
+      }
+    }
+    if (!dictado) {
       await contestar(
-        mensaje.voz
-          ? 'Todavía no transcribo audios: mándame el pendiente escrito (o dicta con el micrófono del teclado).'
-          : 'Mándame texto con lo que hay que hacer.'
+        'Mándame texto o una nota de voz con lo que hay que hacer.'
       );
       return { ok: true };
     }
+    mensaje.texto = dictado;
     if (/^\/start/.test(mensaje.texto)) {
       await contestar(
         'Listo. Escríbeme los pendientes tal cual los dictarías: "Junta con Felipe el lunes a las 12 en Italian Coffee, es de OperativAI. Y que Efrén revise el alta de proveedores de Vanguardia, urgente."'

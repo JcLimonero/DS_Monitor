@@ -14,8 +14,15 @@ import {
 } from '../../core/state/portal.selectors';
 import { PortalStore } from '../../core/state/portal.store';
 import { accountsOf } from '../../core/util/meetings.util';
+import { AvisosService } from '../../core/avisos/avisos.service';
+import {
+  CLASE_PLAZO,
+  PUNTO_PLAZO,
+  textoPlazo,
+  tonoPlazo
+} from '../../core/util/plazo.util';
 import { IconComponent } from '../../ui/icon.component';
-import { TimePipe } from '../../ui/portal.pipes';
+import { DayPipe, TimePipe } from '../../ui/portal.pipes';
 import { TaskCardComponent } from '../../ui/task-card.component';
 import { AvisosConfigComponent } from '../ia/avisos-config.component';
 import { IaResumenComponent } from '../ia/ia-resumen.component';
@@ -34,6 +41,7 @@ import { IaResumenComponent } from '../ia/ia-resumen.component';
     IconComponent,
     RouterLink,
     TaskCardComponent,
+    DayPipe,
     TimePipe
   ],
   templateUrl: './hoy.component.html'
@@ -81,6 +89,52 @@ export class HoyComponent {
     () => this.store.unmirroredMeetings().length
   );
   readonly cargando = this.store.loading;
+
+  private readonly avisos = inject(AvisosService);
+
+  /** Lo que se cerró ayer (por su última actualización). */
+  readonly ayer = computed(() => {
+    const ayer = new Date();
+    ayer.setDate(ayer.getDate() - 1);
+    const clave = ayer.toDateString();
+    return this.store
+      .tasks()
+      .filter(
+        (t) =>
+          t.status === 'hecho' && new Date(t.updatedAt).toDateString() === clave
+      );
+  });
+  /** Lo que el equipo movió ayer desde sus ligas. */
+  readonly movimientosAyer = computed(() => {
+    const ayer = new Date();
+    ayer.setDate(ayer.getDate() - 1);
+    const clave = ayer.toDateString();
+    return this.avisos
+      .avisos()
+      .filter((a) => new Date(a.en).toDateString() === clave);
+  });
+  /** Entregas después de hoy, en los próximos 30 días, con color por plazo. */
+  readonly proximas = computed(() => {
+    const hoy = new Date();
+    hoy.setHours(23, 59, 59, 999);
+    const limite = hoy.getTime() + 30 * 86_400_000;
+    return this.store
+      .tasks()
+      .filter(
+        (t) =>
+          t.status !== 'hecho' &&
+          t.dueDate &&
+          Date.parse(t.dueDate) > hoy.getTime() &&
+          Date.parse(t.dueDate) <= limite
+      )
+      .sort((a, b) => (a.dueDate as string).localeCompare(b.dueDate as string))
+      .map((t) => ({
+        t,
+        punto: PUNTO_PLAZO[tonoPlazo(t.dueDate as string)],
+        clase: CLASE_PLAZO[tonoPlazo(t.dueDate as string)],
+        texto: textoPlazo(t.dueDate as string)
+      }));
+  });
 
   cuentas(junta: { accountId: string; alsoIn?: string[] }): string {
     return accountsOf(junta as never)

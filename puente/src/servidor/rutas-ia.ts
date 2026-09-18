@@ -38,7 +38,16 @@ import {
   semanaDeCadaQuien,
   type SemanaPersona
 } from '../ia/semana.js';
-import { armarTablero, type Fuentes, type Tablero } from '../ia/tablero.js';
+import {
+  armarTablero,
+  cerradosAyer,
+  juntasDelDia,
+  paraHoy,
+  proximasEntregas,
+  vencidos,
+  type Fuentes,
+  type Tablero
+} from '../ia/tablero.js';
 import type {
   Deployment,
   LicenseUsage,
@@ -110,6 +119,13 @@ export interface DependenciasIa {
     sesion: Sesion | undefined
   ) => Promise<string | undefined>;
   dominios: () => Dominio[];
+  /** Avisos push, para el arranque del dia. */
+  push: {
+    avisar: (
+      n: { titulo: string; cuerpo: string; url?: string; etiqueta?: string },
+      correo?: string
+    ) => Promise<unknown>;
+  };
   /** La liga personal de alguien del equipo (ve, comenta y marca lo suyo). */
   ligaDe: (persona: Person) => Promise<string>;
   /** Buzones donde se pueden crear juntas (conectados con Microsoft). */
@@ -797,6 +813,33 @@ export function registrarRutasIa(
     );
   };
 
+  // A las 8 de la mañana, un push con el arranque del dia: lo cerrado ayer,
+  // lo de hoy y lo que se entrega pronto. Una vez por dia.
+  let ultimoInicio = '';
+  const inicioDelDia = async () => {
+    const ahora = new Date();
+    const local = new Date(
+      ahora.toLocaleString('en-US', { timeZone: 'America/Mexico_City' })
+    );
+    const dia = local.toISOString().slice(0, 10);
+    if (local.getHours() < 8 || ultimoInicio === dia) {
+      return;
+    }
+    ultimoInicio = dia;
+    const tablero = await armarTablero(d.fuentes, ahora);
+    const ayer = cerradosAyer(tablero.pendientes, ahora).length;
+    const hoy = paraHoy(tablero.pendientes, ahora).length;
+    const venc = vencidos(tablero.pendientes, ahora).length;
+    const juntas = juntasDelDia(tablero.juntas, ahora).length;
+    const proximas = proximasEntregas(tablero.pendientes, ahora, 7).length;
+    await d.push.avisar({
+      titulo: `Buenos días · ${juntas} ${juntas === 1 ? 'junta' : 'juntas'}, ${hoy} para hoy`,
+      cuerpo: `Ayer se cerraron ${ayer}. ${venc} vencidos · ${proximas} entregas en la semana.`,
+      url: '/hoy',
+      etiqueta: 'inicio-dia'
+    });
+  };
+
   const resumenSiToca = async () => {
     if (!ia()) {
       return;
@@ -810,7 +853,8 @@ export function registrarRutasIa(
   return {
     programables: [
       { nombre: 'correo semanal', cadaMinutos: 15, correr: semanaSiToca },
-      { nombre: 'resumen del día', cadaMinutos: 30, correr: resumenSiToca }
+      { nombre: 'resumen del día', cadaMinutos: 30, correr: resumenSiToca },
+      { nombre: 'inicio del día', cadaMinutos: 15, correr: inicioDelDia }
     ],
     conVeredictos
   };

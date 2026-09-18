@@ -22,6 +22,12 @@ import {
 import { LocalTaskStore } from '../core/sources/local/local-task.store';
 import { PortalStore } from '../core/state/portal.store';
 import { isOverdue } from '../core/util/date.util';
+import {
+  CLASE_PLAZO,
+  PUNTO_PLAZO,
+  textoPlazo,
+  tonoPlazo
+} from '../core/util/plazo.util';
 import { ACCOUNT_BAR_CLASS } from './account-colors';
 import { AccountChipComponent } from './account-chip.component';
 import { IconComponent } from './icon.component';
@@ -179,10 +185,12 @@ const COMPANY_CLASS: Record<string, string> = {
             }
             @if (task().dueDate; as due) {
               <span
-                class="inline-flex items-center gap-1"
-                [class.text-danger]="overdue()">
-                <pt-icon name="reloj" class="h-3.5 w-3.5" />
-                {{ due | dia }} · {{ due | relativo }}
+                class="inline-flex items-center gap-1 font-medium"
+                [class]="done() ? 'text-ink-subtle' : clasePlazo()">
+                <span
+                  class="h-2 w-2 rounded-full"
+                  [class]="done() ? 'bg-ink-subtle' : puntoPlazo()"></span>
+                {{ due | dia }} · {{ textoPlazo() }}
               </span>
             }
           </div>
@@ -505,6 +513,19 @@ export class TaskCardComponent {
     () => !this.done() && isOverdue(this.task().dueDate)
   );
   readonly comments = computed(() => this.task().comments ?? []);
+  readonly clasePlazo = computed(() =>
+    this.task().dueDate
+      ? CLASE_PLAZO[tonoPlazo(this.task().dueDate as string)]
+      : ''
+  );
+  readonly puntoPlazo = computed(() =>
+    this.task().dueDate
+      ? PUNTO_PLAZO[tonoPlazo(this.task().dueDate as string)]
+      : ''
+  );
+  readonly textoPlazo = computed(() =>
+    this.task().dueDate ? textoPlazo(this.task().dueDate as string) : ''
+  );
   readonly priorityLabel = computed(
     () => TASK_PRIORITY_LABEL[this.task().priority]
   );
