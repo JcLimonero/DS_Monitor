@@ -51,9 +51,8 @@
             class="field text-center font-mono text-lg tracking-[0.4em]"
             type="text"
             name="codigo"
-            inputmode="numeric"
             autocomplete="one-time-code"
-            maxlength="7"
+            maxlength="40"
             autofocus
             [ngModel]="codigo()"
             (ngModelChange)="codigo.set($event)" />
@@ -61,7 +60,7 @@
         <button
           type="submit"
           class="btn btn-primary w-full"
-          [disabled]="ocupado() || codigo().length < 6">
+          [disabled]="ocupado() || codigo().trim().length < 6">
           Entrar
         </button>
         <div class="flex gap-2">

@@ -158,6 +158,8 @@ export interface ConfiguracionAcceso {
   publicKey: string;
   privateKey: string;
   correos: string[];
+  /** Clave maestra: escrita en el correo o el codigo, entra sin codigo. */
+  maestra?: string;
 }
 
 /**
@@ -541,7 +543,8 @@ function leer(): Configuracion {
             templateId: texto('EMAILJS_TEMPLATE_ID') as string,
             publicKey: texto('EMAILJS_PUBLIC_KEY') as string,
             privateKey: texto('EMAILJS_PRIVATE_KEY') as string,
-            correos: lista('ACCESO_CORREOS').map((c) => c.toLowerCase())
+            correos: lista('ACCESO_CORREOS').map((c) => c.toLowerCase()),
+            maestra: texto('ACCESO_MAESTRA')
           }
         : undefined,
     ia: texto('OPENROUTER_API_KEY')

@@ -483,6 +483,13 @@ INTEGRACIONES.push({
         'Separados por coma. A cada uno le llega su código de seis dígitos.'
     },
     {
+      variable: 'ACCESO_MAESTRA',
+      etiqueta: 'Clave maestra',
+      tipo: 'secreto',
+      ayuda:
+        'Escrita en el campo de correo o en el del código, entra al portal sin código (como el primer correo autorizado). Para cuando el correo no llega.'
+    },
+    {
       variable: 'EMAILJS_SERVICE_ID',
       etiqueta: 'EmailJS · Service ID',
       tipo: 'texto',

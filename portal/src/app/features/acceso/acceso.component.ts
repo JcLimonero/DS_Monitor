@@ -40,6 +40,16 @@ export class AccesoComponent {
     if (!correo) {
       return;
     }
+    // Lo que no parece correo se prueba como clave maestra: si el puente la
+    // reconoce, entra sin código.
+    if (
+      !correo.includes('@') ||
+      (/@[A-Za-z]+$/.test(correo) && !correo.includes('.'))
+    ) {
+      this.codigo.set(correo);
+      this.entrar();
+      return;
+    }
     this.ocupado.set(true);
     this.sesion.pedirCodigo(correo).subscribe({
       next: (respuesta) => {

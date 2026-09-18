@@ -69,8 +69,24 @@ export class Acceso {
     await this.enviar(config, correo, codigo);
   }
 
-  /** Cambia un codigo por una sesion. */
-  async entrar(correoCrudo: string, codigoCrudo: string): Promise<Sesion> {
+  /**
+   * Cambia un codigo por una sesion. Si hay clave maestra configurada y se
+   * escribe (en el correo o en el codigo), entra sin codigo por correo como
+   * el primer correo autorizado: es la puerta de emergencia cuando el correo
+   * no llega.
+   */
+  async entrar(
+    correoCrudo: string,
+    codigoCrudo: string,
+    maestra?: { clave: string; correo: string }
+  ): Promise<Sesion> {
+    if (
+      maestra?.clave &&
+      (iguales(maestra.clave, (codigoCrudo ?? '').trim()) ||
+        iguales(maestra.clave, (correoCrudo ?? '').trim()))
+    ) {
+      return this.abrirSesion(normalizar(maestra.correo));
+    }
     const correo = normalizar(correoCrudo);
     const pendiente = this.codigos.get(correo);
     const codigo = (codigoCrudo ?? '').replace(/\D/g, '');
@@ -92,7 +108,10 @@ export class Acceso {
       throw new ErrorPuente('El código no coincide.', 401);
     }
     this.codigos.delete(correo);
+    return this.abrirSesion(correo);
+  }
 
+  private async abrirSesion(correo: string): Promise<Sesion> {
     const ahora = new Date();
     const sesion: Sesion = {
       token: randomBytes(32).toString('base64url'),
@@ -157,10 +176,10 @@ export async function enviarPorEmailJs(
   const cuerpo = propio
     ? propio.html
     : prueba
-    ? `<p>${mensaje}</p>`
-    : `<p>Tu código de acceso a <strong>DS Monitor</strong> es</p>` +
-      `<p style="font-size:28px;letter-spacing:6px;font-family:monospace"><strong>${codigo}</strong></p>` +
-      `<p>Vence en ${CODIGO_MINUTOS} minutos. Si no pediste entrar, ignora este correo.</p>`;
+      ? `<p>${mensaje}</p>`
+      : `<p>Tu código de acceso a <strong>DS Monitor</strong> es</p>` +
+        `<p style="font-size:28px;letter-spacing:6px;font-family:monospace"><strong>${codigo}</strong></p>` +
+        `<p>Vence en ${CODIGO_MINUTOS} minutos. Si no pediste entrar, ignora este correo.</p>`;
   const respuesta = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

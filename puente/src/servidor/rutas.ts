@@ -573,7 +573,14 @@ export function construirRutas(
       correo?: string;
       codigo?: string;
     };
-    const sesion: Sesion = await acceso.entrar(correo ?? '', codigo ?? '');
+    const config = cfg();
+    const sesion: Sesion = await acceso.entrar(
+      correo ?? '',
+      codigo ?? '',
+      config.acceso?.maestra && config.acceso.correos[0]
+        ? { clave: config.acceso.maestra, correo: config.acceso.correos[0] }
+        : undefined
+    );
     return { token: sesion.token, correo: sesion.correo, vence: sesion.vence };
   });
 
