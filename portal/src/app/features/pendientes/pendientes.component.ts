@@ -215,8 +215,21 @@ export class PendientesComponent {
     });
   });
 
+  /** Columna izquierda: lo que tiene fecha, agrupado por cuándo vence. */
   readonly groups = computed(() =>
-    groupByDue(this.filtered(), DUE_BUCKET_ORDER)
+    groupByDue(
+      this.filtered().filter((t) => !!t.dueDate),
+      DUE_BUCKET_ORDER
+    ).filter((g) => g.bucket !== 'sin_fecha')
+  );
+  /**
+   * Columna derecha: lo que aún no tiene fecha de entrega, lo más reciente
+   * primero. En cuanto se le pone fecha, pasa a la izquierda.
+   */
+  readonly sinFecha = computed(() =>
+    this.filtered()
+      .filter((t) => !t.dueDate)
+      .sort((a, b) => fechaDeAlta(b).localeCompare(fechaDeAlta(a)))
   );
   readonly total = computed(() => this.filtered().length);
   readonly openCount = computed(() => openTasks(this.filtered()).length);
@@ -275,4 +288,13 @@ export class PendientesComponent {
     this.sender.set('todos');
     this.includeDone.set(false);
   }
+}
+
+/**
+ * Cuándo se dio de alta: los propios llevan la marca de tiempo en el id
+ * (`local-<ms>`); los demás, su última actualización.
+ */
+function fechaDeAlta(t: TaskItem): string {
+  const ms = /^local-(?:\w+-)?(\d{13})/.exec(t.id)?.[1];
+  return ms ? new Date(Number(ms)).toISOString() : t.updatedAt;
 }

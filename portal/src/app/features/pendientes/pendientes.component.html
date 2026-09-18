@@ -216,23 +216,55 @@
 </section>
 }
 
-@if (groups().length > 0) {
-  <div class="mt-4 space-y-6">
-    @for (group of groups(); track group.bucket) {
-      <section>
-        <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
-          {{ bucketLabel[group.bucket] }}
-          <span class="chip bg-surface-muted text-ink-muted">{{
-            group.tasks.length
-          }}</span>
-        </h2>
-        <div class="space-y-2">
-          @for (task of group.tasks; track task.id) {
-            <pt-task-card [task]="task" />
-          }
+@if (groups().length > 0 || sinFecha().length > 0) {
+  <div class="mt-4 grid items-start gap-6 lg:grid-cols-[3fr_2fr]">
+    <!-- Con fecha: para trabajar, por cuándo vence -->
+    <div class="space-y-6">
+      @for (group of groups(); track group.bucket) {
+        <section>
+          <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
+            {{ bucketLabel[group.bucket] }}
+            <span class="chip bg-surface-muted text-ink-muted">{{
+              group.tasks.length
+            }}</span>
+          </h2>
+          <div class="space-y-2">
+            @for (task of group.tasks; track task.id) {
+              <pt-task-card [task]="task" />
+            }
+          </div>
+        </section>
+      }
+      @if (groups().length === 0) {
+        <div class="card">
+          <pt-empty-state
+            title="Nada con fecha"
+            hint="Ponle fecha a un pendiente de la derecha (Editar) y aparece aquí, en su día." />
         </div>
-      </section>
-    }
+      }
+    </div>
+
+    <!-- Sin fecha: lo más reciente primero, hasta que se le ponga entrega -->
+    <section class="lg:sticky lg:top-20">
+      <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
+        Sin fecha de entrega
+        <span class="chip bg-surface-muted text-ink-muted">{{ sinFecha().length }}</span>
+      </h2>
+      <p class="mb-2 text-xs text-ink-muted">
+        Del más reciente al más antiguo. Al ponerles fecha (Editar) pasan a la
+        columna de trabajo.
+      </p>
+      <div class="space-y-2">
+        @for (task of sinFecha(); track task.id) {
+          <pt-task-card [task]="task" />
+        }
+        @if (sinFecha().length === 0) {
+          <div class="card">
+            <pt-empty-state title="Todo tiene fecha" hint="Nada esperando fecha de entrega." />
+          </div>
+        }
+      </div>
+    </section>
   </div>
 } @else {
   <div class="card mt-4">
