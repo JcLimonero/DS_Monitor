@@ -15,6 +15,22 @@ import { DayPipe } from '../../ui/portal.pipes';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent, DayPipe],
   template: `
+    @if (!resumen() && ia.activa()) {
+      <section
+        class="card card-pad flex flex-wrap items-center justify-between gap-3">
+        <p class="text-sm text-ink-muted">
+          La IA puede resumir la semana en los repositorios. Solo cuando lo
+          pides.
+        </p>
+        <button
+          type="button"
+          class="btn"
+          [disabled]="cargando()"
+          (click)="regenerar()">
+          {{ cargando() ? 'Redactando…' : 'Pedir resumen a la IA' }}
+        </button>
+      </section>
+    }
     @if (resumen(); as r) {
       <section class="card card-pad">
         <div class="flex items-start justify-between gap-3">
@@ -70,7 +86,7 @@ import { DayPipe } from '../../ui/portal.pipes';
   `
 })
 export class IaReposComponent {
-  private readonly ia = inject(IaService);
+  readonly ia = inject(IaService);
 
   readonly resumen = signal<ResumenRepos | undefined>(undefined);
   readonly cargando = signal(false);

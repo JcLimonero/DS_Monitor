@@ -11,7 +11,6 @@ import {
 } from '../proveedores/fireflies.js';
 import {
   detectarAlertas,
-  redactarAlertas,
   registrarCostos,
   type Alerta,
   type HistorialCostos
@@ -119,6 +118,8 @@ export interface DependenciasIa {
     sesion: Sesion | undefined
   ) => Promise<string | undefined>;
   dominios: () => Dominio[];
+  /** Clasificar empresa/prioridad de pendientes de Ops con el modelo (apagado). */
+  clasificarPendientesAutomatico?: boolean;
   /** Avisos push, para el arranque del dia. */
   push: {
     avisar: (
@@ -197,31 +198,8 @@ export function registrarRutasIa(
     );
     await d.datos.costosHistorial.escribir(historial);
     const alertas = detectarAlertas(licencias, dominios, historial, ahora);
-    // El texto redactado se guarda por id: las alertas cambian poco.
-    const textos = d.datos.iaAlertas.leer();
-    const sinTexto = alertas.filter((a) => !textos[a.id]);
-    if (ia() && sinTexto.length > 0) {
-      try {
-        const redactadas = await redactarAlertas(ia(), sinTexto);
-        const nuevos = { ...textos };
-        for (const a of redactadas) {
-          if (a.texto) {
-            nuevos[a.id] = a.texto;
-          }
-        }
-        // Se conservan solo las vigentes, para que no crezca.
-        const vigentes = new Set(alertas.map((a) => a.id));
-        await d.datos.iaAlertas.escribir(
-          Object.fromEntries(
-            Object.entries(nuevos).filter(([id]) => vigentes.has(id))
-          )
-        );
-      } catch (error) {
-        console.warn(
-          `[puente] la IA no pudo redactar alertas: ${(error as Error).message}`
-        );
-      }
-    }
+    // Las alertas salen por reglas; el modelo no se gasta en redactarlas
+    // (se conserva lo que ya se hubiera redactado antes).
     const conTexto = d.datos.iaAlertas.leer();
     return alertas.map((a) => ({ ...a, texto: conTexto[a.id] }));
   };
@@ -250,12 +228,9 @@ export function registrarRutasIa(
     if (!ia()) {
       return { disponible: false };
     }
-    const ahora = new Date();
-    const vigente = resumenVigente(ahora);
-    return {
-      disponible: true,
-      resumen: vigente ?? (await generarResumen(ahora))
-    };
+    // Solo lo que ya se genero: el modelo se llama cuando alguien lo pide
+    // (POST /ia/resumen/generar), no en cada carga.
+    return { disponible: true, resumen: d.datos.iaResumen.leer() ?? undefined };
   });
 
   router.post('/ia/resumen/generar', async (contexto) => {
@@ -645,7 +620,17 @@ export function registrarRutasIa(
     return salida;
   };
 
-  router.get('/ia/diagnosticos', async () => diagnosticos(new Date()));
+  router.get('/ia/diagnosticos', async () =>
+    Object.values(d.datos.iaDiagnosticos.leer()).sort((a, b) =>
+      b.generadoEn.localeCompare(a.generadoEn)
+    )
+  );
+
+  router.post('/ia/diagnosticos/generar', async (contexto) => {
+    d.exigirAdmin(contexto);
+    exigirIa();
+    return diagnosticos(new Date());
+  });
 
   // --- La semana en los repositorios ---
 
@@ -671,7 +656,7 @@ export function registrarRutasIa(
     if (!ia()) {
       return { disponible: false };
     }
-    return { disponible: true, resumen: await resumenRepos(false) };
+    return { disponible: true, resumen: d.datos.iaRepos.leer() ?? undefined };
   });
 
   router.post('/ia/repos/generar', async (contexto) => {
@@ -704,7 +689,7 @@ export function registrarRutasIa(
         'Para mandar el correo semanal hace falta el acceso (EmailJS) en Equipo → Configuración.'
       );
     }
-    const semanas = (await armarSemana(true, ahora)).filter(
+    const semanas = (await armarSemana(false, ahora)).filter(
       (s) => !solo || s.persona.email?.toLowerCase() === solo.toLowerCase()
     );
     const enviados: string[] = [];
@@ -760,7 +745,9 @@ export function registrarRutasIa(
   const conVeredictos = async (tareas: TaskItem[]): Promise<TaskItem[]> => {
     const config = ia();
     const vistos = d.datos.iaPendientes.leer();
-    if (config) {
+    // Empresa y prioridad de Ops/personales ya no se piden solas al modelo:
+    // se usa lo que haya guardado.
+    if (config && d.clasificarPendientesAutomatico) {
       const nuevos = tareas
         .filter((t) => !vistos[t.id] && (!t.company || !t.priority))
         .slice(0, MAXIMO_POR_LOTE);
@@ -840,20 +827,9 @@ export function registrarRutasIa(
     });
   };
 
-  const resumenSiToca = async () => {
-    if (!ia()) {
-      return;
-    }
-    const ahora = new Date();
-    if (!resumenVigente(ahora)) {
-      await generarResumen(ahora);
-    }
-  };
-
   return {
     programables: [
       { nombre: 'correo semanal', cadaMinutos: 15, correr: semanaSiToca },
-      { nombre: 'resumen del día', cadaMinutos: 30, correr: resumenSiToca },
       { nombre: 'inicio del día', cadaMinutos: 15, correr: inicioDelDia }
     ],
     conVeredictos

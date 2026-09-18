@@ -109,6 +109,13 @@ const COMPANY_CLASS: Record<string, string> = {
             @if (task().company; as company) {
               <span class="chip" [class]="companyClass()">{{ company }}</span>
             }
+            @if (done()) {
+              <span
+                class="chip bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
+                <pt-icon name="ok" class="h-3.5 w-3.5" />
+                Hecho
+              </span>
+            }
             @if (overdue()) {
               <span
                 class="chip bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
@@ -424,6 +431,8 @@ const COMPANY_CLASS: Record<string, string> = {
                 </div>
               }
             </div>
+          } @else if (message(); as m) {
+            <p class="mt-2 text-xs text-ink-muted">{{ m }}</p>
           }
         </div>
 
@@ -588,6 +597,8 @@ export class TaskCardComponent {
   }
 
   toggle(): void {
+    const hecho = !this.done();
+    this.store.marcarRecienHecho(this.task().id, hecho);
     if (!this.ia.disponible) {
       if (this.task().origin === 'local') {
         this.local.toggleDone(this.task().id);
@@ -595,7 +606,11 @@ export class TaskCardComponent {
       }
       return;
     }
-    this.guardar({ hecho: !this.done() });
+    this.guardar({ hecho }, () =>
+      this.message.set(
+        hecho ? 'Marcado como hecho. Si fue un error, Reabrir.' : 'Reabierto.'
+      )
+    );
   }
 
   comment(): void {

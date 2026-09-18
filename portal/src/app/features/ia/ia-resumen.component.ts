@@ -20,6 +20,22 @@ import { RelativePipe } from '../../ui/portal.pipes';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent, RelativePipe],
   template: `
+    @if (!resumen() && !tv() && ia.activa()) {
+      <section
+        class="card card-pad flex flex-wrap items-center justify-between gap-3">
+        <p class="text-sm text-ink-muted">
+          La IA puede resumirte el día (ayer, hoy y lo que viene). Solo se usa
+          cuando lo pides.
+        </p>
+        <button
+          type="button"
+          class="btn"
+          [disabled]="cargando()"
+          (click)="regenerar()">
+          {{ cargando() ? 'Redactando…' : 'Pedir resumen a la IA' }}
+        </button>
+      </section>
+    }
     @if (resumen(); as r) {
       @if (tv()) {
         <div class="flex h-full flex-col">
@@ -80,7 +96,7 @@ import { RelativePipe } from '../../ui/portal.pipes';
   `
 })
 export class IaResumenComponent {
-  private readonly ia = inject(IaService);
+  readonly ia = inject(IaService);
 
   readonly tv = input(false);
   readonly resumen = signal<ResumenDia | undefined>(undefined);

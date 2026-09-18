@@ -135,7 +135,11 @@ export class PendientesComponent {
     const includeDone = this.includeDone();
 
     return this.store.tasks().filter((task) => {
-      if (!includeDone && task.status === 'hecho') {
+      if (
+        !includeDone &&
+        task.status === 'hecho' &&
+        !this.store.recienHechos().has(task.id)
+      ) {
         return false;
       }
       if (

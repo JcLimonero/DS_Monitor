@@ -154,6 +154,14 @@ export class IaService {
       : of([]);
   }
 
+  generarDiagnosticos(): Observable<Diagnostico[]> {
+    return this.http.post<Diagnostico[]>(
+      this.url('/ia/diagnosticos/generar'),
+      {},
+      { headers: this.headers() }
+    );
+  }
+
   repos(): Observable<{ disponible: boolean; resumen?: ResumenRepos }> {
     return this.disponible
       ? this.http.get<{ disponible: boolean; resumen?: ResumenRepos }>(

@@ -7,7 +7,7 @@ import {
   signal
 } from '@angular/core';
 import { Diagnostico } from '../../core/ia/ia.models';
-import { IaService } from '../../core/ia/ia.service';
+import { IaService, describirError } from '../../core/ia/ia.service';
 import { IconComponent } from '../../ui/icon.component';
 import { RelativePipe } from '../../ui/portal.pipes';
 
@@ -20,6 +20,20 @@ import { RelativePipe } from '../../ui/portal.pipes';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent, RelativePipe],
   template: `
+    @if (ia.activa()) {
+      <div class="mb-2 flex justify-end">
+        <button
+          type="button"
+          class="btn"
+          [disabled]="cargando()"
+          (click)="generar()">
+          {{ cargando() ? 'Diagnosticando…' : 'Pedir diagnóstico a la IA' }}
+        </button>
+      </div>
+      @if (mensaje(); as m) {
+        <p class="mb-2 text-xs text-ink-muted">{{ m }}</p>
+      }
+    }
     @if (visibles().length > 0) {
       <section class="card card-pad">
         <h2 class="text-sm font-semibold text-ink">Diagnóstico de la IA</h2>
@@ -59,7 +73,29 @@ import { RelativePipe } from '../../ui/portal.pipes';
   `
 })
 export class IaDiagnosticosComponent {
-  private readonly ia = inject(IaService);
+  readonly ia = inject(IaService);
+  readonly cargando = signal(false);
+  readonly mensaje = signal<string | undefined>(undefined);
+
+  generar(): void {
+    this.cargando.set(true);
+    this.mensaje.set(undefined);
+    this.ia.generarDiagnosticos().subscribe({
+      next: (d) => {
+        this.diagnosticos.set(d);
+        this.cargando.set(false);
+        if (d.length === 0) {
+          this.mensaje.set(
+            'No hay sitios caídos ni despliegues fallidos que diagnosticar.'
+          );
+        }
+      },
+      error: (e: unknown) => {
+        this.mensaje.set(describirError(e));
+        this.cargando.set(false);
+      }
+    });
+  }
 
   readonly clase = input<'sitio' | 'despliegue' | undefined>(undefined);
   readonly diagnosticos = signal<Diagnostico[]>([]);

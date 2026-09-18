@@ -95,6 +95,20 @@
     }
   </section>
 
+  @if (hechosAhora().length > 0) {
+    <section class="mt-4">
+      <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-ok">
+        <pt-icon name="ok" class="h-4 w-4" />
+        Hechos ahora
+      </h2>
+      <div class="space-y-2">
+        @for (t of hechosAhora(); track t.id) {
+          <pt-task-card [task]="t" />
+        }
+      </div>
+    </section>
+  }
+
   @if (vencidos().length > 0) {
     <section class="mt-4">
       <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-danger">

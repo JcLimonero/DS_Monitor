@@ -130,6 +130,25 @@ export class PortalStore {
    */
   readonly puenteCaido = signal(false);
 
+  /**
+   * Lo que se marcó hecho en esta sesión. Se queda a la vista, tachado y con
+   * "Reabrir", en lugar de desaparecer: así se ve que sí pasó y se puede
+   * deshacer si fue un error.
+   */
+  readonly recienHechos = signal<ReadonlySet<string>>(new Set());
+
+  marcarRecienHecho(id: string, hecho: boolean): void {
+    this.recienHechos.update((actual) => {
+      const nuevo = new Set(actual);
+      if (hecho) {
+        nuevo.add(id);
+      } else {
+        nuevo.delete(id);
+      }
+      return nuevo;
+    });
+  }
+
   constructor() {
     if (this.config.gatewayUrl) {
       interval(15_000).subscribe(() => this.vigilarPuente());

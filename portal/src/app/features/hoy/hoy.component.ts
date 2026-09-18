@@ -89,6 +89,13 @@ export class HoyComponent {
     () => this.store.unmirroredMeetings().length
   );
   readonly cargando = this.store.loading;
+  /** Lo marcado hecho en esta sesión: se queda a la vista con "Reabrir". */
+  readonly hechosAhora = computed(() => {
+    const ids = this.store.recienHechos();
+    return this.store
+      .tasks()
+      .filter((t) => ids.has(t.id) && t.status === 'hecho');
+  });
 
   private readonly avisos = inject(AvisosService);
 
