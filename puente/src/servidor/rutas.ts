@@ -79,6 +79,7 @@ import type { TipoIngesta } from '../ingesta/modelos.js';
 import { Cache } from '../nucleo/cache.js';
 import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
 import { licenciasAnthropic } from '../proveedores/anthropic.js';
+import { consumoOpenRouter } from '../proveedores/openrouter.js';
 import { leerCorreo, type DatosCorreo } from '../proveedores/correo.js';
 import {
   clasificarCorreos,
@@ -118,6 +119,7 @@ import {
 /** Conexiones que el portal puede pedir y la variable que las enciende. */
 const CREDENCIAL_DE: Record<string, string> = {
   anthropic: 'ANTHROPIC_ADMIN_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
   cursor: 'CURSOR_API_KEY',
   figma: 'FIGMA_TOKEN y FIGMA_TEAM_ID',
   vercel: 'VERCEL_TOKEN',
@@ -154,6 +156,7 @@ export function estadoDeConexiones(
 ): Estado[] {
   const filas: [string, boolean, string[]][] = [
     ['anthropic', config.anthropic !== undefined, ['licenses']],
+    ['openrouter', config.ia !== undefined, ['licenses']],
     ['cursor', config.cursor !== undefined, ['licenses']],
     ['figma', config.figma !== undefined, ['licenses']],
     ['vercel', config.vercel !== undefined, ['deployments', 'licenses']],
@@ -833,6 +836,12 @@ export function construirRutas(
   router.get('/licencias/anthropic/licenses', () =>
     cache.obtener('licencias:anthropic', ttl.licencias, () =>
       licenciasAnthropic(exigir(cfg().anthropic, 'anthropic'))
+    )
+  );
+
+  router.get('/licencias/openrouter/licenses', () =>
+    cache.obtener('licencias:openrouter', ttl.licencias, () =>
+      consumoOpenRouter(exigir(cfg().ia, 'openrouter'))
     )
   );
 
@@ -1780,6 +1789,11 @@ export function construirRutas(
       ...(await siHay(cfg().figma, () =>
         cache.obtener('licencias:figma', ttl.licencias, () =>
           licenciasFigma(exigir(cfg().figma, 'figma'))
+        )
+      ).catch(() => [])),
+      ...(await siHay(cfg().ia, () =>
+        cache.obtener('licencias:openrouter', ttl.licencias, () =>
+          consumoOpenRouter(exigir(cfg().ia, 'openrouter'))
         )
       ).catch(() => [])),
       ...(cfg().vercel

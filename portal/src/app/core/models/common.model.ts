@@ -27,7 +27,8 @@ export type SourceKind =
   | 'cursor'
   | 'figma'
   | 'vercel'
-  | 'github';
+  | 'github'
+  | 'openrouter';
 
 /** Una cuenta concreta dentro de una integración, por ejemplo un correo. */
 export interface Account {

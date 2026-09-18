@@ -120,6 +120,14 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       enabled: false
     },
     {
+      id: 'openrouter',
+      label: 'OpenRouter',
+      detail: 'Consumo de la IA del portal (por llave, en USD)',
+      kind: 'openrouter',
+      color: 'violet',
+      enabled: false
+    },
+    {
       id: 'cursor',
       label: 'Cursor',
       detail: 'Asientos y solicitudes del equipo',
@@ -266,6 +274,14 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       mode: 'demo',
       provides: ['licenses'],
       path: '/licencias/anthropic'
+    },
+    {
+      id: 'openrouter-consumo',
+      accountId: 'openrouter',
+      kind: 'openrouter',
+      mode: 'gateway',
+      provides: ['licenses'],
+      path: '/licencias/openrouter'
     },
     {
       id: 'cursor-consumo',

@@ -15,6 +15,7 @@ interface Salud {
  */
 const CUENTA_DE: Record<string, string> = {
   anthropic: 'claude',
+  openrouter: 'openrouter',
   cursor: 'cursor',
   figma: 'figma',
   vercel: 'vercel',
