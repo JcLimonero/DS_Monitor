@@ -1898,7 +1898,9 @@ export function construirRutas(
     for (const { cuenta, metodo } of buzonesLegibles()) {
       try {
         if (metodo === 'graph' || metodo === 'imap') {
-          salida.push(...((await leido(cuenta))[parte] as T[]));
+          // Sin esperar la primera lectura: los pendientes salen del
+          // registro mientras el buzon se lee atras (ver leidoSinEsperar).
+          salida.push(...((await leidoSinEsperar(cuenta, parte)) as T[]));
         } else if (metodo === 'envio') {
           salida.push(...(recibidoDe(cuenta, tipo) as T[]));
         }
