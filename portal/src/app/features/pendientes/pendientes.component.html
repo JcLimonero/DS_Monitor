@@ -1,4 +1,38 @@
-<pt-page-header title="Pendientes" [subtitle]="subtitle()">
+<pt-page-header
+  [title]="vista() === 'personales' ? 'Pendientes personales' : 'Pendientes'"
+  [subtitle]="subtitle()">
+  <div class="flex rounded-lg border border-line p-0.5">
+    <button
+      type="button"
+      class="rounded-md px-3 py-1.5 text-xs font-semibold transition"
+      [class.bg-brand]="vista() === 'negocio'"
+      [class.text-white]="vista() === 'negocio'"
+      (click)="vista.set('negocio')">
+      Del negocio
+    </button>
+    <button
+      type="button"
+      class="rounded-md px-3 py-1.5 text-xs font-semibold transition"
+      [class.bg-brand]="vista() === 'personales'"
+      [class.text-white]="vista() === 'personales'"
+      (click)="vista.set('personales')">
+      Personales
+    </button>
+  </div>
+  @if (sinAsignar() > 0 && owner() !== 'nadie' && vista() === 'negocio') {
+    <button type="button" class="btn" (click)="owner.set('nadie')">
+      <pt-icon name="equipo" class="h-4 w-4" />
+      {{ sinAsignar() }} sin asignar
+    </button>
+  }
+  <a routerLink="/dictado" class="btn">
+    <pt-icon name="microfono" class="h-4 w-4" />
+    Dictar
+  </a>
+  <button type="button" class="btn btn-primary" (click)="mostrarAlta.set(!mostrarAlta())">
+    <pt-icon name="mas" class="h-4 w-4" />
+    Nuevo
+  </button>
   @if (porIdentificar() > 0 && sender() !== 'por_identificar') {
     <button
       type="button"
@@ -13,8 +47,11 @@
   </button>
 </pt-page-header>
 
+@if (mostrarAlta()) {
 <section class="card card-pad">
-  <h2 class="text-sm font-semibold text-ink">Nuevo pendiente</h2>
+  <h2 class="text-sm font-semibold text-ink">
+    {{ vista() === 'personales' ? 'Nuevo pendiente personal' : 'Nuevo pendiente' }}
+  </h2>
   <form class="mt-3 flex flex-wrap items-end gap-3" (ngSubmit)="addTask()">
     <label class="min-w-0 basis-full flex-1 sm:basis-auto">
       <span class="mb-1 block text-xs font-medium text-ink-muted"
@@ -53,6 +90,7 @@
         (ngModelChange)="newDueDate.set($event)"
         name="fecha" />
     </label>
+    @if (vista() === 'negocio') {
     <label>
       <span class="mb-1 block text-xs font-medium text-ink-muted">Empresa</span>
       <select
@@ -66,13 +104,16 @@
         }
       </select>
     </label>
+    }
     <button type="submit" class="btn btn-primary" [disabled]="!canAdd()">
       <pt-icon name="mas" class="h-4 w-4" />
       Agregar
     </button>
   </form>
 </section>
+}
 
+@if (vista() === 'negocio') {
 <section class="card card-pad mt-4">
   <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <label class="lg:col-span-2">
@@ -100,7 +141,8 @@
         (ngModelChange)="owner.set($event)"
         name="responsable">
         <option value="todos">Todos</option>
-        <option value="mios">Solo mios</option>
+        <option value="mios">Solo míos</option>
+        <option value="nadie">Sin asignar</option>
         @for (person of people(); track person.id) {
           <option [value]="person.id">{{ person.name }}</option>
         }
@@ -172,6 +214,7 @@
     </label>
   </div>
 </section>
+}
 
 @if (groups().length > 0) {
   <div class="mt-4 space-y-6">

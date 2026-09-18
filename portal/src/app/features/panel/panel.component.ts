@@ -40,7 +40,6 @@ import {
 } from '../../ui/portal.pipes';
 import { StatTileComponent } from '../../ui/stat-tile.component';
 import { StatusPillComponent } from '../../ui/status-pill.component';
-import { TaskCardComponent } from '../../ui/task-card.component';
 
 /** Cuántos renglones caben en cada tarjeta del panel sin volverla una lista. */
 const PREVIEW_LIMIT = 5;
@@ -63,7 +62,6 @@ const MONTO = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 });
     RouterLink,
     StatTileComponent,
     StatusPillComponent,
-    TaskCardComponent,
     TimePipe
   ],
   templateUrl: './panel.component.html'

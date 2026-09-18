@@ -17,6 +17,7 @@
     { "name": "Hoy", "url": "/hoy" },
     { "name": "Dictar", "url": "/dictado", "description": "Dictar pendientes" },
     { "name": "Pendientes", "url": "/pendientes" },
+    { "name": "Personales", "url": "/pendientes?vista=personales" },
     { "name": "Agenda", "url": "/agenda" }
   ]
 }

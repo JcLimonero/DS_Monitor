@@ -24,7 +24,6 @@ import {
 import { IconComponent } from '../../ui/icon.component';
 import { DayPipe, TimePipe } from '../../ui/portal.pipes';
 import { TaskCardComponent } from '../../ui/task-card.component';
-import { AvisosConfigComponent } from '../ia/avisos-config.component';
 import { IaResumenComponent } from '../ia/ia-resumen.component';
 
 /**
@@ -36,7 +35,6 @@ import { IaResumenComponent } from '../ia/ia-resumen.component';
   selector: 'pt-hoy',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    AvisosConfigComponent,
     IaResumenComponent,
     IconComponent,
     RouterLink,

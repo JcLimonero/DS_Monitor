@@ -1,3 +1,4 @@
+import { RouterLink } from '@angular/router';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -14,15 +15,14 @@ import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 import { TaskCardComponent } from '../../ui/task-card.component';
 
-import { EquipoConfigComponent } from '../configuracion/equipo-config.component';
 @Component({
   selector: 'pt-equipo',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    RouterLink,
     EmptyStateComponent,
     PageHeaderComponent,
-    TaskCardComponent,
-    EquipoConfigComponent
+    TaskCardComponent
   ],
   templateUrl: './equipo.component.html'
 })

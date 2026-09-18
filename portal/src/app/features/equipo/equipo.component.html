@@ -89,27 +89,22 @@
 }
 
 @if (unassigned().length > 0) {
-  <section class="card mt-4">
-    <div class="border-b border-line px-4 py-3 sm:px-5">
-      <h2 class="text-sm font-semibold text-ink">Sin asignar</h2>
-      <p class="mt-0.5 text-xs text-ink-muted">
-        {{ unassigned().length }} pendientes abiertos que nadie tiene a su
-        nombre
-      </p>
-    </div>
-    <div class="space-y-2 p-3 sm:p-4">
-      @for (task of unassigned(); track task.id) {
-        <pt-task-card [task]="task" />
-      }
-    </div>
-  </section>
+  <a
+    routerLink="/pendientes"
+    [queryParams]="{ owner: 'nadie' }"
+    class="card card-pad mt-4 flex items-center justify-between gap-3 transition hover:border-brand/40">
+    <span>
+      <span class="block text-sm font-semibold text-ink">Sin asignar</span>
+      <span class="block text-xs text-ink-muted">
+        {{ unassigned().length }} pendientes abiertos que nadie tiene a su nombre
+      </span>
+    </span>
+    <span class="text-sm text-brand">Ver en Pendientes →</span>
+  </a>
 }
 
-<!-- El equipo y lo que le llega: personas, estatus, avisos y correo del lunes -->
-<details class="mt-6" open>
-  <summary
-    class="cursor-pointer text-xs font-bold uppercase tracking-wide text-ink-subtle">
-    Configuración del equipo
-  </summary>
-  <pt-equipo-config />
-</details>
+<p class="mt-4 text-xs text-ink-muted">
+  Las personas del equipo, el estatus programado y el correo del lunes se
+  administran en
+  <a routerLink="/integraciones" [queryParams]="{ tab: 'equipo' }" class="text-brand hover:underline">Integraciones → Equipo</a>.
+</p>

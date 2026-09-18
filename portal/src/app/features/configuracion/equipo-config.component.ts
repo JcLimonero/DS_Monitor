@@ -1,4 +1,3 @@
-import { AvisosConfigComponent } from '../ia/avisos-config.component';
 import { SemanaConfigComponent } from '../ia/semana-config.component';
 import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component } from '@angular/core';
@@ -13,7 +12,6 @@ import { ConfiguracionBase } from './configuracion-base';
   selector: 'pt-equipo-config',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    AvisosConfigComponent,
     SemanaConfigComponent,
     AccountChipComponent,
     DayPipe,

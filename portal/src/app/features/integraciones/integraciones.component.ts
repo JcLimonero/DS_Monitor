@@ -6,15 +6,41 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CorreoConfigComponent } from '../configuracion/correo-config.component';
+import { DominiosConfigComponent } from '../configuracion/dominios-config.component';
+import { EquipoConfigComponent } from '../configuracion/equipo-config.component';
+import { AvisosConfigComponent } from '../ia/avisos-config.component';
 import { EmisoresConfigComponent } from '../configuracion/emisores-config.component';
 import { IntegracionConfigComponent } from '../configuracion/integracion-config.component';
 import { LicenciasConfigComponent } from '../configuracion/licencias-config.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 
 type Pestana =
-  'correo' | 'ia' | 'acceso' | 'servicios' | 'licencias' | 'ingesta';
+  | 'equipo'
+  | 'avisos'
+  | 'dominios'
+  | 'correo'
+  | 'ia'
+  | 'acceso'
+  | 'servicios'
+  | 'licencias'
+  | 'ingesta';
 
 const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
+  {
+    id: 'equipo',
+    titulo: 'Equipo',
+    detalle: 'Personas, pedir estatus y correo del lunes'
+  },
+  {
+    id: 'avisos',
+    titulo: 'Avisos',
+    detalle: 'Notificaciones en este dispositivo'
+  },
+  {
+    id: 'dominios',
+    titulo: 'Dominios',
+    detalle: 'Registro, vencimiento y costo de cada dominio'
+  },
   {
     id: 'correo',
     titulo: 'Correo',
@@ -55,7 +81,10 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
   selector: 'pt-integraciones',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AvisosConfigComponent,
     CorreoConfigComponent,
+    DominiosConfigComponent,
+    EquipoConfigComponent,
     EmisoresConfigComponent,
     IntegracionConfigComponent,
     LicenciasConfigComponent,

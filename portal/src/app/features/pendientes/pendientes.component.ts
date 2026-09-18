@@ -18,8 +18,8 @@ import {
 } from '../../core/models';
 import { EMPRESAS } from '../../core/ia/ia.models';
 import { AvisosService } from '../../core/avisos/avisos.service';
-import { ActivatedRoute } from '@angular/router';
-import { CURRENT_USER } from '../../core/sources/demo/demo-people';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { SesionService } from '../../core/acceso/sesion.service';
 import { LocalTaskStore } from '../../core/sources/local/local-task.store';
 import {
   groupByDue,
@@ -48,6 +48,7 @@ const ORIGIN_LABEL: Record<TaskOrigin, string> = {
   selector: 'pt-pendientes',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    RouterLink,
     EmptyStateComponent,
     FormsModule,
     IconComponent,
@@ -60,11 +61,19 @@ export class PendientesComponent {
   private readonly store = inject(PortalStore);
   private readonly local = inject(LocalTaskStore);
   private readonly avisos = inject(AvisosService);
+  private readonly sesion = inject(SesionService);
 
   constructor() {
     // Llegar desde un aviso (o desde una liga en el correo) abre ese
     // pendiente aunque este hecho o no pase los filtros.
-    const abrir = inject(ActivatedRoute).snapshot.queryParamMap.get('abrir');
+    const params = inject(ActivatedRoute).snapshot.queryParamMap;
+    if (params.get('owner') === 'nadie') {
+      this.owner.set('nadie');
+    }
+    if (params.get('vista') === 'personales') {
+      this.vista.set('personales');
+    }
+    const abrir = params.get('abrir');
     if (abrir) {
       this.avisos.abrir.set(abrir);
       this.includeDone.set(true);
@@ -104,6 +113,17 @@ export class PendientesComponent {
   );
   readonly empresas = EMPRESAS;
   readonly includeDone = signal(false);
+  /** Del negocio (lo normal) o personales (lo que no es del negocio). */
+  readonly vista = signal<'negocio' | 'personales'>('negocio');
+  /** El formulario de alta se abre a pedido: la lista es lo primero. */
+  readonly mostrarAlta = signal(false);
+  readonly sinAsignar = computed(
+    () =>
+      this.store
+        .tasks()
+        .filter((t) => t.status !== 'hecho' && !t.assignee && !t.personal)
+        .length
+  );
 
   /** Alta rapida de un pendiente propio. */
   readonly newTitle = signal('');
@@ -130,9 +150,12 @@ export class PendientesComponent {
     const priority = this.priority();
     const company = this.company();
     const sender = this.sender();
+    const vista = this.vista();
     const includeDone = this.includeDone();
 
-    return this.store.tasks().filter((task) => {
+    const base =
+      vista === 'personales' ? this.local.tasks() : this.store.tasks();
+    return base.filter((task) => {
       if (
         !includeDone &&
         task.status === 'hecho' &&
@@ -140,18 +163,24 @@ export class PendientesComponent {
       ) {
         return false;
       }
-      if (
-        owner === 'mios' &&
-        task.assignee &&
-        task.assignee.id !== CURRENT_USER.id
-      ) {
+      if (owner === 'nadie' && task.assignee) {
         return false;
+      }
+      if (owner === 'mios') {
+        const yo = this.sesion.correo()?.toLowerCase();
+        if (!task.assignee || task.assignee.email?.toLowerCase() !== yo) {
+          return false;
+        }
       }
       if (
         owner !== 'todos' &&
         owner !== 'mios' &&
+        owner !== 'nadie' &&
         task.assignee?.id !== owner
       ) {
+        return false;
+      }
+      if (vista === 'personales' ? !task.personal : !!task.personal) {
         return false;
       }
       if (origin !== 'todos' && task.origin !== origin) {
@@ -203,7 +232,9 @@ export class PendientesComponent {
 
   /** Del negocio siempre lleva empresa; lo personal se apunta en Personales. */
   readonly canAdd = computed(
-    () => this.newTitle().trim().length > 0 && this.newCompany() !== ''
+    () =>
+      this.newTitle().trim().length > 0 &&
+      (this.vista() === 'personales' || this.newCompany() !== '')
   );
 
   addTask(): void {
@@ -217,8 +248,10 @@ export class PendientesComponent {
       // El input de tipo date entrega "2026-03-12"; se ancla a mediodia para
       // que el pendiente caiga en ese día sin importar la zona horaria.
       dueDate: due ? new Date(`${due}T12:00:00`).toISOString() : undefined,
-      company: this.newCompany()
+      company: this.vista() === 'personales' ? undefined : this.newCompany(),
+      personal: this.vista() === 'personales'
     });
+    this.mostrarAlta.set(false);
     this.newTitle.set('');
     this.newDueDate.set('');
     this.store.refreshTasks();

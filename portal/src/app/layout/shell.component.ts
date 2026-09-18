@@ -21,23 +21,30 @@ interface NavItem {
   path: string;
   label: string;
   icon: IconName;
+  /** Deja un espacio antes: empieza otro bloque del menú. */
+  separador?: boolean;
 }
 
 const NAV: NavItem[] = [
+  // Lo de todos los días.
   { path: '/hoy', label: 'Hoy', icon: 'reloj' },
-  { path: '/panel', label: 'Panel', icon: 'panel' },
   { path: '/pendientes', label: 'Pendientes', icon: 'tareas' },
-  { path: '/personales', label: 'Personales', icon: 'ok' },
-  { path: '/dictado', label: 'Dictar', icon: 'microfono' },
   { path: '/agenda', label: 'Agenda', icon: 'agenda' },
+  { path: '/equipo', label: 'Equipo', icon: 'equipo' },
+  // El negocio de un vistazo y sus fuentes.
+  { path: '/panel', label: 'Panel', icon: 'panel', separador: true },
   { path: '/monitoreo', label: 'Monitoreo', icon: 'monitoreo' },
-  { path: '/crm', label: 'CRM Odoo', icon: 'crm' },
   { path: '/despliegues', label: 'Despliegues', icon: 'despliegue' },
   { path: '/repos', label: 'Repositorios', icon: 'rama' },
+  { path: '/crm', label: 'CRM', icon: 'crm' },
   { path: '/licencias', label: 'Licencias', icon: 'licencia' },
-  { path: '/equipo', label: 'Equipo', icon: 'equipo' },
-  { path: '/integraciones', label: 'Integraciones', icon: 'ajustes' },
-  { path: '/dominios', label: 'Dominios', icon: 'lugar' }
+  // Lo que se configura.
+  {
+    path: '/integraciones',
+    label: 'Integraciones',
+    icon: 'ajustes',
+    separador: true
+  }
 ];
 
 /** Armazon de la aplicacion: barra lateral, encabezado y el area de trabajo. */

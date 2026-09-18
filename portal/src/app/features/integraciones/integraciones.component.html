@@ -27,6 +27,15 @@
 
   <div class="min-w-0 -mt-4">
     @switch (activa()) {
+      @case ('equipo') {
+        <pt-equipo-config />
+      }
+      @case ('avisos') {
+        <pt-avisos-config />
+      }
+      @case ('dominios') {
+        <pt-dominios-config />
+      }
       @case ('correo') {
         <pt-correo-config />
       }

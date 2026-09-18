@@ -17,36 +17,6 @@
     <pt-ia-resumen />
   </div>
 
-  @if (ayer().length > 0 || movimientosAyer().length > 0) {
-    <section class="card mt-4">
-      <div class="flex items-center gap-2 border-b border-line px-4 py-3">
-        <pt-icon name="ok" class="h-4 w-4 text-ok" />
-        <h2 class="text-sm font-semibold text-ink">Ayer</h2>
-        <span class="chip bg-surface-muted text-ink-muted">{{ ayer().length }} cerrados</span>
-      </div>
-      <ul class="divide-y divide-line">
-        @for (t of ayer(); track t.id) {
-          <li class="flex items-center gap-3 px-4 py-2 text-sm">
-            <pt-icon name="ok" class="h-4 w-4 shrink-0 text-ok" />
-            <span class="min-w-0 flex-1 truncate text-ink">{{ t.title }}</span>
-            @if (t.assignee) {
-              <span class="shrink-0 text-xs text-ink-muted">{{ t.assignee.name }}</span>
-            }
-          </li>
-        }
-        @for (a of movimientosAyer(); track a.id) {
-          <li class="px-4 py-2 text-sm text-ink-muted">
-            <span class="font-medium text-ink">{{ a.persona }}</span>
-            {{ a.tipo === "termino" ? "terminó" : a.tipo === "reabrio" ? "reabrió" : "comentó" }}
-            {{ a.titulo }}
-            @if (a.texto) {
-              · “{{ a.texto }}”
-            }
-          </li>
-        }
-      </ul>
-    </section>
-  }
 
   <section class="card mt-4">
     <div class="flex items-center gap-2 border-b border-line px-4 py-3">
@@ -139,6 +109,37 @@
     </section>
   }
 
+  @if (ayer().length > 0 || movimientosAyer().length > 0) {
+    <section class="card mt-4">
+      <div class="flex items-center gap-2 border-b border-line px-4 py-3">
+        <pt-icon name="ok" class="h-4 w-4 text-ok" />
+        <h2 class="text-sm font-semibold text-ink">Ayer</h2>
+        <span class="chip bg-surface-muted text-ink-muted">{{ ayer().length }} cerrados</span>
+      </div>
+      <ul class="divide-y divide-line">
+        @for (t of ayer(); track t.id) {
+          <li class="flex items-center gap-3 px-4 py-2 text-sm">
+            <pt-icon name="ok" class="h-4 w-4 shrink-0 text-ok" />
+            <span class="min-w-0 flex-1 truncate text-ink">{{ t.title }}</span>
+            @if (t.assignee) {
+              <span class="shrink-0 text-xs text-ink-muted">{{ t.assignee.name }}</span>
+            }
+          </li>
+        }
+        @for (a of movimientosAyer(); track a.id) {
+          <li class="px-4 py-2 text-sm text-ink-muted">
+            <span class="font-medium text-ink">{{ a.persona }}</span>
+            {{ a.tipo === "termino" ? "terminó" : a.tipo === "reabrio" ? "reabrió" : "comentó" }}
+            {{ a.titulo }}
+            @if (a.texto) {
+              · “{{ a.texto }}”
+            }
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
   @if (proximas().length > 0) {
     <section class="card mt-4">
       <div class="flex items-center gap-2 border-b border-line px-4 py-3">
@@ -190,5 +191,4 @@
     </p>
   }
 
-  <pt-avisos-config />
 </div>

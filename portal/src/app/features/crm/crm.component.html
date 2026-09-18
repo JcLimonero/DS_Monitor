@@ -1,5 +1,5 @@
 <pt-page-header
-  title="CRM Odoo"
+  title="CRM"
   [subtitle]="
     openCount() +
     ' oportunidades abiertas · ' +
@@ -8,6 +8,10 @@
     (weighted() | moneda) +
     ' ponderado'
   " />
+
+<div class="mb-4">
+  <pt-ia-crm />
+</div>
 
 @if (openCount() > 0 || activities().length > 0) {
   <section>
@@ -183,11 +187,7 @@
     <pt-empty-state
       icon="crm"
       title="Sin datos del CRM"
-      hint="Conecta Odoo abajo, en Configuración." />
+      hint="Conecta Odoo en Integraciones → Servicios." />
   </div>
 }
-
-<div class="mt-4">
-  <pt-ia-crm />
-</div>
 
