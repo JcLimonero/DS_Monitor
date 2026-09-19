@@ -418,4 +418,13 @@ describe('liga personal', () => {
       '2026-09-18T21:00:00.000Z'
     );
   });
+
+  it('la de asignación vence al final del día en que se mandó', async () => {
+    const { finDelDia } = await import('../servidor/rutas.js');
+    // 22:00 CDMX del 17 (04:00Z del 18) → 23:59:59 CDMX del 17 (05:59:59Z del 18)
+    assert.equal(
+      finDelDia(new Date('2026-09-18T04:00:00Z')),
+      '2026-09-18T05:59:59.000Z'
+    );
+  });
 });

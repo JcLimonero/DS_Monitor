@@ -458,6 +458,20 @@ function faltanteDe(correo: ConfiguracionCorreo): string {
  * dia en que se mando; si se mando despues de las tres, hasta las tres del
  * dia siguiente.
  */
+/** El final del dia (23:59:59 en Mexico) en que se manda una liga. */
+export function finDelDia(ahora: Date): string {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(ahora);
+  const v = (t: string) => partes.find((p) => p.type === t)?.value ?? '';
+  return new Date(
+    `${v('year')}-${v('month')}-${v('day')}T23:59:59-06:00`
+  ).toISOString();
+}
+
 export function proximasTres(ahora: Date): string {
   const partes = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Mexico_City',
@@ -1658,8 +1672,9 @@ export function construirRutas(
   /**
    * La liga personal de alguien. Sin `tarea`, enseña todos sus pendientes y
    * vence a las tres de la tarde del dia (la de pedir estatus). Con `tarea`,
-   * enseña solo ese pendiente y dura una semana: es la del correo de
-   * asignacion, que se abre cuando se abre.
+   * enseña solo ese pendiente y vence al final del dia en que se mando: es
+   * la del correo de asignacion. Si la tarea dura mas, la persona sigue
+   * reportando con las ligas de la solicitud de estatus (martes y jueves).
    */
   const ligaDe = async (persona: Person, tarea?: string): Promise<string> => {
     const ahora = new Date();
@@ -1672,11 +1687,7 @@ export function construirRutas(
     await datos.ligasEquipo.escribir({
       ...vigentes,
       [token]: tarea
-        ? {
-            persona: persona.id,
-            vence: new Date(ahora.getTime() + 7 * 86_400_000).toISOString(),
-            tarea
-          }
+        ? { persona: persona.id, vence: finDelDia(ahora), tarea }
         : { persona: persona.id, vence: proximasTres(ahora) }
     });
     return `${cfg().urlPortal}/mio/${token}`;
@@ -1753,7 +1764,7 @@ export function construirRutas(
         ? `<p>Comentarios:</p><ul>${nota.comentarios.map((c) => `<li>${escapar(c.text)}</li>`).join('')}</ul>`
         : '') +
       `<p><a href="${await ligaDe(persona, id)}" style="display:inline-block;padding:10px 16px;background:#04202B;color:#fff;text-decoration:none;border-radius:6px">Ver el pendiente, cambiar su estado o comentar</a></p>` +
-      `<p style="color:#666;font-size:12px">La liga es personal y solo abre este pendiente; no hace falta usuario ni código. Sirve una semana.</p>`;
+      `<p style="color:#666;font-size:12px">La liga es personal y solo abre este pendiente; no hace falta usuario ni código. Sirve hasta el final del día de hoy: no hay que terminar la tarea hoy, pero sí conviene dejar una línea de en qué va. Después te llega otra liga con la solicitud de estatus.</p>`;
     try {
       await enviarPorEmailJs(config.acceso, persona.email, '', false, {
         titulo: `Pendiente asignado: ${t.title ?? id}`,
@@ -2397,7 +2408,7 @@ export function construirRutas(
     if (Date.parse(liga.vence) < Date.now()) {
       throw new ErrorPuente(
         liga.tarea
-          ? 'Esta liga venció (sirve una semana). Pide una nueva a quien te asignó el pendiente.'
+          ? 'Esta liga venció (sirve hasta el final del día en que se mandó). Te llega otra con la solicitud de estatus, o pídela a quien te asignó el pendiente.'
           : 'Esta liga venció (sirve hasta las 3 de la tarde del día en que se mandó). Pide una nueva a quien te asignó el pendiente.',
         410
       );
