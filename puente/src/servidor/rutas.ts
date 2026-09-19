@@ -116,7 +116,10 @@ import { licenciasCursor } from '../proveedores/cursor.js';
 import { licenciasFigma } from '../proveedores/figma.js';
 import { reposGithub } from '../proveedores/github.js';
 import { actividadesComoPendientes, crmOdoo } from '../proveedores/odoo.js';
-import { destinosMonitoreados } from '../proveedores/monitoreo.js';
+import {
+  destinosMonitoreados,
+  type HistorialMonitoreo
+} from '../proveedores/monitoreo.js';
 import {
   desplieguesVercel,
   estadoPlataformaVercel,
@@ -284,6 +287,8 @@ export interface Datos {
   ejecucionesAvisadas: AlmacenJson<AvisosEjecuciones>;
   /** Sitios monitoreados que ya se avisaron como caidos por Telegram. */
   sitiosAvisados: AlmacenJson<SitiosAvisados>;
+  /** Revisiones de cada sitio: 24 h tal cual y 30 dias por conteo diario. */
+  monitoreoHistorial: AlmacenJson<HistorialMonitoreo>;
   /** Donde se permite usar el modelo (Integraciones → IA). */
   iaUsos: AlmacenJson<UsosIa>;
   /** Bitacora de llamadas al modelo. */
@@ -375,6 +380,11 @@ export function abrirDatos(persistencia: Persistencia): Datos {
     sitiosAvisados: new AlmacenJson<SitiosAvisados>(
       persistencia,
       'sitios-avisados',
+      {}
+    ),
+    monitoreoHistorial: new AlmacenJson<HistorialMonitoreo>(
+      persistencia,
+      'monitoreo-historial',
       {}
     ),
     iaBitacora: new AlmacenJson<EntradaBitacora[]>(
@@ -973,7 +983,10 @@ export function construirRutas(
 
   router.get('/monitoreo/estado/targets', () =>
     cache.obtener('monitoreo:destinos', ttl.monitoreo, () =>
-      destinosMonitoreados(exigir(cfg().monitoreo, 'monitoreo'))
+      destinosMonitoreados(
+        exigir(cfg().monitoreo, 'monitoreo'),
+        datos.monitoreoHistorial
+      )
     )
   );
 
@@ -2034,7 +2047,10 @@ export function construirRutas(
     monitoreo: () =>
       siHay(cfg().monitoreo, () =>
         cache.obtener('monitoreo:destinos', ttl.monitoreo, () =>
-          destinosMonitoreados(exigir(cfg().monitoreo, 'monitoreo'))
+          destinosMonitoreados(
+            exigir(cfg().monitoreo, 'monitoreo'),
+            datos.monitoreoHistorial
+          )
         )
       ),
     despliegues: () =>
