@@ -68,9 +68,16 @@ async function pedir<T>(
       );
     }
     if (!r.ok) {
+      let detalle = '';
+      try {
+        const e = (await r.json()) as { error?: string };
+        detalle = e.error ? `: ${e.error}` : '';
+      } catch {
+        // Sin cuerpo legible; con el estado alcanza.
+      }
       throw new ErrorProveedor(
         'prometheus',
-        `Prometheus respondió ${r.status}`
+        `Prometheus respondió ${r.status}${detalle}`
       );
     }
     const cuerpo = (await r.json()) as {
@@ -189,11 +196,16 @@ export function saludDe(
   return { health, reason: razones.length ? razones.join(', ') : undefined };
 }
 
+/** Un nombre de etiqueta valido en PromQL; si no, se usa `nombre`. */
+function etiquetaValida(etiqueta: string): string {
+  return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(etiqueta) ? etiqueta : 'nombre';
+}
+
 export async function estadoVps(
   config: ConfiguracionPrometheus,
   ahora = new Date()
 ): Promise<VpsStatus[]> {
-  const n = config.etiquetaNombre;
+  const n = etiquetaValida(config.etiquetaNombre);
   const q = (k: keyof typeof EXPRESIONES) => consultar(config, expr(k, n));
   const [
     up,

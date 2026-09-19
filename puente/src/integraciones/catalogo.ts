@@ -306,7 +306,8 @@ export const INTEGRACIONES: Integracion[] = [
         variable: 'PROMETHEUS_ETIQUETA_NOMBRE',
         etiqueta: 'Etiqueta con el nombre del servidor',
         tipo: 'texto',
-        ayuda: 'Por omisión "nombre" (se pone en prometheus.yml por cada VPS).'
+        ayuda:
+          'Déjalo vacío. Es el NOMBRE de la etiqueta de prometheus.yml (por omisión "nombre"), no el nombre del servidor.'
       }
     ],
     probar: async (config) => {
