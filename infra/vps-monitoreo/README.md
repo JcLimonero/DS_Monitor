@@ -18,13 +18,26 @@ sudo apt-get install -y apache2-utils && htpasswd -nBC 12 "" | tr -d ':\n'
 docker compose --profile central up -d
 ```
 
+Si el VPS tiene `ufw`, deja que la red de Docker llegue a node_exporter (corre
+en la red del host) y que el puente lea Prometheus:
+
+```bash
+sudo ufw allow from 10.0.0.0/8 to any port 9100 proto tcp
+sudo ufw allow from 172.16.0.0/12 to any port 9100 proto tcp
+sudo ufw allow 9090/tcp
+```
+
 Comprueba: `curl -u dsmonitor:TU_CONTRASEÑA http://localhost:9090/api/v1/targets`
 debe listar `node` y `cadvisor` con `"health":"up"`. (node_exporter corre en la
 red del host; Prometheus lo alcanza como `host.docker.internal:9100`.)
 
-Abre el puerto **9090** solo hacia afuera si Prometheus se va a consultar desde
-Render (el puente de DS Monitor). Mejor todavía: ponlo detrás de tu proxy con
-TLS (Caddy/Nginx) en `https://monitor.tudominio.com` y deja 9090 cerrado.
+Si `node` sale `down` con "context deadline exceeded", es el firewall: mira con
+qué red creó Compose (`docker network inspect monitoreo_default`) y permite esa
+red al 9100. Si `host.docker.internal` no resuelve, en `prometheus.yml` pon la
+IP del gateway de esa red en lugar de `host.docker.internal`.
+
+El 9090 va con contraseña pero en HTTP plano. Mejor: ponlo detrás de tu proxy
+con TLS (Caddy/Nginx) en `https://monitor.tudominio.com` y deja 9090 cerrado.
 
 ## 2. En cada VPS adicional (solo agentes)
 
