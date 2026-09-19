@@ -14,6 +14,7 @@ import { IaBitacoraComponent } from '../ia/ia-bitacora.component';
 import { EmisoresConfigComponent } from '../configuracion/emisores-config.component';
 import { IntegracionConfigComponent } from '../configuracion/integracion-config.component';
 import { LicenciasConfigComponent } from '../configuracion/licencias-config.component';
+import { RespaldoComponent } from '../configuracion/respaldo.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 
 type Pestana =
@@ -55,8 +56,8 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
   },
   {
     id: 'acceso',
-    titulo: 'Acceso',
-    detalle: 'Código por correo y clave maestra'
+    titulo: 'Acceso y respaldo',
+    detalle: 'Código por correo, clave maestra y copia de los datos'
   },
   {
     id: 'servicios',
@@ -92,6 +93,7 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
     EmisoresConfigComponent,
     IntegracionConfigComponent,
     LicenciasConfigComponent,
+    RespaldoComponent,
     PageHeaderComponent
   ],
   templateUrl: './integraciones.component.html'

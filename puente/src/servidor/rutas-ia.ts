@@ -170,6 +170,8 @@ export interface Programable {
 export interface ServiciosIa {
   /** Lo que corre solo, a intervalos. */
   programables: Programable[];
+  /** Una pregunta suelta al asistente (el bot de Telegram la usa). */
+  preguntar: (texto: string) => Promise<string>;
   /** Pone empresa y prioridad a pendientes que llegan sin ellas. */
   conVeredictos: (tareas: TaskItem[]) => Promise<TaskItem[]>;
 }
@@ -1022,7 +1024,22 @@ export function registrarRutasIa(
     );
   });
 
+  const preguntarSuelto = async (texto: string): Promise<string> => {
+    const config = exigirIa('asistente');
+    const ahora = new Date();
+    const tablero = await armarTablero(d.fuentes, ahora);
+    const alertas = await alertasActuales(ahora);
+    return responderAsistente(
+      config,
+      tablero,
+      alertas,
+      [{ rol: 'usuario', texto }],
+      ahora
+    );
+  };
+
   return {
+    preguntar: preguntarSuelto,
     programables: [
       { nombre: 'correo semanal', cadaMinutos: 15, correr: semanaSiToca },
       { nombre: 'inicio del día', cadaMinutos: 15, correr: inicioDelDia }

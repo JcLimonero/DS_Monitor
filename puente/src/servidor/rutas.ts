@@ -9,6 +9,7 @@ import { Acceso, type Sesion } from '../acceso/acceso.js';
 import { AlmacenCorreo } from '../correo/almacen-correo.js';
 import { AlmacenJson } from '../datos/almacen-json.js';
 import {
+  COLECCIONES,
   PersistenciaArchivos,
   type Persistencia
 } from '../datos/persistencia.js';
@@ -103,6 +104,14 @@ import {
 import { avisosDeSitios, type SitiosAvisados } from '../nucleo/vigilancia.js';
 import { conPrioridadPersonal } from '../pendientes/prioridad.js';
 import { semanaIso } from '../ia/repos.js';
+import { armarTablero } from '../ia/tablero.js';
+import {
+  TEXTO_AYUDA,
+  interpretarComando,
+  textoHoy,
+  textoPendientes,
+  textoServicios
+} from '../nucleo/comandos-telegram.js';
 import { Cache } from '../nucleo/cache.js';
 import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
 import { licenciasAnthropic } from '../proveedores/anthropic.js';
@@ -2320,8 +2329,46 @@ export function construirRutas(
     mensaje.texto = dictado;
     if (/^\/start/.test(mensaje.texto)) {
       await contestar(
-        'Listo. Escríbeme los pendientes tal cual los dictarías: "Junta con Felipe el lunes a las 12 en Italian Coffee, es de OperativAI. Y que Efrén revise el alta de proveedores de Vanguardia, urgente."'
+        'Listo. Escríbeme los pendientes tal cual los dictarías: "Junta con Felipe el lunes a las 12 en Italian Coffee, es de OperativAI. Y que Efrén revise el alta de proveedores de Vanguardia, urgente."\n\n' +
+          TEXTO_AYUDA
       );
+      return { ok: true };
+    }
+    // Consultas: /hoy, /pendientes, /servicios, ?pregunta. Lo demas es dictado.
+    const comando = interpretarComando(mensaje.texto);
+    if (comando) {
+      try {
+        const ahora = new Date();
+        if (comando.tipo === 'ayuda') {
+          await contestar(TEXTO_AYUDA);
+        } else if (comando.tipo === 'hoy') {
+          await contestar(textoHoy(await armarTablero(fuentes, ahora), ahora));
+        } else if (comando.tipo === 'pendientes') {
+          await contestar(
+            textoPendientes(await armarTablero(fuentes, ahora), ahora)
+          );
+        } else if (comando.tipo === 'servicios') {
+          await contestar(
+            textoServicios(
+              listarEjecuciones(datos.ejecuciones.leer(), ahora),
+              cfg().monitoreo
+                ? await fuentes.monitoreo().catch(() => [] as MonitorTarget[])
+                : [],
+              ahora
+            )
+          );
+        } else if (comando.tipo === 'pregunta') {
+          if (!ia) {
+            await contestar('La IA no está activa.');
+          } else {
+            await contestar(escapar(await ia.preguntar(comando.texto)));
+          }
+        }
+      } catch (error) {
+        await contestar(
+          `No pude contestar: ${escapar((error as Error).message)}`
+        );
+      }
       return { ok: true };
     }
     try {
@@ -3223,6 +3270,22 @@ export function construirRutas(
         await datos.ejecucionesAvisadas.escribir(deEjecuciones.avisadas);
       }
     }
+  });
+
+  // Respaldo completo: todas las colecciones tal como estan en la base, para
+  // descargarlo desde Integraciones. Lleva credenciales (buzones,
+  // integraciones): es un respaldo de verdad, se guarda con cuidado.
+  router.get('/respaldo', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const colecciones: Record<string, Record<string, unknown>> = {};
+    for (const c of COLECCIONES) {
+      colecciones[c] = Object.fromEntries(await persistencia.leerColeccion(c));
+    }
+    return {
+      generadoEn: new Date().toISOString(),
+      origen: persistencia.descripcion,
+      colecciones
+    };
   });
 
   router.get('/ejecuciones', async () =>

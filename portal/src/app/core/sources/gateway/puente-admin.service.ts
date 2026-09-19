@@ -309,6 +309,19 @@ export class PuenteAdminService {
     );
   }
 
+  /** Todo lo que guarda el puente, para descargarlo como respaldo. */
+  respaldo(): Observable<{
+    generadoEn: string;
+    origen: string;
+    colecciones: Record<string, Record<string, unknown>>;
+  }> {
+    return this.http.get<{
+      generadoEn: string;
+      origen: string;
+      colecciones: Record<string, Record<string, unknown>>;
+    }>(this.url('/respaldo'), { headers: this.headers() });
+  }
+
   /** La última corrida de cada integración, las que están mal primero. */
   ejecuciones(): Observable<Ejecucion[]> {
     return this.http.get<Ejecucion[]>(this.url('/ejecuciones'));
