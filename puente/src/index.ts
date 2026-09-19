@@ -192,6 +192,24 @@ servidor.listen(config.puerto, () => {
       `[puente]   · ${estado.conexion} apagada, falta ${estado.faltante}`
     );
   }
+  // El webhook de Telegram apunta a la URL publica de este puente: si el
+  // puente cambio de servidor o de dominio, se vuelve a registrar solo.
+  const telegram = configurador.config().telegram;
+  if (telegram) {
+    import('./proveedores/telegram.js')
+      .then(({ registrarWebhook }) =>
+        registrarWebhook(
+          telegram,
+          `${configurador.config().urlPublica}/telegram/webhook`
+        )
+      )
+      .then(() => console.log('[puente] webhook de Telegram registrado'))
+      .catch((error) =>
+        console.warn(
+          `[puente] no se pudo registrar el webhook de Telegram: ${error instanceof Error ? error.message : error}`
+        )
+      );
+  }
   programar(programables);
   console.log(
     `[puente] tareas programadas: ${programables

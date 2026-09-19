@@ -1,0 +1,74 @@
+# DS Monitor completo en un servidor propio (Coolify o docker compose a mano):
+# la base, el puente y el portal. Coolify lee este archivo, pone las variables
+# de entorno que se capturan en su panel y asigna dominio al portal.
+#
+# Variables que hay que dar (en Coolify → Environment Variables):
+#   POSTGRES_PASSWORD      contraseña de la base (la genera Coolify si se pide)
+#   PUENTE_ADMIN_TOKEN     token de administracion del puente
+#   PUENTE_URL_PUBLICA     https://portal.dealersolutions.com.mx/api/portal
+#   PUENTE_PORTAL_URL      https://portal.dealersolutions.com.mx
+#   PUENTE_ORIGENES        https://portal.dealersolutions.com.mx
+#   CORREO_CUENTAS, INGESTA_CLIENTES, ACCESO_* / EMAILJS_*  (ver puente/.env.example)
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ds_monitor
+      POSTGRES_USER: ds_monitor
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db-datos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ds_monitor -d ds_monitor"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  puente:
+    build:
+      context: ./puente
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PUENTE_PUERTO: "10000"
+      DATABASE_URL: postgres://ds_monitor:${POSTGRES_PASSWORD}@db:5432/ds_monitor
+      DATOS_DIRECTORIO: /var/data
+      INGESTA_DIRECTORIO: /var/data/ingesta
+      CORREO_DIRECTORIO: /var/data/correo
+      INTEGRACIONES_DIRECTORIO: /var/data/integraciones
+      # Un respaldo completo pesa varios MB: hay que dejarlo pasar.
+      INGESTA_MAXIMO_KB: "16384"
+      PUENTE_ADMIN_TOKEN: ${PUENTE_ADMIN_TOKEN}
+      PUENTE_URL_PUBLICA: ${PUENTE_URL_PUBLICA}
+      PUENTE_PORTAL_URL: ${PUENTE_PORTAL_URL}
+      PUENTE_ORIGENES: ${PUENTE_ORIGENES}
+      CORREO_CUENTAS: ${CORREO_CUENTAS:-}
+      INGESTA_CLIENTES: ${INGESTA_CLIENTES:-}
+      ACCESO_CORREOS: ${ACCESO_CORREOS:-}
+      ACCESO_MAESTRA: ${ACCESO_MAESTRA:-}
+      EMAILJS_SERVICE_ID: ${EMAILJS_SERVICE_ID:-}
+      EMAILJS_TEMPLATE_ID: ${EMAILJS_TEMPLATE_ID:-}
+      EMAILJS_PUBLIC_KEY: ${EMAILJS_PUBLIC_KEY:-}
+      EMAILJS_PRIVATE_KEY: ${EMAILJS_PRIVATE_KEY:-}
+      MONITOREO_DESTINOS: ${MONITOREO_DESTINOS:-}
+    volumes:
+      - puente-datos:/var/data
+    expose:
+      - "10000"
+
+  portal:
+    build:
+      context: ./portal
+    restart: unless-stopped
+    depends_on:
+      - puente
+    ports:
+      - "80"
+
+volumes:
+  db-datos:
+  puente-datos:

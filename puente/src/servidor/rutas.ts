@@ -3330,6 +3330,37 @@ export function construirRutas(
     };
   });
 
+  // Restaura un respaldo completo (el JSON que da GET /respaldo) en la
+  // persistencia: escribe cada documento. Sirve para mudar el puente de un
+  // servidor a otro; despues hay que reiniciar para que las tablas propias
+  // se llenen desde los documentos y todo se relea.
+  router.post('/respaldo/restaurar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const cuerpo = (contexto.cuerpo ?? {}) as {
+      colecciones?: Record<string, Record<string, unknown>>;
+    };
+    if (!cuerpo.colecciones || typeof cuerpo.colecciones !== 'object') {
+      throw new ErrorPuente('Falta "colecciones" con el respaldo.', 400);
+    }
+    let escritos = 0;
+    for (const c of COLECCIONES) {
+      const docs = cuerpo.colecciones[c];
+      if (!docs || typeof docs !== 'object') {
+        continue;
+      }
+      for (const [clave, valor] of Object.entries(docs)) {
+        await persistencia.guardar(c, clave, valor);
+        escritos++;
+      }
+    }
+    return {
+      ok: true,
+      escritos,
+      aviso:
+        'Reinicia el puente para que lo restaurado se cargue (y las tablas se llenen desde los documentos).'
+    };
+  });
+
   // Respaldo completo: todas las colecciones tal como estan en la base, para
   // descargarlo desde Integraciones. Lleva credenciales (buzones,
   // integraciones): es un respaldo de verdad, se guarda con cuidado.
