@@ -11,6 +11,8 @@ services:
     image: prom/prometheus:v2.54.1
     container_name: prometheus
     restart: unless-stopped
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --web.config.file=/etc/prometheus/web.yml

@@ -19,7 +19,8 @@ docker compose --profile central up -d
 ```
 
 Comprueba: `curl -u dsmonitor:TU_CONTRASEÑA http://localhost:9090/api/v1/targets`
-debe listar `node` y `cadvisor` con `"health":"up"`.
+debe listar `node` y `cadvisor` con `"health":"up"`. (node_exporter corre en la
+red del host; Prometheus lo alcanza como `host.docker.internal:9100`.)
 
 Abre el puerto **9090** solo hacia afuera si Prometheus se va a consultar desde
 Render (el puente de DS Monitor). Mejor todavía: ponlo detrás de tu proxy con

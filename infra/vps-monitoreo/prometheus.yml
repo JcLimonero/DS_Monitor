@@ -6,10 +6,12 @@ global:
   evaluation_interval: 30s
 
 scrape_configs:
-  # CPU, memoria, disco, red y tiempo arriba de cada VPS.
+  # CPU, memoria, disco, red y tiempo arriba de cada VPS. node_exporter corre
+  # en la red del host; desde el contenedor de Prometheus se llega con
+  # host.docker.internal (ver extra_hosts en docker-compose.yml).
   - job_name: node
     static_configs:
-      - targets: ['localhost:9100']
+      - targets: ['host.docker.internal:9100']
         labels: { nombre: 'vps-1' }
       # Otro VPS (corre el perfil `agente` y abre 9100/8080 solo a esta IP):
       # - targets: ['203.0.113.10:9100']
@@ -22,7 +24,3 @@ scrape_configs:
         labels: { nombre: 'vps-1' }
       # - targets: ['203.0.113.10:8080']
       #   labels: { nombre: 'vps-2' }
-
-  - job_name: prometheus
-    static_configs:
-      - targets: ['localhost:9090']
