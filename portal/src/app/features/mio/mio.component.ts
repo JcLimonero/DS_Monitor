@@ -122,6 +122,40 @@ export class MioComponent {
     this.anotar(t, { comentario: texto }, () => this.escribir(t.id, ''));
   }
 
+  /** Qué pendiente tiene abierto el formulario de "no tengo tiempo". */
+  readonly pidiendo = signal<string | undefined>(undefined);
+  readonly motivo = signal('');
+
+  pedirReasignacion(t: TaskItem): void {
+    this.ocupado.set(t.id);
+    this.http
+      .post<{ ok: boolean }>(
+        `${this.config.gatewayUrl}/mio/${this.token}/reasignar`,
+        { id: t.id, motivo: this.motivo().trim() || undefined }
+      )
+      .subscribe({
+        next: () => {
+          this.ocupado.set(undefined);
+          this.pidiendo.set(undefined);
+          this.motivo.set('');
+          this.mensajes.update((m) => ({
+            ...m,
+            [t.id]:
+              'Solicitud enviada. En cuanto Carlos decida te llega un correo.'
+          }));
+          this.cargar();
+        },
+        error: (e: unknown) => {
+          const http = e as { error?: { error?: string }; message?: string };
+          this.ocupado.set(undefined);
+          this.mensajes.update((m) => ({
+            ...m,
+            [t.id]: http?.error?.error ?? http?.message ?? 'No se pudo mandar.'
+          }));
+        }
+      });
+  }
+
   marcar(t: TaskItem, hecho: boolean): void {
     this.anotar(t, { hecho });
   }

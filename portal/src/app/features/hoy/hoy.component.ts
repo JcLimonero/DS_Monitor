@@ -69,6 +69,10 @@ export class HoyComponent {
     )
   );
   readonly paraHoy = computed(() => tasksDueToday(this.store.tasks()));
+  /** Pendientes cuyo responsable pidió que se los quiten; hay que decidir. */
+  readonly solicitudes = computed(() =>
+    this.store.tasks().filter((t) => t.reassignRequest && t.status !== 'hecho')
+  );
   /** Lo asignado a quien entró, fuera de lo vencido y lo de hoy. */
   readonly mios = computed(() => {
     const yo = this.sesion.correo()?.toLowerCase();

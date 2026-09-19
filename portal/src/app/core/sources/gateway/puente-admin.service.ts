@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import { PORTAL_CONFIG } from '../../config/portal-config.token';
-import { Person, SourceKind } from '../../models';
+import { Person, SourceKind, TaskItem } from '../../models';
 
 /** Un dominio registrado, tal como lo guarda el puente. */
 export interface Dominio {
@@ -290,6 +290,21 @@ export class PuenteAdminService {
     return this.http.post<{ ok: boolean }>(
       this.url('/emisores/borrar'),
       { nombre },
+      { headers: this.headers() }
+    );
+  }
+
+  /** Decide una solicitud de reasignación: aprobar (y a quién) o rechazar. */
+  decidirReasignacion(datos: {
+    id: string;
+    decision: 'aprobar' | 'rechazar';
+    asignarA?: string;
+    nota?: string;
+    tarea?: Partial<TaskItem>;
+  }): Observable<{ ok: boolean; aviso?: string }> {
+    return this.http.post<{ ok: boolean; aviso?: string }>(
+      this.url('/pendientes/reasignacion'),
+      datos,
       { headers: this.headers() }
     );
   }

@@ -307,7 +307,7 @@ export interface Datos {
 /** Un aviso en el monitor: alguien del equipo movio un pendiente. */
 export interface Aviso {
   id: string;
-  tipo: 'comento' | 'termino' | 'reabrio';
+  tipo: 'comento' | 'termino' | 'reabrio' | 'reasignacion';
   /** El verbo tal cual se muestra ("puso en progreso", "terminó"). */
   accion?: string;
   persona: string;
@@ -2569,6 +2569,162 @@ export function construirRutas(
       etiqueta: `mio:${id}`
     });
     return { ok: true, anotacion: nota };
+  });
+
+  // Desde su liga, alguien pide que le quiten un pendiente (no tiene tiempo).
+  // Queda marcado en el pendiente y a Carlos le llega el aviso para decidir.
+  router.post('/mio/:token/reasignar', async (contexto) => {
+    const persona = await personaDeLiga(contexto.segmentos[1] as string);
+    const cuerpo = (contexto.cuerpo ?? {}) as { id?: string; motivo?: string };
+    const id = (cuerpo.id ?? '').trim();
+    const mias = await pendientesDe(persona);
+    const tarea = mias.find((t) => t.id === id);
+    if (!tarea) {
+      throw new ErrorPuente('Ese pendiente no está a tu nombre.', 403);
+    }
+    const motivo =
+      typeof cuerpo.motivo === 'string' && cuerpo.motivo.trim()
+        ? cuerpo.motivo.trim().slice(0, 300)
+        : undefined;
+    const ahora = new Date().toISOString();
+    const todas = datos.anotaciones.leer();
+    let nota: Anotacion = todas[id] ?? { comentarios: [], actualizadoEn: '' };
+    nota.solicitudReasignacion = {
+      by: persona.name,
+      reason: motivo,
+      at: ahora
+    };
+    nota = conEvento(nota, {
+      at: ahora,
+      by: persona.name,
+      kind: 'solicitud',
+      text: `Pidió que se reasigne${motivo ? `: ${motivo}` : ''}`
+    });
+    nota.actualizadoEn = ahora;
+    await datos.anotaciones.escribir({ ...todas, [id]: nota });
+    cache.olvidar();
+    const aviso: Aviso = {
+      id: randomBytes(8).toString('hex'),
+      tipo: 'reasignacion',
+      accion: 'pide reasignar',
+      persona: persona.name,
+      tareaId: id,
+      titulo: tarea.title,
+      texto: motivo,
+      en: ahora,
+      leido: false
+    };
+    await datos.avisos.escribir([aviso, ...datos.avisos.leer()].slice(0, 200));
+    void push.avisar({
+      titulo: `${persona.name} pide reasignar: ${tarea.title}`,
+      cuerpo: motivo ?? 'Sin motivo',
+      url: `/pendientes?abrir=${encodeURIComponent(id)}`,
+      etiqueta: `reasignar:${id}`
+    });
+    return { ok: true };
+  });
+
+  // Carlos decide desde el portal: aprobar (y a quien) o rechazar. En los
+  // dos casos la persona se entera por correo, si hay con que mandarlo.
+  router.post('/pendientes/reasignacion', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const cuerpo = (contexto.cuerpo ?? {}) as {
+      id?: string;
+      decision?: 'aprobar' | 'rechazar';
+      asignarA?: string;
+      nota?: string;
+      tarea?: Partial<TaskItem>;
+    };
+    const id = (cuerpo.id ?? '').trim();
+    const todas = datos.anotaciones.leer();
+    const nota0 = todas[id];
+    if (!id || !nota0?.solicitudReasignacion) {
+      throw new ErrorPuente(
+        'Ese pendiente no tiene solicitud de reasignación.',
+        404
+      );
+    }
+    const solicitud = nota0.solicitudReasignacion;
+    const sesion = acceso.sesionDe(tokenDe(contexto));
+    const quien = sesion?.correo ?? 'administración';
+    const ahora = new Date().toISOString();
+    const comentario =
+      typeof cuerpo.nota === 'string' && cuerpo.nota.trim()
+        ? cuerpo.nota.trim().slice(0, 300)
+        : undefined;
+    const solicitante = (await equipoCompleto()).find(
+      (p) => p.name === solicitud.by
+    );
+    const titulo = cuerpo.tarea?.title ?? id;
+    if (cuerpo.decision === 'aprobar') {
+      if (!cuerpo.asignarA) {
+        throw new ErrorPuente('Di a quién se reasigna.', 400);
+      }
+      let nota = { ...nota0 };
+      delete nota.solicitudReasignacion;
+      nota = conEvento(nota, {
+        at: ahora,
+        by: quien,
+        kind: 'solicitud',
+        text: `Reasignación aprobada${comentario ? `: ${comentario}` : ''}`
+      });
+      await datos.anotaciones.escribir({ ...todas, [id]: nota });
+      const aviso = await asignarPendiente(
+        id,
+        cuerpo.asignarA,
+        cuerpo.tarea ?? {},
+        sesion
+      );
+      if (solicitante?.email && cfg().acceso) {
+        await enviarPorEmailJs(
+          cfg().acceso as NonNullable<Configuracion['acceso']>,
+          solicitante.email,
+          '',
+          false,
+          {
+            titulo: `Reasignado: ${titulo}`,
+            html:
+              `<p>Se aprobó tu solicitud: <strong>${escapar(titulo)}</strong> ya no está a tu nombre.</p>` +
+              (comentario ? `<p>${escapar(comentario)}</p>` : '')
+          }
+        ).catch(() => undefined);
+      }
+      return { ok: true, aviso };
+    }
+    if (cuerpo.decision === 'rechazar') {
+      let nota = { ...nota0 };
+      delete nota.solicitudReasignacion;
+      nota = conEvento(nota, {
+        at: ahora,
+        by: quien,
+        kind: 'solicitud',
+        text: `Reasignación rechazada${comentario ? `: ${comentario}` : ''}`
+      });
+      nota.actualizadoEn = ahora;
+      await datos.anotaciones.escribir({ ...todas, [id]: nota });
+      cache.olvidar();
+      if (solicitante?.email && cfg().acceso) {
+        await enviarPorEmailJs(
+          cfg().acceso as NonNullable<Configuracion['acceso']>,
+          solicitante.email,
+          '',
+          false,
+          {
+            titulo: `Sigue a tu nombre: ${titulo}`,
+            html:
+              `<p>Tu solicitud de reasignar <strong>${escapar(titulo)}</strong> no se aprobó; sigue a tu nombre.</p>` +
+              (comentario ? `<p>${escapar(comentario)}</p>` : '') +
+              `<p style="color:#666;font-size:12px">Con la liga de la solicitud de estatus puedes dejar en qué va.</p>`
+          }
+        ).catch(() => undefined);
+        return {
+          ok: true,
+          aviso: `Rechazada; se avisó a ${solicitante.email}.`
+        };
+      }
+      return { ok: true, aviso: 'Rechazada.' };
+    }
+    throw new ErrorPuente('La decisión debe ser "aprobar" o "rechazar".', 400);
   });
 
   // --- Avisos del monitor: lo que el equipo movio ---

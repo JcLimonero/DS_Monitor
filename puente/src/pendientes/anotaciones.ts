@@ -1,5 +1,6 @@
 import type {
   Person,
+  ReassignRequest,
   TaskComment,
   TaskEvent,
   TaskItem,
@@ -29,6 +30,8 @@ export interface Anotacion {
   cambios?: CambiosPendiente;
   comentarios: TaskComment[];
   asignado?: Person;
+  /** El responsable pidio que se lo quiten; se borra al decidir. */
+  solicitudReasignacion?: ReassignRequest;
   actualizadoEn: string;
 }
 
@@ -70,6 +73,7 @@ export function anotar(
               ? 'pendiente'
               : tarea.status)),
         assignee: nota.asignado ?? tarea.assignee,
+        reassignRequest: nota.solicitudReasignacion,
         history: nota.historial?.length ? nota.historial : tarea.history,
         comments:
           nota.comentarios.length > 0 ? nota.comentarios : tarea.comments,

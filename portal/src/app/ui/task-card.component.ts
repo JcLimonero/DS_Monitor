@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { IaService, describirError } from '../core/ia/ia.service';
+import { PuenteAdminService } from '../core/sources/gateway/puente-admin.service';
 import { AvisosService } from '../core/avisos/avisos.service';
 import { ElementRef, effect } from '@angular/core';
 import { Borrador, EMPRESAS } from '../core/ia/ia.models';
@@ -113,6 +114,12 @@ const COMPANY_CLASS: Record<string, string> = {
                 Vencido
               </span>
             }
+            @if (task().reassignRequest) {
+              <span
+                class="chip bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200">
+                Pide reasignar
+              </span>
+            }
             @if (comments().length > 0) {
               <span class="chip bg-surface-muted text-ink-muted">
                 {{ comments().length }}
@@ -210,6 +217,73 @@ const COMPANY_CLASS: Record<string, string> = {
 
           @if (open()) {
             <div class="mt-3 space-y-3 border-t border-line pt-3">
+              @if (task().reassignRequest; as r) {
+                <div
+                  class="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-500/40 dark:bg-amber-500/10">
+                  <p
+                    class="text-sm font-medium text-amber-900 dark:text-amber-200">
+                    {{ r.by }} pide que se reasigne
+                    <span
+                      class="font-normal text-amber-800/80 dark:text-amber-200/70">
+                      · {{ r.at | relativo }}
+                    </span>
+                  </p>
+                  @if (r.reason) {
+                    <p
+                      class="mt-1 text-sm text-amber-900/90 dark:text-amber-100/80">
+                      “{{ r.reason }}”
+                    </p>
+                  }
+                  <div class="mt-2 flex flex-wrap items-end gap-2">
+                    <label class="min-w-40">
+                      <span
+                        class="mb-1 block text-xs font-medium text-ink-muted"
+                        >Reasignar a</span
+                      >
+                      <select
+                        class="field"
+                        [ngModel]="reasignarA()"
+                        (ngModelChange)="reasignarA.set($event)"
+                        name="reasig-{{ task().id }}">
+                        <option value="">Elige a alguien</option>
+                        @for (p of ia.equipo(); track p.id) {
+                          @if (p.name !== r.by) {
+                            <option [value]="p.email ?? p.id">
+                              {{ p.name }}
+                            </option>
+                          }
+                        }
+                      </select>
+                    </label>
+                    <label class="min-w-0 flex-1">
+                      <span
+                        class="mb-1 block text-xs font-medium text-ink-muted"
+                        >Nota para quien lo pidió (opcional)</span
+                      >
+                      <input
+                        class="field"
+                        type="text"
+                        [ngModel]="notaDecision()"
+                        (ngModelChange)="notaDecision.set($event)"
+                        name="nota-reasig-{{ task().id }}" />
+                    </label>
+                    <button
+                      type="button"
+                      class="btn btn-primary"
+                      [disabled]="saving() || !reasignarA()"
+                      (click)="decidirReasignacion('aprobar')">
+                      Aprobar y reasignar
+                    </button>
+                    <button
+                      type="button"
+                      class="btn"
+                      [disabled]="saving()"
+                      (click)="decidirReasignacion('rechazar')">
+                      Rechazar
+                    </button>
+                  </div>
+                </div>
+              }
               @if (historial().length > 0) {
                 <details class="rounded-lg bg-surface-muted p-3">
                   <summary
@@ -529,6 +603,7 @@ export class TaskCardComponent {
   private readonly store = inject(PortalStore);
   private readonly local = inject(LocalTaskStore);
   readonly ia = inject(IaService);
+  private readonly admin = inject(PuenteAdminService);
 
   readonly task = input.required<TaskItem>();
 
@@ -537,6 +612,9 @@ export class TaskCardComponent {
   readonly saving = signal(false);
   readonly drafting = signal(false);
   readonly message = signal<string | undefined>(undefined);
+  /** Para decidir una solicitud de reasignación: a quién y una nota. */
+  readonly reasignarA = signal('');
+  readonly notaDecision = signal('');
   readonly borrador = signal<Borrador | undefined>(undefined);
   readonly empresas = EMPRESAS;
   readonly senderLabel = SENDER_KIND_LABEL;
@@ -707,6 +785,35 @@ export class TaskCardComponent {
   }
 
   /** Reasignar desde la lista: cambia y avisa sin abrir la tarjeta. */
+  decidirReasignacion(decision: 'aprobar' | 'rechazar'): void {
+    if (decision === 'aprobar' && !this.reasignarA()) {
+      return;
+    }
+    this.saving.set(true);
+    this.message.set(undefined);
+    this.admin
+      .decidirReasignacion({
+        id: this.task().id,
+        decision,
+        asignarA: decision === 'aprobar' ? this.reasignarA() : undefined,
+        nota: this.notaDecision().trim() || undefined,
+        tarea: this.task()
+      })
+      .subscribe({
+        next: (r) => {
+          this.saving.set(false);
+          this.reasignarA.set('');
+          this.notaDecision.set('');
+          this.message.set(r.aviso ?? 'Listo.');
+          this.store.refreshTasks();
+        },
+        error: (error: unknown) => {
+          this.saving.set(false);
+          this.message.set(describirError(error));
+        }
+      });
+  }
+
   reasignar(quien: string): void {
     this.guardar({ asignarA: quien, tarea: this.task() });
   }

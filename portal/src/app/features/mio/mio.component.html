@@ -130,6 +130,44 @@
                     </ol>
                   </details>
                 }
+                @if (t.reassignRequest; as r) {
+                  <p
+                    class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+                    Pediste que se reasigne{{
+                      r.reason ? ": " + r.reason : ""
+                    }}. Carlos lo está viendo; te llega un correo con la
+                    decisión.
+                  </p>
+                } @else if (pidiendo() === t.id) {
+                  <form
+                    class="mt-3 space-y-2 rounded-lg border border-line p-3"
+                    (ngSubmit)="pedirReasignacion(t)">
+                    <p class="text-xs font-medium text-ink">
+                      Pedir que se reasigne este pendiente
+                    </p>
+                    <input
+                      class="field"
+                      type="text"
+                      placeholder="Motivo (opcional): no tengo tiempo, está fuera de mi área…"
+                      [ngModel]="motivo()"
+                      (ngModelChange)="motivo.set($event)"
+                      name="motivo-{{ t.id }}" />
+                    <div class="flex gap-2">
+                      <button
+                        type="submit"
+                        class="btn btn-primary"
+                        [disabled]="ocupado() === t.id">
+                        Mandar solicitud
+                      </button>
+                      <button
+                        type="button"
+                        class="btn"
+                        (click)="pidiendo.set(undefined)">
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                }
                 <form class="mt-3 flex gap-2" (ngSubmit)="comentar(t)">
                   <input
                     class="field min-w-0 flex-1"
@@ -147,6 +185,18 @@
                 </form>
                 @if (mensajes()[t.id]; as m) {
                   <p class="mt-1 text-xs text-ink-muted">{{ m }}</p>
+                }
+                @if (
+                  !t.reassignRequest &&
+                  pidiendo() !== t.id &&
+                  t.status !== "hecho"
+                ) {
+                  <button
+                    type="button"
+                    class="mt-2 text-xs text-ink-subtle underline-offset-2 hover:text-ink hover:underline"
+                    (click)="pidiendo.set(t.id)">
+                    No tengo tiempo: pedir que se reasigne
+                  </button>
                 }
               </div>
             </div>

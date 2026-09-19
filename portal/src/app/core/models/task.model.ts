@@ -26,8 +26,22 @@ export interface TaskComment {
 export interface TaskEvent {
   at: string;
   by?: string;
-  kind: 'comentario' | 'estado' | 'asignacion' | 'edicion' | 'eliminado';
+  kind:
+    | 'comentario'
+    | 'estado'
+    | 'asignacion'
+    | 'edicion'
+    | 'eliminado'
+    | 'solicitud';
   text: string;
+}
+
+/** Alguien del equipo pidió, desde su liga, que le quiten un pendiente. */
+export interface ReassignRequest {
+  /** Quién lo pide (nombre). */
+  by: string;
+  reason?: string;
+  at: string;
 }
 
 export interface TaskItem {
@@ -55,6 +69,8 @@ export interface TaskItem {
   dueDate?: string;
   /** La fecha lleva hora concreta; si no, es "para ese día". */
   dueHasTime?: boolean;
+  /** El responsable pidió que se lo reasignen; pendiente de decidir. */
+  reassignRequest?: ReassignRequest;
   /** A quien le toca. Sin responsable el pendiente sale como "sin asignar". */
   assignee?: Person;
   accountId: string;
