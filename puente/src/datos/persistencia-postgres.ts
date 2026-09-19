@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Persistencia } from './persistencia.js';
+import type { Fila, Persistencia, Sql } from './persistencia.js';
 
 /**
  * Los documentos en una tabla de Postgres (la base de Render).
@@ -13,6 +13,7 @@ import type { Persistencia } from './persistencia.js';
  */
 export class PersistenciaPostgres implements Persistencia {
   readonly descripcion: string;
+  readonly sql: Sql;
   private readonly pool: pg.Pool;
 
   constructor(url: string) {
@@ -27,6 +28,27 @@ export class PersistenciaPostgres implements Persistencia {
       ssl: conTls ? { rejectUnauthorized: false } : undefined
     });
     this.descripcion = `Postgres en ${host || 'la base configurada'}`;
+    this.sql = {
+      ejecutar: async (texto, parametros = []) =>
+        (await this.pool.query(texto, parametros)).rows as Fila[],
+      transaccion: async (f) => {
+        const cliente = await this.pool.connect();
+        try {
+          await cliente.query('BEGIN');
+          const salida = await f(
+            async (texto, parametros = []) =>
+              (await cliente.query(texto, parametros)).rows as Fila[]
+          );
+          await cliente.query('COMMIT');
+          return salida;
+        } catch (error) {
+          await cliente.query('ROLLBACK').catch(() => undefined);
+          throw error;
+        } finally {
+          cliente.release();
+        }
+      }
+    };
   }
 
   /** Crea la tabla si no existe. Se llama una vez al arrancar. */

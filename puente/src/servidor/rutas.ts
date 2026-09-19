@@ -13,6 +13,20 @@ import {
   PersistenciaArchivos,
   type Persistencia
 } from '../datos/persistencia.js';
+import { AlmacenTabla } from '../datos/almacen-tabla.js';
+import {
+  TABLA_ANOTACIONES,
+  TABLA_AVISOS,
+  TABLA_DOMINIOS,
+  TABLA_EJECUCIONES,
+  TABLA_EMISORES,
+  TABLA_EQUIPO,
+  TABLA_LIGAS,
+  TABLA_PERSONALES,
+  TABLA_REGISTRO_CORREO,
+  TABLA_SESIONES,
+  type Aviso
+} from '../datos/tablas.js';
 import {
   dominiosComoLicencias,
   validarDominio,
@@ -328,20 +342,6 @@ export interface Datos {
   >;
 }
 
-/** Un aviso en el monitor: alguien del equipo movio un pendiente. */
-export interface Aviso {
-  id: string;
-  tipo: 'comento' | 'termino' | 'reabrio' | 'reasignacion' | 'sistema';
-  /** El verbo tal cual se muestra ("puso en progreso", "terminó"). */
-  accion?: string;
-  persona: string;
-  tareaId: string;
-  titulo: string;
-  texto?: string;
-  en: string;
-  leido: boolean;
-}
-
 /** Lee todos los almacenes (una sola lectura de la coleccion); al arrancar. */
 export async function cargarDatos(
   datos: Datos,
@@ -349,22 +349,43 @@ export async function cargarDatos(
 ): Promise<void> {
   const todos = await persistencia.leerColeccion('datos');
   for (const almacen of Object.values(datos)) {
-    (almacen as AlmacenJson<unknown>).cargarDe(todos);
+    if (almacen instanceof AlmacenTabla) {
+      // Tabla propia: se lee de la tabla (y migra el documento si esta vacia).
+      await almacen.cargar();
+    } else {
+      (almacen as AlmacenJson<unknown>).cargarDe(todos);
+    }
   }
 }
 
 export function abrirDatos(persistencia: Persistencia): Datos {
   return {
-    equipo: new AlmacenJson<Person[]>(persistencia, 'equipo', []),
-    dominios: new AlmacenJson<Dominio[]>(persistencia, 'dominios', []),
-    sesiones: new AlmacenJson<Sesion[]>(persistencia, 'sesiones', []),
-    personales: new AlmacenJson<TaskItem[]>(persistencia, 'personales', []),
-    emisores: new AlmacenJson<ClienteIngesta[]>(persistencia, 'emisores', []),
-    ejecuciones: new AlmacenJson<Ejecuciones>(persistencia, 'ejecuciones', {}),
-    anotaciones: new AlmacenJson<Anotaciones>(persistencia, 'anotaciones', {}),
-    registroCorreo: new AlmacenJson<Registro>(
+    equipo: new AlmacenTabla<Person[]>(persistencia, TABLA_EQUIPO, []),
+    dominios: new AlmacenTabla<Dominio[]>(persistencia, TABLA_DOMINIOS, []),
+    sesiones: new AlmacenTabla<Sesion[]>(persistencia, TABLA_SESIONES, []),
+    personales: new AlmacenTabla<TaskItem[]>(
       persistencia,
-      'pendientes-correo',
+      TABLA_PERSONALES,
+      []
+    ),
+    emisores: new AlmacenTabla<ClienteIngesta[]>(
+      persistencia,
+      TABLA_EMISORES,
+      []
+    ),
+    ejecuciones: new AlmacenTabla<Ejecuciones>(
+      persistencia,
+      TABLA_EJECUCIONES,
+      {}
+    ),
+    anotaciones: new AlmacenTabla<Anotaciones>(
+      persistencia,
+      TABLA_ANOTACIONES,
+      {}
+    ),
+    registroCorreo: new AlmacenTabla<Registro>(
+      persistencia,
+      TABLA_REGISTRO_CORREO,
       {}
     ),
     iaCorreo: new AlmacenJson<Record<string, Clasificacion>>(
@@ -412,8 +433,8 @@ export function abrirDatos(persistencia: Persistencia): Datos {
     ),
     aprendido: new AlmacenJson<Aprendizajes>(persistencia, 'aprendido', {}),
     iaUsos: new AlmacenJson<UsosIa>(persistencia, 'ia-usos', USOS_POR_OMISION),
-    ligasEquipo: new AlmacenJson(persistencia, 'ligas-equipo', {}),
-    avisos: new AlmacenJson(persistencia, 'avisos', []),
+    ligasEquipo: new AlmacenTabla(persistencia, TABLA_LIGAS, {}),
+    avisos: new AlmacenTabla<Aviso[]>(persistencia, TABLA_AVISOS, []),
     estatusPedido: new AlmacenJson(persistencia, 'estatus-pedido', {}),
     // De inicio martes y jueves a las 9; se cambia desde Equipo → Configuración.
     estatusConfig: new AlmacenJson(persistencia, 'estatus-config', {

@@ -30,6 +30,19 @@ export interface Persistencia {
   borrar(coleccion: string, clave: string): Promise<void>;
   /** Cierra conexiones (Postgres); en archivos no hace nada. */
   cerrar(): Promise<void>;
+  /**
+   * SQL directo, solo en Postgres: los almacenes con tabla propia lo usan.
+   * En archivos no existe y esos almacenes se guardan como documento.
+   */
+  sql?: Sql;
+}
+
+export type Fila = Record<string, unknown>;
+
+export interface Sql {
+  ejecutar(texto: string, parametros?: unknown[]): Promise<Fila[]>;
+  /** Corre varias sentencias como una sola: todo o nada. */
+  transaccion<T>(f: (ejecutar: Sql['ejecutar']) => Promise<T>): Promise<T>;
 }
 
 export const COLECCIONES = [
