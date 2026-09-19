@@ -373,8 +373,8 @@ export async function estadoVps(
 
 /**
  * Todos los servidores de todas las instancias de Prometheus configuradas.
- * Una instancia que no contesta no tira a las demas: sus servidores salen
- * como "sin señal" con el motivo.
+ * Una instancia que no contesta no tira a las demas: sale como un servidor
+ * "sin señal" con el motivo.
  */
 export async function estadoServidores(
   config: ConfiguracionServidores,
@@ -385,9 +385,9 @@ export async function estadoServidores(
       try {
         return await estadoVps(fuente, ahora);
       } catch (error) {
-        if (config.fuentes.length === 1) {
-          throw error;
-        }
+        // Un Prometheus que no contesta se ve como un servidor sin señal con
+        // el motivo, tambien cuando es el unico: asi la pantalla lo muestra
+        // en vez de quedarse en blanco.
         const razon = error instanceof Error ? error.message : String(error);
         return [
           {

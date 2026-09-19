@@ -1,0 +1,186 @@
+@if (!disponible) {
+  <p class="text-sm text-ink-muted">
+    Los servidores se guardan en el puente; conéctalo para capturarlos.
+  </p>
+} @else {
+  <section class="card card-pad">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 class="text-sm font-semibold text-ink">Servidores vigilados</h2>
+        <p class="mt-1 max-w-3xl text-sm text-ink-muted">
+          Uno por VPS, cada uno con la URL de su Prometheus y sus propias
+          credenciales. La etiqueta es el nombre que se ve en Servidores, el
+          carrusel, Hoy y Telegram. La guía para instalar Prometheus en cada VPS
+          está en el repositorio, en
+          <code class="font-mono">infra/vps-monitoreo/README.md</code>.
+        </p>
+      </div>
+      <button type="button" class="btn" (click)="agregar()">
+        <pt-icon name="mas" class="h-4 w-4" />
+        Agregar servidor
+      </button>
+    </div>
+
+    @if (renglones(); as lista) {
+      @if (lista.length === 0) {
+        <p class="mt-4 text-sm text-ink-muted">
+          Todavía no hay servidores. Agrega el primero.
+        </p>
+      }
+      <div class="mt-4 space-y-3">
+        @for (r of lista; track $index) {
+          <div class="rounded-lg border border-line p-3">
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <label class="min-w-0">
+                <span class="mb-1 block text-xs font-medium text-ink-muted"
+                  >Etiqueta (como se ve)</span
+                >
+                <input
+                  class="field"
+                  type="text"
+                  placeholder="Nexus 1"
+                  [ngModel]="r.etiqueta"
+                  (ngModelChange)="cambiar($index, { etiqueta: $event })"
+                  name="etiqueta-{{ $index }}" />
+              </label>
+              <label class="min-w-0 lg:col-span-2">
+                <span class="mb-1 block text-xs font-medium text-ink-muted"
+                  >URL de Prometheus (sin /api)</span
+                >
+                <input
+                  class="field"
+                  type="url"
+                  placeholder="http://74.208.151.19:9090"
+                  [ngModel]="r.url"
+                  (ngModelChange)="cambiar($index, { url: $event })"
+                  name="url-{{ $index }}" />
+              </label>
+              <label class="min-w-0">
+                <span class="mb-1 block text-xs font-medium text-ink-muted"
+                  >Usuario (basic auth)</span
+                >
+                <input
+                  class="field"
+                  type="text"
+                  autocomplete="off"
+                  [ngModel]="r.usuario"
+                  (ngModelChange)="cambiar($index, { usuario: $event })"
+                  name="usuario-{{ $index }}" />
+              </label>
+              <label class="min-w-0">
+                <span class="mb-1 block text-xs font-medium text-ink-muted">
+                  Contraseña
+                  @if (r.conContrasena) {
+                    <span class="font-normal text-ink-subtle"
+                      >· guardada; en blanco se conserva</span
+                    >
+                  }
+                </span>
+                <input
+                  class="field"
+                  type="password"
+                  autocomplete="new-password"
+                  [placeholder]="r.conContrasena ? '••••••••' : ''"
+                  [ngModel]="r.contrasena"
+                  (ngModelChange)="cambiar($index, { contrasena: $event })"
+                  name="contrasena-{{ $index }}" />
+              </label>
+              <label class="min-w-0">
+                <span class="mb-1 block text-xs font-medium text-ink-muted">
+                  Bearer token (opcional)
+                  @if (r.conToken) {
+                    <span class="font-normal text-ink-subtle">· guardado</span>
+                  }
+                </span>
+                <input
+                  class="field"
+                  type="password"
+                  autocomplete="off"
+                  [placeholder]="
+                    r.conToken ? '••••••••' : 'Solo si va detrás de un proxy'
+                  "
+                  [ngModel]="r.token"
+                  (ngModelChange)="cambiar($index, { token: $event })"
+                  name="token-{{ $index }}" />
+              </label>
+              <label class="min-w-0">
+                <span class="mb-1 block text-xs font-medium text-ink-muted"
+                  >Etiqueta de prometheus.yml (opcional)</span
+                >
+                <input
+                  class="field"
+                  type="text"
+                  placeholder="nombre"
+                  [ngModel]="r.etiquetaNombre"
+                  (ngModelChange)="cambiar($index, { etiquetaNombre: $event })"
+                  name="etiqueta-nombre-{{ $index }}" />
+              </label>
+            </div>
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="btn"
+                [disabled]="r.nuevo || prueba(r) === 'probando'"
+                (click)="probar(r)">
+                {{ prueba(r) === "probando" ? "Probando…" : "Probar" }}
+              </button>
+              <button
+                type="button"
+                class="btn"
+                title="Quitar"
+                (click)="quitar($index)">
+                <pt-icon name="basura" class="h-4 w-4" />
+                Quitar
+              </button>
+              @if (prueba(r); as p) {
+                @if (p !== "probando") {
+                  <span
+                    class="rounded-lg px-3 py-1.5 text-xs"
+                    [class]="
+                      p.ok
+                        ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200'
+                        : 'bg-rose-50 text-rose-800 dark:bg-rose-500/10 dark:text-rose-200'
+                    ">
+                    {{ p.mensaje }}
+                  </span>
+                }
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="ocupado() || lista.length === 0"
+          (click)="guardar()">
+          Guardar
+        </button>
+        @if (mensaje(); as m) {
+          <span
+            class="rounded-lg px-3 py-1.5 text-xs"
+            [class]="
+              m.ok
+                ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200'
+                : 'bg-rose-50 text-rose-800 dark:bg-rose-500/10 dark:text-rose-200'
+            ">
+            {{ m.mensaje }}
+          </span>
+        }
+      </div>
+    } @else {
+      <p class="mt-4 text-sm text-ink-muted">Cargando…</p>
+    }
+  </section>
+
+  @if (guardados().length > 0) {
+    <p class="mt-3 text-xs text-ink-subtle">
+      Última edición
+      {{ guardados()[guardados().length - 1]!.actualizadoEn | relativo }}. Los
+      umbrales de aviso son: disco ≥ 85 % (aviso) y ≥ 95 % (crítico), memoria ≥
+      90 %, CPU ≥ 85 %, y sin señal si deja de reportar.
+    </p>
+  }
+}

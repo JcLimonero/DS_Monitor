@@ -2,7 +2,8 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import {
   variableContrasena,
   type Configuracion,
-  type ConfiguracionCorreo
+  type ConfiguracionCorreo,
+  type ConfiguracionServidores
 } from '../config/entorno.js';
 import { join } from 'node:path';
 import { Acceso, type Sesion } from '../acceso/acceso.js';
@@ -24,9 +25,16 @@ import {
   TABLA_LIGAS,
   TABLA_PERSONALES,
   TABLA_REGISTRO_CORREO,
+  TABLA_SERVIDORES,
   TABLA_SESIONES,
   type Aviso
 } from '../datos/tablas.js';
+import {
+  comoFuente,
+  sinSecretos,
+  validarServidor,
+  type ServidorVps
+} from '../datos/servidores.js';
 import {
   dominiosComoLicencias,
   validarDominio,
@@ -151,7 +159,7 @@ import {
   destinosMonitoreados,
   type HistorialMonitoreo
 } from '../proveedores/monitoreo.js';
-import { estadoServidores } from '../proveedores/prometheus.js';
+import { estadoServidores, estadoVps } from '../proveedores/prometheus.js';
 import {
   desplieguesVercel,
   estadoPlataformaVercel,
@@ -223,7 +231,8 @@ export function estadoDeConexiones(
   almacenCorreo = new AlmacenCorreo(
     new PersistenciaArchivos({ correo: config.directorioCorreo })
   ),
-  hayEmisoresOps: () => boolean = () => false
+  hayEmisoresOps: () => boolean = () => false,
+  hayServidores: () => boolean = () => false
 ): Estado[] {
   const filas: [string, boolean, string[]][] = [
     ['anthropic', config.anthropic !== undefined, ['licenses']],
@@ -232,7 +241,7 @@ export function estadoDeConexiones(
     ['figma', config.figma !== undefined, ['licenses']],
     ['vercel', config.vercel !== undefined, ['deployments', 'licenses']],
     ['monitoreo', config.monitoreo !== undefined, ['monitors']],
-    ['prometheus', config.prometheus !== undefined, ['vps']],
+    ['prometheus', config.prometheus !== undefined || hayServidores(), ['vps']],
     ['odoo', config.odoo !== undefined, ['crm']],
     ['github', config.github !== undefined, ['repos']],
     [
@@ -327,6 +336,8 @@ export interface Datos {
   avisosSemanales: AlmacenJson<{ sinAsignar?: string }>;
   /** Servidores (VPS) que ya se avisaron por Telegram, con la salud avisada. */
   vpsAvisados: AlmacenJson<VpsAvisados>;
+  /** Los servidores vigilados: cada uno con su Prometheus y credenciales. */
+  servidores: AlmacenJson<ServidorVps[]>;
   /** Donde se permite usar el modelo (Integraciones → IA). */
   iaUsos: AlmacenJson<UsosIa>;
   /** Bitacora de llamadas al modelo. */
@@ -438,6 +449,11 @@ export function abrirDatos(persistencia: Persistencia): Datos {
       {}
     ),
     vpsAvisados: new AlmacenJson<VpsAvisados>(persistencia, 'vps-avisados', {}),
+    servidores: new AlmacenTabla<ServidorVps[]>(
+      persistencia,
+      TABLA_SERVIDORES,
+      []
+    ),
     iaBitacora: new AlmacenJson<EntradaBitacora[]>(
       persistencia,
       'ia-bitacora',
@@ -659,7 +675,12 @@ export function construirRutas(
     ok: true,
     version: '0.1.0',
     ahora: new Date().toISOString(),
-    conexiones: estadoDeConexiones(cfg(), almacenCorreo, hayOps)
+    conexiones: estadoDeConexiones(
+      cfg(),
+      almacenCorreo,
+      hayOps,
+      () => datos.servidores.leer().length > 0
+    )
   }));
 
   // --- Acceso: quien puede ver el portal ---
@@ -1032,12 +1053,111 @@ export function construirRutas(
 
   // --- Servidores (VPS) via Prometheus ---
 
+  // Los Prometheus que se leen: los capturados en Integraciones → Servidores
+  // mas, por compatibilidad, los de PROMETHEUS_URL en el entorno.
+  const fuentesVps = (): ConfiguracionServidores => ({
+    fuentes: [
+      ...datos.servidores.leer().map(comoFuente),
+      ...(cfg().prometheus?.fuentes ?? [])
+    ]
+  });
+  const hayServidores = () => fuentesVps().fuentes.length > 0;
+
   const vps = () =>
-    cache.obtener('vps:estado', ttl.vps, () =>
-      estadoServidores(exigir(cfg().prometheus, 'prometheus'))
-    );
+    cache.obtener('vps:estado', ttl.vps, () => {
+      if (!hayServidores()) {
+        throw new ErrorConfiguracion(
+          'No hay servidores capturados: agrega uno en Integraciones → Servidores.'
+        );
+      }
+      return estadoServidores(fuentesVps());
+    });
 
   router.get('/vps/estado', () => vps());
+
+  // --- Servidores: la lista, cada uno con su Prometheus ---
+
+  router.get('/vps/servidores', async () =>
+    datos.servidores.leer().map(sinSecretos)
+  );
+
+  router.post('/vps/servidores/guardar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { servidores } = (contexto.cuerpo ?? {}) as { servidores?: unknown };
+    if (!Array.isArray(servidores)) {
+      throw new ErrorPuente('"servidores" debe ser una lista.', 400);
+    }
+    const previos = datos.servidores.leer();
+    const ahora = new Date().toISOString();
+    const limpios: ServidorVps[] = [];
+    for (const crudo of servidores) {
+      const id =
+        typeof (crudo as { id?: unknown })?.id === 'string'
+          ? ((crudo as { id: string }).id as string)
+          : undefined;
+      try {
+        limpios.push(
+          validarServidor(
+            crudo,
+            previos.find((p) => p.id === id),
+            ahora
+          )
+        );
+      } catch (error) {
+        throw new ErrorPuente(
+          error instanceof Error ? error.message : String(error),
+          400
+        );
+      }
+    }
+    const ids = new Set<string>();
+    for (const s of limpios) {
+      while (ids.has(s.id)) {
+        s.id = `${s.id}-2`;
+      }
+      ids.add(s.id);
+    }
+    await datos.servidores.escribir(limpios);
+    cache.olvidar('vps:estado');
+    return limpios.map(sinSecretos);
+  });
+
+  router.post('/vps/servidores/borrar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { id } = (contexto.cuerpo ?? {}) as { id?: string };
+    await datos.servidores.escribir(
+      datos.servidores.leer().filter((s) => s.id !== id)
+    );
+    cache.olvidar('vps:estado');
+    return { ok: true };
+  });
+
+  // Prueba un servidor: lee su Prometheus y dice que encontro.
+  router.post('/vps/servidores/probar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { id } = (contexto.cuerpo ?? {}) as { id?: string };
+    const servidor = datos.servidores.leer().find((s) => s.id === id);
+    if (!servidor) {
+      throw new ErrorPuente('No hay un servidor con ese id.', 404);
+    }
+    try {
+      const lista = await estadoVps(comoFuente(servidor));
+      const arriba = lista.filter((v) => v.online).length;
+      const cont = lista.reduce((n, v) => n + v.containers.length, 0);
+      return {
+        ok: lista.length > 0,
+        mensaje:
+          lista.length === 0
+            ? 'Prometheus responde, pero no ve ningún servidor con job "node" (node_exporter).'
+            : `${lista.length} ${lista.length === 1 ? 'servidor' : 'servidores'}, ${arriba} reportando; ${cont} contenedores.`
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        mensaje: error instanceof Error ? error.message : String(error)
+      };
+    }
+  });
 
   // --- Monitoreo ---
 
@@ -1602,9 +1722,12 @@ export function construirRutas(
       throw new ErrorPuente(`No hay una integración "${id}".`, 404);
     }
     const guardadas = integraciones?.almacen.variablesDe(id) ?? {};
-    const estado = estadoDeConexiones(cfg(), almacenCorreo, hayOps).find(
-      (e) => e.conexion === id
-    );
+    const estado = estadoDeConexiones(
+      cfg(),
+      almacenCorreo,
+      hayOps,
+      () => datos.servidores.leer().length > 0
+    ).find((e) => e.conexion === id);
     // Acceso y la aplicacion de Microsoft no son conexiones del portal: su
     // estado sale de la configuracion misma.
     const config = cfg();
@@ -3295,7 +3418,7 @@ export function construirRutas(
         datos.sitiosAvisados.leer(),
         ahora
       );
-      const servidores = cfg().prometheus
+      const servidores = hayServidores()
         ? await vps().catch(() => [] as VpsStatus[])
         : [];
       const deVps = avisosDeVps(servidores, datos.vpsAvisados.leer(), ahora);

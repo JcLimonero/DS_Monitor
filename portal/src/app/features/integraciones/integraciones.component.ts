@@ -15,6 +15,7 @@ import { EmisoresConfigComponent } from '../configuracion/emisores-config.compon
 import { IntegracionConfigComponent } from '../configuracion/integracion-config.component';
 import { LicenciasConfigComponent } from '../configuracion/licencias-config.component';
 import { RespaldoComponent } from '../configuracion/respaldo.component';
+import { ServidoresConfigComponent } from '../configuracion/servidores-config.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 
 type Pestana =
@@ -25,6 +26,8 @@ type Pestana =
   | 'ia'
   | 'acceso'
   | 'servicios'
+  | 'sitios'
+  | 'servidores'
   | 'licencias'
   | 'ingesta';
 
@@ -62,7 +65,17 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
   {
     id: 'servicios',
     titulo: 'Servicios',
-    detalle: 'Vercel, GitHub, Odoo, sitios y servidores (Prometheus)'
+    detalle: 'Vercel, GitHub y Odoo'
+  },
+  {
+    id: 'sitios',
+    titulo: 'Sitios',
+    detalle: 'Páginas y APIs que se revisan cada minuto'
+  },
+  {
+    id: 'servidores',
+    titulo: 'Servidores',
+    detalle: 'Cada VPS con su Prometheus'
   },
   {
     id: 'licencias',
@@ -94,6 +107,7 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
     IntegracionConfigComponent,
     LicenciasConfigComponent,
     RespaldoComponent,
+    ServidoresConfigComponent,
     PageHeaderComponent
   ],
   templateUrl: './integraciones.component.html'

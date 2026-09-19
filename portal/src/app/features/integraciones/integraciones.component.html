@@ -52,8 +52,13 @@
         <pt-respaldo />
       }
       @case ("servicios") {
-        <pt-integracion-config
-          [kinds]="['vercel', 'github', 'odoo', 'monitor', 'prometheus']" />
+        <pt-integracion-config [kinds]="['vercel', 'github', 'odoo']" />
+      }
+      @case ("sitios") {
+        <pt-integracion-config [kinds]="['monitor']" />
+      }
+      @case ("servidores") {
+        <pt-servidores-config />
       }
       @case ("licencias") {
         <pt-licencias-config />

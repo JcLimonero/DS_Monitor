@@ -71,6 +71,29 @@ export interface Ejecucion {
   erroresSeguidos: number;
 }
 
+/** Un servidor (VPS) con su Prometheus, tal como lo enseña el puente (sin secretos). */
+export interface ServidorVps {
+  id: string;
+  etiqueta: string;
+  url: string;
+  usuario?: string;
+  conContrasena: boolean;
+  conToken: boolean;
+  etiquetaNombre?: string;
+  actualizadoEn: string;
+}
+
+/** Lo que se manda al guardar; contraseña y token solo si se cambian. */
+export interface ServidorVpsEdicion {
+  id?: string;
+  etiqueta: string;
+  url: string;
+  usuario?: string;
+  contrasena?: string;
+  token?: string;
+  etiquetaNombre?: string;
+}
+
 export interface ResultadoPrueba {
   ok: boolean;
   mensaje: string;
@@ -305,6 +328,38 @@ export class PuenteAdminService {
     return this.http.post<{ ok: boolean; aviso?: string }>(
       this.url('/pendientes/reasignacion'),
       datos,
+      { headers: this.headers() }
+    );
+  }
+
+  /** Los servidores (VPS) vigilados, sin secretos. */
+  servidores(): Observable<ServidorVps[]> {
+    return this.http.get<ServidorVps[]>(this.url('/vps/servidores'));
+  }
+
+  /** Guarda la lista completa; contraseña/token vacíos conservan los que había. */
+  guardarServidores(
+    servidores: ServidorVpsEdicion[]
+  ): Observable<ServidorVps[]> {
+    return this.http.post<ServidorVps[]>(
+      this.url('/vps/servidores/guardar'),
+      { servidores },
+      { headers: this.headers() }
+    );
+  }
+
+  borrarServidor(id: string): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(
+      this.url('/vps/servidores/borrar'),
+      { id },
+      { headers: this.headers() }
+    );
+  }
+
+  probarServidor(id: string): Observable<ResultadoPrueba> {
+    return this.http.post<ResultadoPrueba>(
+      this.url('/vps/servidores/probar'),
+      { id },
       { headers: this.headers() }
     );
   }

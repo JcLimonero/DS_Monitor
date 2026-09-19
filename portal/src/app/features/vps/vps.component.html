@@ -12,12 +12,12 @@
     <pt-empty-state
       icon="monitoreo"
       title="Prometheus sin conectar"
-      hint="Captura la URL de Prometheus (y su usuario, si lo pide) en Integraciones → Servicios. La guía para instalarlo en cada VPS está en el repositorio: infra/vps-monitoreo." />
+      hint="Agrega cada VPS (etiqueta, URL de su Prometheus y credenciales) en Integraciones → Servidores. La guía para instalar Prometheus en cada VPS está en el repositorio: infra/vps-monitoreo." />
     <p class="pb-4 text-center text-xs">
       <a
         class="text-brand hover:underline"
         routerLink="/integraciones"
-        [queryParams]="{ tab: 'servicios' }"
+        [queryParams]="{ tab: 'servidores' }"
         >Ir a Integraciones →</a
       >
     </p>

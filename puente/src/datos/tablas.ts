@@ -5,6 +5,7 @@ import type { Person, TaskItem } from '../nucleo/contrato.js';
 import type { Anotacion, Anotaciones } from '../pendientes/anotaciones.js';
 import type { Registro } from '../pendientes/registro.js';
 import type { Dominio } from './dominios.js';
+import type { ServidorVps } from './servidores.js';
 import type { DefinicionTabla } from './almacen-tabla.js';
 import type { Fila } from './persistencia.js';
 
@@ -541,4 +542,39 @@ export const TABLA_SESIONES: DefinicionTabla<Sesion[]> = {
       creada: iso(f['creada']),
       vence: iso(f['vence'])
     }))
+};
+
+// --- Servidores (VPS) con Prometheus ------------------------------------
+
+export const TABLA_SERVIDORES: DefinicionTabla<ServidorVps[]> = {
+  clave: 'servidores-vps',
+  tabla: 'servidores_vps',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS servidores_vps (
+      id text PRIMARY KEY,
+      orden integer NOT NULL DEFAULT 0,
+      etiqueta text NOT NULL,
+      url text NOT NULL,
+      usuario text,
+      etiqueta_nombre text,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+  `,
+  id: 'id',
+  orden: 'orden',
+  aFilas: (lista) => ({
+    principal: lista.map((s, i) => ({
+      id: s.id,
+      orden: i,
+      etiqueta: s.etiqueta,
+      url: s.url,
+      usuario: s.usuario ?? null,
+      etiqueta_nombre: s.etiquetaNombre ?? null,
+      actualizado_en: s.actualizadoEn,
+      datos: s
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<ServidorVps>(f['datos']))
 };
