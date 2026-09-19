@@ -5,8 +5,8 @@
       <div class="min-w-0">
         <h1 class="text-lg font-bold text-ink">
           @if (persona(); as p) {
-            {{ alcance() === "tarea" ? "Pendiente de" : "Pendientes de" }}
-            {{ p.name }}
+            {{ alcance() === "tarea" ? "Tu pendiente" : "Tus pendientes" }}
+            <span class="font-normal text-ink-muted">· {{ p.name }}</span>
           } @else {
             Mis pendientes
           }

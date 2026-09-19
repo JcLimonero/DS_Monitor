@@ -165,7 +165,7 @@ export class IaAcuerdosComponent {
       next: (r) => {
         this.cargando.set(false);
         this.mensaje.set(
-          `${r.agregados} agregados a Personales.${r.avisos.length ? ` ${r.avisos.join(' ')}` : ''}`
+          `${r.agregados} agregados a Míos.${r.avisos.length ? ` ${r.avisos.join(' ')}` : ''}`
         );
         this.propuestas.set([]);
         this.store.refreshTasks();

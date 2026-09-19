@@ -1,5 +1,5 @@
 <pt-page-header
-  [title]="vista() === 'personales' ? 'Pendientes personales' : 'Pendientes'"
+  [title]="vista() === 'personales' ? 'Mis pendientes' : 'Pendientes'"
   [subtitle]="subtitle()">
   <div class="flex rounded-lg border border-line p-0.5">
     <button
@@ -16,7 +16,7 @@
       [class.bg-brand]="vista() === 'personales'"
       [class.text-white]="vista() === 'personales'"
       (click)="vista.set('personales')">
-      Personales
+      Míos
     </button>
   </div>
   @if (sinAsignar() > 0 && owner() !== "nadie" && vista() === "negocio") {
