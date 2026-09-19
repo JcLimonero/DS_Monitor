@@ -370,6 +370,21 @@ const COMPANY_CLASS: Record<string, string> = {
                       Agendar
                     </button>
                   }
+                  @if (
+                    !task().assignee &&
+                    !task().personal &&
+                    ia.activa() !== false
+                  ) {
+                    <button
+                      type="button"
+                      class="btn"
+                      [disabled]="sugiriendo()"
+                      title="La IA propone responsable y empresa; tú decides"
+                      (click)="sugerir()">
+                      <span class="text-base leading-none">✦</span>
+                      {{ sugiriendo() ? 'Pensando…' : 'Sugerir responsable' }}
+                    </button>
+                  }
                   @if (task().origin === 'correo' && ia.activa() !== false) {
                     <button
                       type="button"
@@ -522,6 +537,40 @@ const COMPANY_CLASS: Record<string, string> = {
                 <p class="text-xs text-ink-muted">{{ m }}</p>
               }
 
+              @if (sugerencia(); as sg) {
+                <div
+                  class="rounded-lg border border-line bg-surface-muted p-3 text-sm">
+                  <p class="text-ink">
+                    <span class="text-brand">✦</span>
+                    @if (sg.persona) {
+                      Propone a <strong>{{ sg.persona.name }}</strong>
+                    } @else {
+                      Sin propuesta de responsable
+                    }
+                    @if (sg.empresa) {
+                      · {{ sg.empresa }}
+                    }
+                  </p>
+                  <p class="mt-1 text-xs text-ink-muted">{{ sg.motivo }}</p>
+                  <div class="mt-2 flex flex-wrap gap-2">
+                    @if (sg.persona || sg.empresa) {
+                      <button
+                        type="button"
+                        class="btn btn-primary"
+                        [disabled]="saving()"
+                        (click)="aplicarSugerencia()">
+                        Aplicar
+                      </button>
+                    }
+                    <button
+                      type="button"
+                      class="btn"
+                      (click)="sugerencia.set(undefined)">
+                      Descartar
+                    </button>
+                  </div>
+                </div>
+              }
               @if (borrador(); as b) {
                 <div class="rounded-lg bg-surface-muted p-3">
                   <p class="text-xs text-ink-muted">
@@ -611,6 +660,15 @@ export class TaskCardComponent {
   readonly draft = signal('');
   readonly saving = signal(false);
   readonly drafting = signal(false);
+  readonly sugiriendo = signal(false);
+  readonly sugerencia = signal<
+    | {
+        persona?: { id: string; name: string; email?: string };
+        empresa?: string;
+        motivo: string;
+      }
+    | undefined
+  >(undefined);
   readonly message = signal<string | undefined>(undefined);
   /** Para decidir una solicitud de reasignación: a quién y una nota. */
   readonly reasignarA = signal('');
@@ -816,6 +874,49 @@ export class TaskCardComponent {
 
   reasignar(quien: string): void {
     this.guardar({ asignarA: quien, tarea: this.task() });
+  }
+
+  sugerir(): void {
+    this.sugiriendo.set(true);
+    this.message.set(undefined);
+    this.ia.sugerir(this.task().id).subscribe({
+      next: (r) => {
+        const persona = this.ia.equipo().find((p) => p.id === r.responsable);
+        this.sugerencia.set({
+          persona: persona
+            ? { id: persona.id, name: persona.name, email: persona.email }
+            : undefined,
+          empresa: r.empresa,
+          motivo: r.motivo
+        });
+        this.sugiriendo.set(false);
+      },
+      error: (error: unknown) => {
+        this.message.set(describirError(error));
+        this.sugiriendo.set(false);
+      }
+    });
+  }
+
+  /** Aplica lo propuesto: empresa por edición y responsable por asignación. */
+  aplicarSugerencia(): void {
+    const sg = this.sugerencia();
+    if (!sg) {
+      return;
+    }
+    const cambios =
+      sg.empresa && sg.empresa !== this.task().company
+        ? { company: sg.empresa }
+        : undefined;
+    this.guardar(
+      {
+        ...(cambios ? { cambios, tarea: this.task() } : {}),
+        ...(sg.persona
+          ? { asignarA: sg.persona.email ?? sg.persona.id, tarea: this.task() }
+          : {})
+      },
+      () => this.sugerencia.set(undefined)
+    );
   }
 
   reply(): void {

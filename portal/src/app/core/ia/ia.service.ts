@@ -264,6 +264,17 @@ export class IaService {
     );
   }
 
+  /** A pedido: a quién asignar un pendiente sin dueño y de qué empresa es. */
+  sugerir(
+    id: string
+  ): Observable<{ responsable?: string; empresa?: string; motivo: string }> {
+    return this.http.post<{
+      responsable?: string;
+      empresa?: string;
+      motivo: string;
+    }>(this.url('/ia/sugerir'), { id }, { headers: this.headers() });
+  }
+
   /** Comentar, marcar hecho o asignar cualquier pendiente. */
   anotar(
     id: string,

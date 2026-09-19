@@ -101,6 +101,14 @@ export class ShellComponent {
   irAlAviso(a: Aviso): void {
     this.avisos.marcarLeidos([a.id]);
     this.avisosAbiertos.set(false);
+    if (a.tipo === 'sistema' || !a.tareaId) {
+      // Un aviso del monitor (el lunes de "sin asignar") lleva a la vista, no
+      // a un pendiente.
+      void this.router.navigate(['/pendientes'], {
+        queryParams: { owner: 'nadie' }
+      });
+      return;
+    }
     this.avisos.abrir.set(a.tareaId);
     void this.router.navigate(['/pendientes'], {
       queryParams: { abrir: a.tareaId }

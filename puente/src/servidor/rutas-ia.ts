@@ -35,9 +35,14 @@ import { consumo, type EntradaBitacora } from '../ia/modelo.js';
 import {
   aplicarVeredictos,
   clasificarPendientes,
+  sugerirResponsable,
   type VeredictoPendiente
 } from '../ia/pendientes.js';
 import { resumirRepos, semanaIso, type ResumenRepos } from '../ia/repos.js';
+import {
+  pistasParaModelo,
+  type Aprendizajes
+} from '../pendientes/aprendido.js';
 import { resumirDia, type ResumenDia } from '../ia/resumen.js';
 import { borradorDeRespuesta } from '../ia/respuesta.js';
 import {
@@ -115,6 +120,7 @@ export interface DependenciasIa {
     anotaciones: AlmacenJson<Anotaciones>;
     iaCorreo: AlmacenJson<Record<string, Clasificacion>>;
     personales: AlmacenJson<TaskItem[]>;
+    aprendido: AlmacenJson<Aprendizajes>;
   };
   exigirAdmin: (contexto: Contexto) => void;
   sesionDe: (contexto: Contexto) => Sesion | undefined;
@@ -984,6 +990,37 @@ export function registrarRutasIa(
       etiqueta: 'inicio-dia'
     });
   };
+
+  // A pedido, desde la tarjeta: a quién asignarlo y de qué empresa es. Los
+  // parecidos son los que comparten proyecto o empresa y ya tienen dueño.
+  router.post('/ia/sugerir', async (contexto) => {
+    const config = exigirIa('asistente');
+    const { id } = (contexto.cuerpo ?? {}) as { id?: string };
+    const tablero = await armarTablero(d.fuentes, new Date());
+    const tarea = tablero.pendientes.find((t) => t.id === id);
+    if (!tarea) {
+      throw new ErrorPuente('No encontré ese pendiente.', 404);
+    }
+    const parecidos = tablero.pendientes.filter(
+      (t) =>
+        t.id !== tarea.id &&
+        t.assignee &&
+        ((tarea.project && t.project === tarea.project) ||
+          (tarea.company && t.company === tarea.company))
+    );
+    return sugerirResponsable(
+      config,
+      tarea,
+      tablero.equipo.map((p) => ({
+        id: p.id,
+        name: p.name,
+        role: p.role,
+        email: p.email
+      })),
+      parecidos,
+      pistasParaModelo(d.datos.aprendido.leer())
+    );
+  });
 
   return {
     programables: [

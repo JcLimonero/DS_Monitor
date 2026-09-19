@@ -6,7 +6,7 @@ import { PORTAL_CONFIG } from '../config/portal-config.token';
 /** Lo que alguien del equipo hizo sobre un pendiente desde su liga. */
 export interface Aviso {
   id: string;
-  tipo: 'comento' | 'termino' | 'reabrio' | 'reasignacion';
+  tipo: 'comento' | 'termino' | 'reabrio' | 'reasignacion' | 'sistema';
   /** El verbo listo para mostrar; si no viene, se deduce del tipo. */
   accion?: string;
   persona: string;

@@ -98,3 +98,59 @@ function masAlta(a: TaskPriority, b?: TaskPriority): TaskPriority {
   }
   return ORDEN.indexOf(b) > ORDEN.indexOf(a) ? b : a;
 }
+
+/** Lo que la IA propone para un pendiente sin dueño: quién y de qué empresa. */
+export interface SugerenciaPendiente {
+  responsable?: string;
+  empresa?: string;
+  motivo: string;
+}
+
+/**
+ * Sugiere responsable y empresa para un pendiente, a pedido (el botón en la
+ * tarjeta). Se apoya en el equipo, en lo que otros pendientes parecidos ya
+ * tienen asignado y en lo aprendido de correcciones anteriores por
+ * remitente. No asigna nada: la persona decide.
+ */
+export async function sugerirResponsable(
+  config: ConfiguracionIa,
+  tarea: TaskItem,
+  equipo: { id: string; name: string; role?: string; email?: string }[],
+  parecidos: TaskItem[],
+  pistas: string[]
+): Promise<SugerenciaPendiente> {
+  const texto = await preguntar(config, {
+    uso: 'asistente',
+    sistema: `${CONTEXTO_EMPRESAS}\nTe doy un pendiente sin responsable, el equipo (nombre y rol), pendientes parecidos que ya tienen responsable y empresa, y pistas aprendidas por remitente. Propón quién del equipo debería atenderlo y a qué empresa pertenece. Responde SOLO JSON: {"responsable":"id de la persona o null","empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null","motivo":"una frase corta de por qué"}. Si no hay base para proponer, responsable null y dilo en el motivo.`,
+    usuario: JSON.stringify({
+      pendiente: {
+        titulo: tarea.title,
+        descripcion: (tarea.description ?? '').slice(0, 600),
+        proyecto: tarea.project,
+        empresaActual: tarea.company,
+        origen: tarea.origin,
+        remitente: tarea.senderKind,
+        etiquetas: tarea.tags
+      },
+      equipo,
+      parecidos: parecidos.slice(0, 12).map((t) => ({
+        titulo: t.title,
+        empresa: t.company,
+        proyecto: t.project,
+        responsable: t.assignee?.id
+      })),
+      pistas: pistas.slice(0, 25)
+    }),
+    json: true,
+    maxTokens: 400
+  });
+  const salida = comoJson<Partial<SugerenciaPendiente>>(texto);
+  const responsable = texto1(salida.responsable);
+  return {
+    responsable: equipo.some((p) => p.id === responsable)
+      ? responsable
+      : undefined,
+    empresa: EMPRESAS.find((e) => e === salida.empresa),
+    motivo: texto1(salida.motivo) ?? 'Sin base suficiente para proponer.'
+  };
+}

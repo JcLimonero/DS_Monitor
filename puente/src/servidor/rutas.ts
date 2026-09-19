@@ -96,11 +96,13 @@ import type { TipoIngesta } from '../ingesta/modelos.js';
 import {
   avisosPendientes,
   listarEjecuciones,
+  registrarEjecucion,
   type AvisosEjecuciones,
   type Ejecuciones
 } from '../ingesta/ejecuciones.js';
 import { avisosDeSitios, type SitiosAvisados } from '../nucleo/vigilancia.js';
 import { conPrioridadPersonal } from '../pendientes/prioridad.js';
+import { semanaIso } from '../ia/repos.js';
 import { Cache } from '../nucleo/cache.js';
 import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
 import { licenciasAnthropic } from '../proveedores/anthropic.js';
@@ -289,6 +291,8 @@ export interface Datos {
   sitiosAvisados: AlmacenJson<SitiosAvisados>;
   /** Revisiones de cada sitio: 24 h tal cual y 30 dias por conteo diario. */
   monitoreoHistorial: AlmacenJson<HistorialMonitoreo>;
+  /** Que avisos semanales ya salieron (semana ISO). */
+  avisosSemanales: AlmacenJson<{ sinAsignar?: string }>;
   /** Donde se permite usar el modelo (Integraciones → IA). */
   iaUsos: AlmacenJson<UsosIa>;
   /** Bitacora de llamadas al modelo. */
@@ -318,7 +322,7 @@ export interface Datos {
 /** Un aviso en el monitor: alguien del equipo movio un pendiente. */
 export interface Aviso {
   id: string;
-  tipo: 'comento' | 'termino' | 'reabrio' | 'reasignacion';
+  tipo: 'comento' | 'termino' | 'reabrio' | 'reasignacion' | 'sistema';
   /** El verbo tal cual se muestra ("puso en progreso", "terminó"). */
   accion?: string;
   persona: string;
@@ -385,6 +389,11 @@ export function abrirDatos(persistencia: Persistencia): Datos {
     monitoreoHistorial: new AlmacenJson<HistorialMonitoreo>(
       persistencia,
       'monitoreo-historial',
+      {}
+    ),
+    avisosSemanales: new AlmacenJson<{ sinAsignar?: string }>(
+      persistencia,
+      'avisos-semanales',
       {}
     ),
     iaBitacora: new AlmacenJson<EntradaBitacora[]>(
@@ -3044,6 +3053,51 @@ export function construirRutas(
     }
   );
 
+  // El propio puente se reporta en Ejecuciones: cada tarea programada deja su
+  // corrida (emisor "ds-monitor") al terminar, con duracion y error si lo hubo.
+  // Asi, si el barrido de correo o la vigilancia dejan de correr, se ve en la
+  // misma pantalla que los demas servicios y avisa por Telegram.
+  const conReporte = (tarea: Programable): Programable => ({
+    ...tarea,
+    correr: async () => {
+      const inicio = Date.now();
+      let error: unknown;
+      try {
+        await tarea.correr();
+      } catch (e) {
+        error = e;
+      }
+      try {
+        const { ejecuciones } = registrarEjecucion(
+          datos.ejecuciones.leer(),
+          'ds-monitor',
+          {
+            integracion: tarea.nombre,
+            nombre: `Puente: ${tarea.nombre}`,
+            estado: error ? 'error' : 'ok',
+            mensaje: error
+              ? (error instanceof Error ? error.message : String(error)).slice(
+                  0,
+                  240
+                )
+              : undefined,
+            detalle: error instanceof Error ? error.stack : undefined,
+            duracionMs: Date.now() - inicio,
+            cadaMinutos: tarea.cadaMinutos
+          }
+        );
+        await datos.ejecuciones.escribir(ejecuciones);
+      } catch (e) {
+        console.warn(
+          `[puente] no se pudo registrar la corrida de "${tarea.nombre}": ${(e as Error).message}`
+        );
+      }
+      if (error) {
+        throw error;
+      }
+    }
+  });
+
   // --- Lo que corrio cada integracion (se lee con sesion) ---
 
   // Vigilancia por Telegram, a los chats autorizados, una vez por problema y
@@ -3077,6 +3131,67 @@ export function construirRutas(
     }
     return mandado;
   };
+
+  // Lunes a las 8: cuantos pendientes del negocio siguen sin dueño o sin
+  // empresa, por Telegram y en la campana, con liga a esa vista. Una vez por
+  // semana.
+  programables.push({
+    nombre: 'sin asignar',
+    cadaMinutos: 15,
+    correr: async () => {
+      const ahora = new Date();
+      const local = new Date(
+        ahora.toLocaleString('en-US', { timeZone: 'America/Mexico_City' })
+      );
+      const semana = semanaIso(ahora);
+      const previo = datos.avisosSemanales.leer();
+      if (
+        local.getDay() !== 1 ||
+        local.getHours() < 8 ||
+        previo.sinAsignar === semana
+      ) {
+        return;
+      }
+      const abiertos = (await fuentes.pendientes()).filter(
+        (t) => t.status !== 'hecho' && !t.personal
+      );
+      const sinDueno = abiertos.filter((t) => !t.assignee).length;
+      const sinEmpresa = abiertos.filter((t) => !t.company).length;
+      const porIdentificar = abiertos.filter(
+        (t) => t.senderKind === 'por_identificar'
+      ).length;
+      await datos.avisosSemanales.escribir({ ...previo, sinAsignar: semana });
+      if (sinDueno === 0 && sinEmpresa === 0) {
+        return;
+      }
+      const partes = [
+        sinDueno > 0 ? `${sinDueno} sin responsable` : undefined,
+        sinEmpresa > 0 ? `${sinEmpresa} sin empresa` : undefined,
+        porIdentificar > 0
+          ? `${porIdentificar} con remitente por identificar`
+          : undefined
+      ].filter((x): x is string => !!x);
+      const texto = `Pendientes por acomodar: ${partes.join(', ')}.`;
+      const aviso: Aviso = {
+        id: randomBytes(8).toString('hex'),
+        tipo: 'sistema',
+        accion: 'recuerda',
+        persona: 'DS Monitor',
+        tareaId: '',
+        titulo: texto,
+        texto:
+          'Abre Pendientes → Sin asignar; en cada tarjeta "Sugerir responsable" te propone a quién.',
+        en: ahora.toISOString(),
+        leido: false
+      };
+      await datos.avisos.escribir(
+        [aviso, ...datos.avisos.leer()].slice(0, 200)
+      );
+      await mandarTelegram(
+        `<b>DS Monitor · lunes</b>\n${texto}\n${cfg().urlPortal}/pendientes?owner=nadie`
+      );
+    }
+  });
 
   programables.push({
     nombre: 'vigilancia de servicios',
@@ -3125,6 +3240,11 @@ export function construirRutas(
     await datos.ejecuciones.escribir(todas);
     return { ok: true };
   });
+
+  // Todas las tareas que se apuntaron arriba, ya con su reporte.
+  for (let i = 0; i < programables.length; i++) {
+    programables[i] = conReporte(programables[i] as Programable);
+  }
 
   return router;
 }
