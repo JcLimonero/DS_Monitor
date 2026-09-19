@@ -3293,6 +3293,43 @@ export function construirRutas(
     }
   });
 
+  // Restaura el registro de pendientes de correo desde los archivos del disco
+  // (la epoca anterior a la base): une lo del archivo con lo que hay, sin
+  // pisar lo actual. Sirve si el registro se vacio por un reinicio a medias.
+  router.post('/pendientes/correo/restaurar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const archivos = new PersistenciaArchivos({
+      datos: configInicial.directorioDatos
+    });
+    const guardado = (await archivos.leerColeccion('datos')).get(
+      'pendientes-correo'
+    ) as Registro | undefined;
+    if (!guardado) {
+      throw new ErrorPuente(
+        'No hay archivo pendientes-correo.json en el disco.',
+        404
+      );
+    }
+    const actual = datos.registroCorreo.leer();
+    const unido: Registro = { ...actual };
+    let agregados = 0;
+    for (const [cuenta, lista] of Object.entries(guardado)) {
+      const ids = new Set((unido[cuenta] ?? []).map((t) => t.id));
+      const faltan = lista.filter((t) => !ids.has(t.id));
+      unido[cuenta] = [...(unido[cuenta] ?? []), ...faltan];
+      agregados += faltan.length;
+    }
+    await datos.registroCorreo.escribir(unido);
+    cache.olvidar();
+    return {
+      ok: true,
+      agregados,
+      porCuenta: Object.fromEntries(
+        Object.entries(unido).map(([c, l]) => [c, l.length])
+      )
+    };
+  });
+
   // Respaldo completo: todas las colecciones tal como estan en la base, para
   // descargarlo desde Integraciones. Lleva credenciales (buzones,
   // integraciones): es un respaldo de verdad, se guarda con cuidado.
