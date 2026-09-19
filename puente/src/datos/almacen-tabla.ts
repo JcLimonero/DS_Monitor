@@ -190,6 +190,35 @@ export class AlmacenTabla<T> extends AlmacenJson<T> {
     return super.escribir(valor);
   }
 
+  /**
+   * Deja la tabla exactamente como `valor`, sin importar lo que hubiera: borra
+   * las filas de este almacen (y sus subfilas) y escribe todo de nuevo. Es lo
+   * que usa la restauracion de un respaldo.
+   */
+  async reemplazar(valor: T): Promise<T> {
+    const sql = this.sql;
+    if (sql) {
+      const { texto, valores } = this.condicion();
+      const ids = (
+        await sql.ejecutar(
+          `SELECT ${this.def.id} AS id FROM ${this.def.tabla}${texto}`,
+          valores
+        )
+      ).map((f) => String(f['id']));
+      await sql.transaccion(async (ejecutar) => {
+        for (const st of this.def.subtablas ?? []) {
+          await ejecutar(
+            `DELETE FROM ${st.tabla} WHERE ${st.padre} = ANY($1::text[])`,
+            [ids]
+          );
+        }
+        await ejecutar(`DELETE FROM ${this.def.tabla}${texto}`, valores);
+      });
+      this.previas = new Map();
+    }
+    return this.escribir(valor);
+  }
+
   private recordar(filas: {
     principal: Fila[];
     sub: Record<string, Fila[]>;

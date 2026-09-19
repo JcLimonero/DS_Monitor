@@ -10,3 +10,4 @@
 # Tokens locales del barrido de Mail.app
 .env.barrido
 .env.barrido.render
+.env.barrido.vps

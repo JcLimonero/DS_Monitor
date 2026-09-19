@@ -3353,11 +3353,30 @@ export function construirRutas(
         escritos++;
       }
     }
+    // Lo restaurado manda: las tablas propias se reescriben desde los
+    // documentos y lo que esta en memoria se recarga, sin esperar a un
+    // reinicio (asi ninguna tarea programada pisa el respaldo a medias).
+    const docs = new Map(Object.entries(cuerpo.colecciones['datos'] ?? {}));
+    for (const a of Object.values(datos) as AlmacenJson<unknown>[]) {
+      if (a instanceof AlmacenTabla) {
+        if (docs.has(a.clave)) {
+          await a.reemplazar(docs.get(a.clave));
+        }
+      } else {
+        a.cargarDe(docs);
+      }
+    }
+    await almacen.cargar();
+    await almacenCorreo.cargar();
+    if (integraciones) {
+      await integraciones.almacen.cargar();
+      integraciones.configurador.invalidar();
+    }
+    cache.olvidar();
     return {
       ok: true,
       escritos,
-      aviso:
-        'Reinicia el puente para que lo restaurado se cargue (y las tablas se llenen desde los documentos).'
+      aviso: 'Restaurado y cargado; no hace falta reiniciar.'
     };
   });
 

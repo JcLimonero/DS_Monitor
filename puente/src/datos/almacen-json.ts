@@ -10,7 +10,7 @@ export class AlmacenJson<T> {
 
   constructor(
     private readonly persistencia: Persistencia,
-    private readonly clave: string,
+    readonly clave: string,
     private readonly porOmision: T,
     private readonly coleccion = 'datos'
   ) {
