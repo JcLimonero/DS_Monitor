@@ -6,3 +6,4 @@ export * from './crm.model';
 export * from './license.model';
 export * from './deployment.model';
 export * from './repo.model';
+export * from './vps.model';

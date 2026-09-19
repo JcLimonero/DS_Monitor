@@ -38,7 +38,8 @@ import type {
   MonitorTarget,
   Person,
   TaskItem,
-  TaskStatus
+  TaskStatus,
+  VpsStatus
 } from '../nucleo/contrato.js';
 
 const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
@@ -115,7 +116,12 @@ import {
   type AvisosEjecuciones,
   type Ejecuciones
 } from '../ingesta/ejecuciones.js';
-import { avisosDeSitios, type SitiosAvisados } from '../nucleo/vigilancia.js';
+import {
+  avisosDeSitios,
+  avisosDeVps,
+  type SitiosAvisados,
+  type VpsAvisados
+} from '../nucleo/vigilancia.js';
 import { conPrioridadPersonal } from '../pendientes/prioridad.js';
 import { semanaIso } from '../ia/repos.js';
 import { armarTablero } from '../ia/tablero.js';
@@ -145,6 +151,7 @@ import {
   destinosMonitoreados,
   type HistorialMonitoreo
 } from '../proveedores/monitoreo.js';
+import { estadoVps } from '../proveedores/prometheus.js';
 import {
   desplieguesVercel,
   estadoPlataformaVercel,
@@ -185,6 +192,7 @@ const CREDENCIAL_DE: Record<string, string> = {
   figma: 'FIGMA_TOKEN y FIGMA_TEAM_ID',
   vercel: 'VERCEL_TOKEN',
   monitoreo: 'MONITOREO_DESTINOS',
+  prometheus: 'PROMETHEUS_URL',
   github: 'GITHUB_TOKEN',
   odoo: 'ODOO_URL, ODOO_DB, ODOO_USUARIO y ODOO_API_KEY',
   ops: 'un emisor con tipo pendientes (Pendientes → API)'
@@ -224,6 +232,7 @@ export function estadoDeConexiones(
     ['figma', config.figma !== undefined, ['licenses']],
     ['vercel', config.vercel !== undefined, ['deployments', 'licenses']],
     ['monitoreo', config.monitoreo !== undefined, ['monitors']],
+    ['prometheus', config.prometheus !== undefined, ['vps']],
     ['odoo', config.odoo !== undefined, ['crm']],
     ['github', config.github !== undefined, ['repos']],
     [
@@ -316,6 +325,8 @@ export interface Datos {
   monitoreoHistorial: AlmacenJson<HistorialMonitoreo>;
   /** Que avisos semanales ya salieron (semana ISO). */
   avisosSemanales: AlmacenJson<{ sinAsignar?: string }>;
+  /** Servidores (VPS) que ya se avisaron por Telegram, con la salud avisada. */
+  vpsAvisados: AlmacenJson<VpsAvisados>;
   /** Donde se permite usar el modelo (Integraciones → IA). */
   iaUsos: AlmacenJson<UsosIa>;
   /** Bitacora de llamadas al modelo. */
@@ -426,6 +437,7 @@ export function abrirDatos(persistencia: Persistencia): Datos {
       'avisos-semanales',
       {}
     ),
+    vpsAvisados: new AlmacenJson<VpsAvisados>(persistencia, 'vps-avisados', {}),
     iaBitacora: new AlmacenJson<EntradaBitacora[]>(
       persistencia,
       'ia-bitacora',
@@ -1017,6 +1029,15 @@ export function construirRutas(
   router.get('/vercel/licenses', async () =>
     licenciasVercel(exigir(cfg().vercel, 'vercel'))
   );
+
+  // --- Servidores (VPS) via Prometheus ---
+
+  const vps = () =>
+    cache.obtener('vps:estado', ttl.vps, () =>
+      estadoVps(exigir(cfg().prometheus, 'prometheus'))
+    );
+
+  router.get('/vps/estado', () => vps());
 
   // --- Monitoreo ---
 
@@ -3274,20 +3295,35 @@ export function construirRutas(
         datos.sitiosAvisados.leer(),
         ahora
       );
+      const servidores = cfg().prometheus
+        ? await vps().catch(() => [] as VpsStatus[])
+        : [];
+      const deVps = avisosDeVps(servidores, datos.vpsAvisados.leer(), ahora);
       const deEjecuciones = avisosPendientes(
         datos.ejecuciones.leer(),
         datos.ejecucionesAvisadas.leer(),
         ahora
       );
-      const lineas = [...deSitios.lineas, ...deEjecuciones.lineas];
+      const lineas = [
+        ...deSitios.lineas,
+        ...deVps.lineas,
+        ...deEjecuciones.lineas
+      ];
       if (lineas.length === 0) {
         return;
       }
-      const texto = `<b>DS Monitor · servicios</b>\n${lineas.join('\n')}\n${cfg().urlPortal}/${deSitios.lineas.length > 0 ? 'monitoreo' : 'ejecuciones'}`;
+      const destino =
+        deVps.lineas.length > 0
+          ? 'vps'
+          : deSitios.lineas.length > 0
+            ? 'monitoreo'
+            : 'ejecuciones';
+      const texto = `<b>DS Monitor · servicios</b>\n${lineas.join('\n')}\n${cfg().urlPortal}/${destino}`;
       // Solo se da por avisado lo que de verdad salio; si Telegram fallo se
       // vuelve a intentar en la siguiente vuelta.
       if (await mandarTelegram(texto)) {
         await datos.sitiosAvisados.escribir(deSitios.avisados);
+        await datos.vpsAvisados.escribir(deVps.avisados);
         await datos.ejecucionesAvisadas.escribir(deEjecuciones.avisadas);
       }
     }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { MonitorTarget } from './contrato.js';
-import { avisosDeSitios } from './vigilancia.js';
+import type { MonitorTarget, VpsStatus } from './contrato.js';
+import { avisosDeSitios, avisosDeVps } from './vigilancia.js';
 
 const AHORA = new Date('2026-09-18T12:00:00Z');
 
@@ -63,5 +63,48 @@ describe('avisosDeSitios', () => {
       AHORA
     );
     assert.match(r.lineas[0]!, /A &lt;b&gt;.*&lt;img&gt;/);
+  });
+});
+
+describe('avisosDeVps', () => {
+  const vps = (health: VpsStatus['health'], reason?: string): VpsStatus => ({
+    id: 'vps-1',
+    name: 'VPS Nexus',
+    online: health !== 'sin_senal',
+    health,
+    reason,
+    cpuHistory: [],
+    memHistory: [],
+    containers: [],
+    accountId: 'vps'
+  });
+
+  it('avisa al pasar de umbral, otra vez si empeora y cuando vuelve', () => {
+    const uno = avisosDeVps([vps('aviso', 'disco al 86 %')], {}, AHORA);
+    assert.match(uno.lineas[0]!, /🟠.*VPS Nexus.*aviso — disco al 86 %/);
+    assert.deepEqual(
+      avisosDeVps([vps('aviso', 'disco al 87 %')], uno.avisados, AHORA).lineas,
+      []
+    );
+    const peor = avisosDeVps(
+      [vps('critico', 'disco al 96 %')],
+      uno.avisados,
+      AHORA
+    );
+    assert.match(peor.lineas[0]!, /🔴.*crítico/);
+    const bien = avisosDeVps(
+      [vps('bien')],
+      peor.avisados,
+      new Date(AHORA.getTime() + 3600_000)
+    );
+    assert.match(bien.lineas[0]!, /🟢.*volvió a estar bien después de 1.0 h/);
+    assert.deepEqual(bien.avisados, {});
+  });
+
+  it('sin señal también avisa', () => {
+    assert.match(
+      avisosDeVps([vps('sin_senal', 'No reporta')], {}, AHORA).lineas[0]!,
+      /📡.*sin señal/
+    );
   });
 });

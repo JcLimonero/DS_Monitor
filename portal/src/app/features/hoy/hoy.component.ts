@@ -16,6 +16,7 @@ import { PortalStore } from '../../core/state/portal.store';
 import { accountsOf } from '../../core/util/meetings.util';
 import { AvisosService } from '../../core/avisos/avisos.service';
 import { EjecucionesService } from '../../core/ejecuciones/ejecuciones.service';
+import { VpsService } from '../../core/vps/vps.service';
 import {
   CLASE_PLAZO,
   PUNTO_PLAZO,
@@ -50,6 +51,8 @@ export class HoyComponent {
   private readonly sesion = inject(SesionService);
   /** Las integraciones que no están bien (error o atrasadas), para avisar. */
   readonly ejecucionesMal = inject(EjecucionesService).mal;
+  /** Servidores con atención (umbral o sin señal). */
+  readonly vpsMal = inject(VpsService).mal;
 
   readonly fecha = new Date().toLocaleDateString('es-MX', {
     weekday: 'long',

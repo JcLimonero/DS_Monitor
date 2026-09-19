@@ -62,7 +62,7 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
   {
     id: 'servicios',
     titulo: 'Servicios',
-    detalle: 'Vercel, GitHub, Odoo y monitoreo de sitios'
+    detalle: 'Vercel, GitHub, Odoo, sitios y servidores (Prometheus)'
   },
   {
     id: 'licencias',

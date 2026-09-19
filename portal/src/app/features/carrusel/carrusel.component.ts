@@ -24,6 +24,7 @@ import { PantallaEncendida } from './pantalla-encendida';
 import { AgendaSlideComponent } from './diapositivas/agenda.slide';
 import { DesplieguesSlideComponent } from './diapositivas/despliegues.slide';
 import { EjecucionesSlideComponent } from './diapositivas/ejecuciones.slide';
+import { VpsSlideComponent } from './diapositivas/vps.slide';
 import { EmbudoSlideComponent } from './diapositivas/embudo.slide';
 import { EquipoSlideComponent } from './diapositivas/equipo.slide';
 import { LicenciasSlideComponent } from './diapositivas/licencias.slide';
@@ -53,6 +54,7 @@ const CONTROLES_MS = 3000;
     BrandLogoComponent,
     DesplieguesSlideComponent,
     EjecucionesSlideComponent,
+    VpsSlideComponent,
     EmbudoSlideComponent,
     EquipoSlideComponent,
     LicenciasSlideComponent,

@@ -1,0 +1,232 @@
+<pt-page-header title="Servidores" [subtitle]="subtitulo()" />
+
+@if (!disponible) {
+  <div class="card">
+    <pt-empty-state
+      icon="monitoreo"
+      title="Sin puente"
+      hint="Los servidores se leen desde el puente; conéctalo en Integraciones." />
+  </div>
+} @else if (sinConfigurar()) {
+  <div class="card">
+    <pt-empty-state
+      icon="monitoreo"
+      title="Prometheus sin conectar"
+      hint="Captura la URL de Prometheus (y su usuario, si lo pide) en Integraciones → Servicios. La guía para instalarlo en cada VPS está en el repositorio: infra/vps-monitoreo." />
+    <p class="pb-4 text-center text-xs">
+      <a
+        class="text-brand hover:underline"
+        routerLink="/integraciones"
+        [queryParams]="{ tab: 'servicios' }"
+        >Ir a Integraciones →</a
+      >
+    </p>
+  </div>
+} @else {
+  <div class="mb-4 flex items-center justify-end">
+    @if (error(); as e) {
+      <p
+        class="mr-3 rounded-lg bg-rose-50 px-3 py-1.5 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200">
+        {{ e }}
+      </p>
+    }
+    <button
+      type="button"
+      class="btn px-2 py-1.5"
+      title="Volver a pedir"
+      aria-label="Volver a pedir"
+      (click)="cargar()">
+      <pt-icon name="refrescar" class="h-4 w-4" />
+    </button>
+  </div>
+
+  @if (ordenados().length > 0) {
+    <div class="grid gap-4 lg:grid-cols-2">
+      @for (v of ordenados(); track v.id) {
+        <article class="card min-w-0">
+          <button
+            type="button"
+            class="flex w-full items-start gap-3 px-4 py-3 text-left"
+            [attr.aria-expanded]="abierto() === v.id"
+            (click)="alternar(v.id)">
+            <span class="min-w-0 flex-1">
+              <span class="flex flex-wrap items-center gap-2">
+                <span class="text-base font-semibold text-ink">{{
+                  v.name
+                }}</span>
+                <span class="chip" [class]="claseSalud(v)">{{
+                  etiqueta[v.health]
+                }}</span>
+                @if (v.reason) {
+                  <span class="text-xs text-ink-muted">{{ v.reason }}</span>
+                }
+              </span>
+              <span class="mt-0.5 block text-xs text-ink-muted">
+                {{ v.id }}
+                @if (v.online) {
+                  · arriba {{ arriba(v.uptimeSeconds) }}
+                  @if (v.cores) {
+                    · {{ v.cores }} núcleos
+                  }
+                  @if (v.load1 !== undefined) {
+                    · carga {{ v.load1 }}
+                  }
+                } @else if (v.lastSeen) {
+                  · última señal {{ v.lastSeen | relativo }}
+                }
+              </span>
+            </span>
+            <pt-icon
+              name="siguiente"
+              class="mt-1 h-4 w-4 shrink-0 text-ink-subtle transition"
+              [class.rotate-90]="abierto() === v.id" />
+          </button>
+
+          <!-- Medidores: CPU, memoria y disco -->
+          <div class="grid grid-cols-3 gap-3 px-4 pb-3">
+            <div>
+              <p
+                class="flex items-baseline justify-between text-xs text-ink-muted">
+                <span>CPU</span>
+                <span class="text-sm font-semibold tabular-nums text-ink"
+                  >{{ v.cpuPct ?? "—"
+                  }}<span class="text-xs font-normal"> %</span></span
+                >
+              </p>
+              <div
+                class="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted">
+                <div
+                  class="h-full rounded-full"
+                  [class]="claseUso(v.cpuPct)"
+                  [style.width.%]="v.cpuPct ?? 0"></div>
+              </div>
+            </div>
+            <div>
+              <p
+                class="flex items-baseline justify-between text-xs text-ink-muted">
+                <span>Memoria</span>
+                <span class="text-sm font-semibold tabular-nums text-ink"
+                  >{{ v.memPct ?? "—"
+                  }}<span class="text-xs font-normal"> %</span></span
+                >
+              </p>
+              <div
+                class="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted">
+                <div
+                  class="h-full rounded-full"
+                  [class]="claseUso(v.memPct)"
+                  [style.width.%]="v.memPct ?? 0"></div>
+              </div>
+              @if (v.memTotalMb) {
+                <p class="mt-0.5 text-[11px] text-ink-subtle">
+                  {{ v.memUsedMb }} / {{ v.memTotalMb }} MB
+                </p>
+              }
+            </div>
+            <div>
+              <p
+                class="flex items-baseline justify-between text-xs text-ink-muted">
+                <span>Disco</span>
+                <span class="text-sm font-semibold tabular-nums text-ink"
+                  >{{ v.diskPct ?? "—"
+                  }}<span class="text-xs font-normal"> %</span></span
+                >
+              </p>
+              <div
+                class="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted">
+                <div
+                  class="h-full rounded-full"
+                  [class]="claseUso(v.diskPct)"
+                  [style.width.%]="v.diskPct ?? 0"></div>
+              </div>
+              @if (v.diskTotalGb) {
+                <p class="mt-0.5 text-[11px] text-ink-subtle">
+                  {{ v.diskUsedGb }} / {{ v.diskTotalGb }} GB
+                </p>
+              }
+            </div>
+          </div>
+
+          <!-- Curvas de 6 h y red -->
+          <div class="grid grid-cols-2 gap-3 border-t border-line px-4 py-3">
+            <div class="text-accent">
+              <p
+                class="mb-1 text-[11px] uppercase tracking-wide text-ink-subtle">
+                CPU · 6 h
+              </p>
+              <pt-serie [puntos]="v.cpuHistory" nombre="CPU" />
+            </div>
+            <div class="text-accent">
+              <p
+                class="mb-1 text-[11px] uppercase tracking-wide text-ink-subtle">
+                Memoria · 6 h
+              </p>
+              <pt-serie [puntos]="v.memHistory" nombre="Memoria" />
+            </div>
+          </div>
+          <p
+            class="flex flex-wrap gap-x-4 gap-y-1 border-t border-line px-4 py-2 text-xs text-ink-muted">
+            <span>↓ {{ red(v.netRxBps) }}</span>
+            <span>↑ {{ red(v.netTxBps) }}</span>
+            <span class="ml-auto">
+              {{ v.containers.length }}
+              {{ v.containers.length === 1 ? "contenedor" : "contenedores" }}
+            </span>
+          </p>
+
+          @if (abierto() === v.id) {
+            <div class="border-t border-line px-4 py-3">
+              @if (v.containers.length === 0) {
+                <p class="text-xs text-ink-muted">
+                  Sin contenedores (o cAdvisor no está en este servidor).
+                </p>
+              } @else {
+                <table class="w-full text-xs">
+                  <thead class="text-left text-ink-subtle">
+                    <tr>
+                      <th class="pb-1 font-medium">Contenedor</th>
+                      <th class="pb-1 font-medium">Estado</th>
+                      <th class="pb-1 text-right font-medium">CPU</th>
+                      <th class="pb-1 text-right font-medium">Memoria</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-line">
+                    @for (c of v.containers; track c.name) {
+                      <tr>
+                        <td class="py-1 font-mono text-ink">{{ c.name }}</td>
+                        <td class="py-1">
+                          <span
+                            class="chip"
+                            [class]="
+                              c.running
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
+                                : 'bg-surface-muted text-ink-muted'
+                            ">
+                            {{ c.running ? "corriendo" : "detenido" }}
+                          </span>
+                        </td>
+                        <td class="py-1 text-right tabular-nums text-ink">
+                          {{ c.cpuPct !== undefined ? c.cpuPct + " %" : "—" }}
+                        </td>
+                        <td class="py-1 text-right tabular-nums text-ink">
+                          {{ c.memMb !== undefined ? c.memMb + " MB" : "—" }}
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            </div>
+          }
+        </article>
+      }
+    </div>
+  } @else if (lista()) {
+    <div class="card">
+      <pt-empty-state
+        icon="monitoreo"
+        title="Prometheus no ve ningún servidor"
+        hint="Revisa que en prometheus.yml haya un job llamado node con cada VPS (node_exporter) y que Prometheus los alcance." />
+    </div>
+  }
+}

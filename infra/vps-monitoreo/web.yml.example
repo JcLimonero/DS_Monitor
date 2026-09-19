@@ -1,0 +1,6 @@
+# Usuario y contraseña para Prometheus (basic auth). Copia este archivo a
+# web.yml y pon el hash bcrypt de tu contraseña:
+#   htpasswd -nBC 12 "" | tr -d ':\n'     (apache2-utils)
+#   o: python3 -c 'import bcrypt,getpass;print(bcrypt.hashpw(getpass.getpass().encode(),bcrypt.gensalt(12)).decode())'
+basic_auth_users:
+  dsmonitor: $2y$12$REEMPLAZA_ESTE_HASH

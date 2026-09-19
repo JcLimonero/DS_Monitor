@@ -287,3 +287,48 @@ export interface RepoStatus {
   accountId: string;
   updatedAt: string;
 }
+
+// --- Servidores (VPS) con Prometheus ---
+
+export type VpsHealth = 'bien' | 'aviso' | 'critico' | 'sin_senal';
+
+export interface VpsPoint {
+  at: string;
+  value: number;
+}
+
+export interface VpsContainer {
+  name: string;
+  running: boolean;
+  cpuPct?: number;
+  memMb?: number;
+  lastSeen: string;
+}
+
+export interface VpsStatus {
+  /** El host (instancia sin puerto) o la etiqueta de nombre. */
+  id: string;
+  name: string;
+  online: boolean;
+  health: VpsHealth;
+  /** Que disparo el aviso o el critico, en palabras. */
+  reason?: string;
+  cpuPct?: number;
+  cores?: number;
+  load1?: number;
+  memPct?: number;
+  memUsedMb?: number;
+  memTotalMb?: number;
+  diskPct?: number;
+  diskUsedGb?: number;
+  diskTotalGb?: number;
+  netRxBps?: number;
+  netTxBps?: number;
+  uptimeSeconds?: number;
+  lastSeen?: string;
+  /** Ultimas horas, para la grafica. */
+  cpuHistory: VpsPoint[];
+  memHistory: VpsPoint[];
+  containers: VpsContainer[];
+  accountId: string;
+}

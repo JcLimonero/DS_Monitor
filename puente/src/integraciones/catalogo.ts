@@ -273,6 +273,54 @@ export const INTEGRACIONES: Integracion[] = [
     }
   },
   {
+    id: 'prometheus',
+    etiqueta: 'Servidores (Prometheus)',
+    kind: 'prometheus',
+    campos: [
+      {
+        variable: 'PROMETHEUS_URL',
+        etiqueta: 'URL de Prometheus',
+        tipo: 'texto',
+        obligatoria: true,
+        ayuda:
+          'La raíz, por ejemplo https://monitor.midominio.com:9090 (sin /api). En cada VPS va node_exporter y cAdvisor; la guía está en infra/vps-monitoreo/README.md.'
+      },
+      {
+        variable: 'PROMETHEUS_USUARIO',
+        etiqueta: 'Usuario (basic auth)',
+        tipo: 'texto',
+        ayuda: 'Si Prometheus pide usuario y contraseña (web.config.yml).'
+      },
+      {
+        variable: 'PROMETHEUS_CONTRASENA',
+        etiqueta: 'Contraseña',
+        tipo: 'secreto'
+      },
+      {
+        variable: 'PROMETHEUS_TOKEN',
+        etiqueta: 'Bearer token',
+        tipo: 'secreto',
+        ayuda: 'Solo si va detrás de un proxy que pide token en vez de usuario.'
+      },
+      {
+        variable: 'PROMETHEUS_ETIQUETA_NOMBRE',
+        etiqueta: 'Etiqueta con el nombre del servidor',
+        tipo: 'texto',
+        ayuda: 'Por omisión "nombre" (se pone en prometheus.yml por cada VPS).'
+      }
+    ],
+    probar: async (config) => {
+      const { estadoVps } = await import('../proveedores/prometheus.js');
+      const lista = await estadoVps(
+        exigir(config.prometheus, 'la URL de Prometheus')
+      );
+      const arriba = lista.filter((v) => v.online).length;
+      return lista.length === 0
+        ? 'Prometheus responde, pero no hay ningún servidor con job "node" (node_exporter).'
+        : `${lista.length} servidores, ${arriba} reportando; ${lista.reduce((n, v) => n + v.containers.length, 0)} contenedores.`;
+    }
+  },
+  {
     id: 'monitoreo',
     etiqueta: 'Monitoreo',
     kind: 'monitor',

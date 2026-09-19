@@ -55,7 +55,8 @@ const KIND_LABEL: Record<SourceKind, string> = {
   figma: 'Figma',
   vercel: 'Vercel',
   github: 'GitHub',
-  openrouter: 'OpenRouter'
+  openrouter: 'OpenRouter',
+  prometheus: 'Servidores (Prometheus)'
 };
 
 const CAPABILITY_LABEL: Record<SourceConnection['provides'][number], string> = {

@@ -28,7 +28,8 @@ export type SourceKind =
   | 'figma'
   | 'vercel'
   | 'github'
-  | 'openrouter';
+  | 'openrouter'
+  | 'prometheus';
 
 /** Una cuenta concreta dentro de una integración, por ejemplo un correo. */
 export interface Account {

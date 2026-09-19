@@ -180,6 +180,23 @@ export interface ConfiguracionFireflies {
   apiKey: string;
 }
 
+/**
+ * Prometheus en el VPS (con node_exporter y cAdvisor). El puente le
+ * pregunta por HTTP; Grafana no hace falta, el portal grafica.
+ */
+export interface ConfiguracionPrometheus {
+  /** Raiz, por ejemplo https://vps.midominio.com:9090 (sin /api). */
+  url: string;
+  /** Basic auth de Prometheus (web.config.yml), si se activo. */
+  usuario?: string;
+  contrasena?: string;
+  /** O un bearer token, si va detras de un proxy que lo pide. */
+  token?: string;
+  /** Etiqueta con el nombre legible del servidor; por omision `nombre`. */
+  etiquetaNombre: string;
+  accountId: string;
+}
+
 export interface ConfiguracionTelegram {
   token: string;
   chats: string[];
@@ -205,6 +222,7 @@ export interface Configuracion {
     despliegues: number;
     estadoPlataforma: number;
     monitoreo: number;
+    vps: number;
     crm: number;
     repos: number;
     correo: number;
@@ -238,6 +256,7 @@ export interface Configuracion {
   microsoftApp?: Omit<ConfiguracionMicrosoft, 'refreshToken' | 'conectadaComo'>;
   ia?: ConfiguracionIa;
   fireflies?: ConfiguracionFireflies;
+  prometheus?: ConfiguracionPrometheus;
   telegram?: ConfiguracionTelegram;
   /** La aplicacion OAuth de Google que usan todos los buzones de Gmail. */
   googleApp?: Omit<ConfiguracionGoogle, 'refreshToken' | 'conectadaComo'>;
@@ -446,6 +465,7 @@ function leer(): Configuracion {
       despliegues: numeroCon('CACHE_DESPLIEGUES_SEGUNDOS', 30),
       estadoPlataforma: numeroCon('CACHE_ESTADO_SEGUNDOS', 60),
       monitoreo: numeroCon('CACHE_MONITOREO_SEGUNDOS', 60),
+      vps: numeroCon('CACHE_VPS_SEGUNDOS', 60),
       crm: numeroCon('CACHE_CRM_SEGUNDOS', 120),
       repos: numeroCon('CACHE_REPOS_SEGUNDOS', 120),
       // Leer un buzon completo por IMAP es lento y los proveedores limitan las
@@ -559,6 +579,16 @@ function leer(): Configuracion {
           modelo: texto('OPENROUTER_MODEL') ?? 'openai/gpt-oss-120b',
           dias: numeroCon('OPENROUTER_DIAS', 7),
           maximo: numeroCon('OPENROUTER_MAXIMO', 40)
+        }
+      : undefined,
+    prometheus: texto('PROMETHEUS_URL')
+      ? {
+          url: (texto('PROMETHEUS_URL') as string).replace(/\/+$/, ''),
+          usuario: texto('PROMETHEUS_USUARIO'),
+          contrasena: texto('PROMETHEUS_CONTRASENA'),
+          token: texto('PROMETHEUS_TOKEN'),
+          etiquetaNombre: texto('PROMETHEUS_ETIQUETA_NOMBRE') ?? 'nombre',
+          accountId: 'vps'
         }
       : undefined,
     fireflies: texto('FIREFLIES_API_KEY')

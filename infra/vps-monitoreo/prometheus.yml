@@ -1,0 +1,28 @@
+# Qué recolecta Prometheus. Un bloque por VPS en cada job; la etiqueta
+# `nombre` es como se ve el servidor en DS Monitor (y la que une
+# node_exporter con cAdvisor del mismo servidor).
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  # CPU, memoria, disco, red y tiempo arriba de cada VPS.
+  - job_name: node
+    static_configs:
+      - targets: ['localhost:9100']
+        labels: { nombre: 'vps-1' }
+      # Otro VPS (corre el perfil `agente` y abre 9100/8080 solo a esta IP):
+      # - targets: ['203.0.113.10:9100']
+      #   labels: { nombre: 'vps-2' }
+
+  # Contenedores de cada VPS.
+  - job_name: cadvisor
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels: { nombre: 'vps-1' }
+      # - targets: ['203.0.113.10:8080']
+      #   labels: { nombre: 'vps-2' }
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']

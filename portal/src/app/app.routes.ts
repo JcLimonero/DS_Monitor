@@ -75,6 +75,12 @@ export const routes: Routes = [
           )
       },
       {
+        path: 'vps',
+        title: 'Servidores | DS Monitor',
+        loadComponent: () =>
+          import('./features/vps/vps.component').then((m) => m.VpsComponent)
+      },
+      {
         path: 'ejecuciones',
         title: 'Ejecuciones | DS Monitor',
         loadComponent: () =>

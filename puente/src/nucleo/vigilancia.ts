@@ -1,4 +1,4 @@
-import type { MonitorTarget } from './contrato.js';
+import type { MonitorTarget, VpsHealth, VpsStatus } from './contrato.js';
 
 /**
  * Vigilancia de los sitios monitoreados para avisar por Telegram: cuando uno
@@ -58,4 +58,50 @@ function enPalabras(ms: number): string {
   return h < 48
     ? `${h < 10 ? h.toFixed(1) : Math.round(h)} h`
     : `${Math.round(h / 24)} días`;
+}
+
+/**
+ * Vigilancia de los servidores (Prometheus): se avisa una vez cuando un VPS
+ * deja de reportar o se pasa de umbral (disco, memoria, CPU) y otra cuando
+ * vuelve a estar bien. Se recuerda por servidor la salud que ya se aviso.
+ */
+export type VpsAvisados = Record<string, { salud: VpsHealth; desde: string }>;
+
+export function avisosDeVps(
+  servidores: VpsStatus[],
+  avisados: VpsAvisados,
+  ahora = new Date()
+): { lineas: string[]; avisados: VpsAvisados } {
+  const lineas: string[] = [];
+  const nuevos: VpsAvisados = {};
+  for (const v of servidores) {
+    const previo = avisados[v.id];
+    const nombre = `<b>${escapar(v.name)}</b>`;
+    const mal = v.health !== 'bien';
+    if (mal) {
+      if (!previo || previo.salud !== v.health) {
+        const icono =
+          v.health === 'sin_senal'
+            ? '📡'
+            : v.health === 'critico'
+              ? '🔴'
+              : '🟠';
+        lineas.push(
+          `${icono} ${nombre}: ${v.health === 'sin_senal' ? 'sin señal' : v.health === 'critico' ? 'crítico' : 'aviso'}${v.reason ? ` — ${escapar(v.reason)}` : ''}.`
+        );
+        nuevos[v.id] = {
+          salud: v.health,
+          desde: previo?.desde ?? ahora.toISOString()
+        };
+      } else {
+        nuevos[v.id] = previo;
+      }
+    } else if (previo) {
+      const fuera = ahora.getTime() - Date.parse(previo.desde);
+      lineas.push(
+        `🟢 ${nombre} volvió a estar bien${fuera > 0 ? ` después de ${enPalabras(fuera)}` : ''}.`
+      );
+    }
+  }
+  return { lineas, avisados: nuevos };
 }
