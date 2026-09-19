@@ -37,7 +37,27 @@ services:
       - /:/host:ro,rslave
     profiles: ['central', 'agente']
 
+  # En el VPS central Prometheus le habla por la red interna (cadvisor:8080),
+  # asi que no se publica el puerto. En un VPS agente si hay que abrirlo hacia
+  # el central: agrega `ports: ['8080:8080']` (o usa el perfil agente-puerto).
   cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg
+    profiles: ['central']
+
+  # Igual que cadvisor, pero publicando 8080 para que el Prometheus central lo
+  # lea desde otro servidor. Solo en los VPS agentes.
+  cadvisor_agente:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     container_name: cadvisor
     restart: unless-stopped
@@ -52,7 +72,7 @@ services:
       - /dev/disk/:/dev/disk:ro
     devices:
       - /dev/kmsg
-    profiles: ['central', 'agente']
+    profiles: ['agente']
 
 volumes:
   prometheus-datos:

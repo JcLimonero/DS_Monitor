@@ -33,7 +33,8 @@ mkdir -p /opt/monitoreo && cd /opt/monitoreo
 docker compose --profile agente up -d
 ```
 
-Abre **9100** y **8080** únicamente a la IP del VPS principal (ufw:
+(En el agente cAdvisor sí publica el 8080; en el central no hace falta, Prometheus
+le habla por la red interna.) Abre **9100** y **8080** únicamente a la IP del VPS principal (ufw:
 `ufw allow from IP_PRINCIPAL to any port 9100,8080 proto tcp`). Luego agrega
 el VPS en `prometheus.yml` del principal, en los jobs `node` y `cadvisor`, con
 su etiqueta `nombre`, y recarga: `docker compose --profile central restart prometheus`.
