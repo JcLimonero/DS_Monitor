@@ -126,7 +126,7 @@ export const TABLA_PERSONALES: DefinicionTabla<TaskItem[]> = {
 
 /** Los pendientes detectados en el correo, por buzon. */
 export const TABLA_REGISTRO_CORREO: DefinicionTabla<Registro> = {
-  clave: 'registro-correo',
+  clave: 'pendientes-correo',
   tabla: 'pendientes',
   ddl: DDL_PENDIENTES,
   id: 'id',
