@@ -337,21 +337,30 @@ const COMPANY_CLASS: Record<string, string> = {
                         patchEdit({ description: $event })
                       "></textarea>
                   </label>
-                  <label>
-                    <span class="mb-1 block text-xs font-medium text-ink-muted"
-                      >Prioridad</span
-                    >
-                    <select
-                      class="field"
-                      name="e-prio-{{ task().id }}"
-                      [ngModel]="e.priority"
-                      (ngModelChange)="patchEdit({ priority: $event })">
-                      <option value="urgente">Urgente</option>
-                      <option value="alta">Alta</option>
-                      <option value="media">Media</option>
-                      <option value="baja">Baja</option>
-                    </select>
-                  </label>
+                  @if (!task().personal) {
+                    <label>
+                      <span
+                        class="mb-1 block text-xs font-medium text-ink-muted"
+                        >Prioridad</span
+                      >
+                      <select
+                        class="field"
+                        name="e-prio-{{ task().id }}"
+                        [ngModel]="e.priority"
+                        (ngModelChange)="patchEdit({ priority: $event })">
+                        <option value="urgente">Urgente</option>
+                        <option value="alta">Alta</option>
+                        <option value="media">Media</option>
+                        <option value="baja">Baja</option>
+                      </select>
+                    </label>
+                  } @else {
+                    <!-- Lo personal: alta, y urgente si tiene fecha. Lo pone el puente. -->
+                    <p class="text-xs text-ink-muted">
+                      Prioridad:
+                      {{ e.dueLocal ? 'urgente (tiene fecha)' : 'alta' }}
+                    </p>
+                  }
                   <label>
                     <span class="mb-1 block text-xs font-medium text-ink-muted"
                       >Para cuándo</span
@@ -747,7 +756,11 @@ export class TaskCardComponent {
         cambios: {
           title: e.title,
           description: e.description,
-          priority: e.priority as TaskPriority,
+          priority: this.task().personal
+            ? e.dueLocal
+              ? 'urgente'
+              : 'alta'
+            : (e.priority as TaskPriority),
           // Sin hora se ancla a mediodia (cae en ese día en cualquier zona).
           dueDate: e.dueLocal
             ? new Date(`${e.dueLocal}T${e.dueTime || '12:00'}:00`).toISOString()

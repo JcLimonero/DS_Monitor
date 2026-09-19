@@ -1,4 +1,5 @@
 import { enviarPorEmailJs, type Sesion } from '../acceso/acceso.js';
+import { conPrioridadPersonal } from '../pendientes/prioridad.js';
 import type { Configuracion, ConfiguracionIa } from '../config/entorno.js';
 import {
   ETIQUETA_USO,
@@ -514,7 +515,7 @@ export function registrarRutasIa(
         updatedAt: ahora
       }));
     await d.datos.personales.escribir([
-      ...nuevos,
+      ...nuevos.map(conPrioridadPersonal),
       ...d.datos.personales.leer()
     ]);
     const avisos: string[] = [];

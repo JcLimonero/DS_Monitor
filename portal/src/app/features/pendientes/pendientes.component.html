@@ -72,20 +72,27 @@
           (ngModelChange)="newTitle.set($event)"
           name="titulo" />
       </label>
-      <label>
-        <span class="mb-1 block text-xs font-medium text-ink-muted"
-          >Prioridad</span
-        >
-        <select
-          class="field"
-          [ngModel]="newPriority()"
-          (ngModelChange)="newPriority.set($event)"
-          name="prioridad">
-          @for (option of priorities; track option) {
-            <option [value]="option">{{ priorityLabel[option] }}</option>
-          }
-        </select>
-      </label>
+      @if (vista() === "negocio") {
+        <label>
+          <span class="mb-1 block text-xs font-medium text-ink-muted"
+            >Prioridad</span
+          >
+          <select
+            class="field"
+            [ngModel]="newPriority()"
+            (ngModelChange)="newPriority.set($event)"
+            name="prioridad">
+            @for (option of priorities; track option) {
+              <option [value]="option">{{ priorityLabel[option] }}</option>
+            }
+          </select>
+        </label>
+      } @else {
+        <!-- Lo personal siempre es alta, y urgente si tiene fecha: no se elige. -->
+        <p class="self-end pb-2 text-xs text-ink-muted">
+          Prioridad: {{ newDueDate() ? "urgente (tiene fecha)" : "alta" }}
+        </p>
+      }
       <label>
         <span class="mb-1 block text-xs font-medium text-ink-muted"
           >Para cuándo</span

@@ -96,6 +96,7 @@ import {
   type Ejecuciones
 } from '../ingesta/ejecuciones.js';
 import { avisosDeSitios, type SitiosAvisados } from '../nucleo/vigilancia.js';
+import { conPrioridadPersonal } from '../pendientes/prioridad.js';
 import { Cache } from '../nucleo/cache.js';
 import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
 import { licenciasAnthropic } from '../proveedores/anthropic.js';
@@ -284,7 +285,13 @@ export interface Datos {
   /** Lo aprendido de las correcciones a mano, por remitente. */
   aprendido: AlmacenJson<Aprendizajes>;
   /** Ligas "mis pendientes": token → persona y hasta cuando sirve. */
-  ligasEquipo: AlmacenJson<Record<string, { persona: string; vence: string }>>;
+  /**
+   * Ligas personales del equipo: token → persona y vencimiento. Con `tarea`,
+   * la liga solo enseña ese pendiente (la que va en el correo de asignacion).
+   */
+  ligasEquipo: AlmacenJson<
+    Record<string, { persona: string; vence: string; tarea?: string }>
+  >;
   /** Lo que el equipo hizo sobre sus pendientes, para avisar en el monitor. */
   avisos: AlmacenJson<Aviso[]>;
   /** Ultimo dia en que se pidio estatus, para no repetir. */
@@ -848,10 +855,15 @@ export function construirRutas(
           (['pendiente', 'en_progreso', 'bloqueado', 'hecho'] as const).find(
             (e) => e === t['status']
           ) ?? 'pendiente',
+        // Lo personal siempre es alta, y urgente si tiene fecha.
         priority:
-          (['baja', 'media', 'alta', 'urgente'] as const).find(
-            (p) => p === t['priority']
-          ) ?? 'media',
+          t['personal'] === true
+            ? texto(t['dueDate'])
+              ? 'urgente'
+              : 'alta'
+            : ((['baja', 'media', 'alta', 'urgente'] as const).find(
+                (p) => p === t['priority']
+              ) ?? 'media'),
         dueDate: texto(t['dueDate']),
         dueHasTime: t['dueHasTime'] === true ? true : undefined,
         accountId: 'mios',
@@ -1643,7 +1655,13 @@ export function construirRutas(
    * comenta y los marca, sin entrar al portal. El token se crea la primera
    * vez y no caduca; se puede renovar borrandolo de datos/ligas-equipo.json.
    */
-  const ligaDe = async (persona: Person): Promise<string> => {
+  /**
+   * La liga personal de alguien. Sin `tarea`, enseña todos sus pendientes y
+   * vence a las tres de la tarde del dia (la de pedir estatus). Con `tarea`,
+   * enseña solo ese pendiente y dura una semana: es la del correo de
+   * asignacion, que se abre cuando se abre.
+   */
+  const ligaDe = async (persona: Person, tarea?: string): Promise<string> => {
     const ahora = new Date();
     const token = randomBytes(18).toString('base64url');
     const vigentes = Object.fromEntries(
@@ -1653,7 +1671,13 @@ export function construirRutas(
     );
     await datos.ligasEquipo.escribir({
       ...vigentes,
-      [token]: { persona: persona.id, vence: proximasTres(ahora) }
+      [token]: tarea
+        ? {
+            persona: persona.id,
+            vence: new Date(ahora.getTime() + 7 * 86_400_000).toISOString(),
+            tarea
+          }
+        : { persona: persona.id, vence: proximasTres(ahora) }
     });
     return `${cfg().urlPortal}/mio/${token}`;
   };
@@ -1728,8 +1752,8 @@ export function construirRutas(
       (nota.comentarios.length > 0
         ? `<p>Comentarios:</p><ul>${nota.comentarios.map((c) => `<li>${escapar(c.text)}</li>`).join('')}</ul>`
         : '') +
-      `<p><a href="${await ligaDe(persona)}" style="display:inline-block;padding:10px 16px;background:#04202B;color:#fff;text-decoration:none;border-radius:6px">Ver mis pendientes, comentar o marcar como hecho</a></p>` +
-      `<p style="color:#666;font-size:12px">La liga es personal: con ella entras directo a tus pendientes sin código.</p>`;
+      `<p><a href="${await ligaDe(persona, id)}" style="display:inline-block;padding:10px 16px;background:#04202B;color:#fff;text-decoration:none;border-radius:6px">Ver el pendiente, cambiar su estado o comentar</a></p>` +
+      `<p style="color:#666;font-size:12px">La liga es personal y solo abre este pendiente; no hace falta usuario ni código. Sirve una semana.</p>`;
     try {
       await enviarPorEmailJs(config.acceso, persona.email, '', false, {
         titulo: `Pendiente asignado: ${t.title ?? id}`,
@@ -1835,7 +1859,9 @@ export function construirRutas(
       if (propios.some((t) => t.id === id)) {
         await datos.personales.escribir(
           propios.map((t) =>
-            t.id === id ? { ...t, ...limpios, updatedAt: ahora } : t
+            t.id === id
+              ? conPrioridadPersonal({ ...t, ...limpios, updatedAt: ahora })
+              : t
           )
         );
       } else {
@@ -2297,7 +2323,10 @@ export function construirRutas(
         tags: ['dictado', 'telegram'],
         updatedAt: ahora
       }));
-      await datos.personales.escribir([...nuevos, ...datos.personales.leer()]);
+      await datos.personales.escribir([
+        ...nuevos.map(conPrioridadPersonal),
+        ...datos.personales.leer()
+      ]);
       const lineas: string[] = [];
       for (const [i, p] of propuestas.entries()) {
         const t = nuevos[i] as TaskItem;
@@ -2358,14 +2387,18 @@ export function construirRutas(
   // Sin sesion: el token de la liga identifica a la persona. Solo ve y toca
   // lo que tiene asignado.
 
-  const personaDeLiga = async (token: string): Promise<Person> => {
+  const personaDeLiga = async (
+    token: string
+  ): Promise<Person & { soloTarea?: string }> => {
     const liga = datos.ligasEquipo.leer()[token];
     if (!liga) {
       throw new ErrorPuente('Esta liga no es válida.', 404);
     }
     if (Date.parse(liga.vence) < Date.now()) {
       throw new ErrorPuente(
-        'Esta liga venció (sirve hasta las 3 de la tarde del día en que se mandó). Pide una nueva a quien te asignó el pendiente.',
+        liga.tarea
+          ? 'Esta liga venció (sirve una semana). Pide una nueva a quien te asignó el pendiente.'
+          : 'Esta liga venció (sirve hasta las 3 de la tarde del día en que se mandó). Pide una nueva a quien te asignó el pendiente.',
         410
       );
     }
@@ -2373,16 +2406,19 @@ export function construirRutas(
     if (!persona) {
       throw new ErrorPuente('Esta liga ya no es válida.', 404);
     }
-    return persona;
+    return liga.tarea ? { ...persona, soloTarea: liga.tarea } : persona;
   };
 
-  const pendientesDe = async (persona: Person): Promise<TaskItem[]> => {
+  const pendientesDe = async (
+    persona: Person & { soloTarea?: string }
+  ): Promise<TaskItem[]> => {
     const correo = persona.email?.toLowerCase();
     return (await fuentes.pendientes()).filter(
       (t) =>
         t.assignee &&
         (t.assignee.id === persona.id ||
-          (correo && t.assignee.email?.toLowerCase() === correo))
+          (correo && t.assignee.email?.toLowerCase() === correo)) &&
+        (!persona.soloTarea || t.id === persona.soloTarea)
     );
   };
 
@@ -2427,6 +2463,8 @@ export function construirRutas(
     const persona = await personaDeLiga(segmentos[1] as string);
     return {
       persona: { id: persona.id, name: persona.name, role: persona.role },
+      /** "tarea": la liga del correo de asignacion; "todos": la de estatus. */
+      alcance: persona.soloTarea ? 'tarea' : 'todos',
       pendientes: await pendientesDe(persona)
     };
   });

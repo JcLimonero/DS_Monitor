@@ -5,7 +5,8 @@
       <div class="min-w-0">
         <h1 class="text-lg font-bold text-ink">
           @if (persona(); as p) {
-            Pendientes de {{ p.name }}
+            {{ alcance() === "tarea" ? "Pendiente de" : "Pendientes de" }}
+            {{ p.name }}
           } @else {
             Mis pendientes
           }
@@ -23,18 +24,30 @@
       <p class="mt-4 text-sm text-ink-muted">Cargando…</p>
     } @else {
       <p class="mt-3 text-sm text-ink-muted">
-        {{ abiertos().length }}
-        {{
-          abiertos().length === 1 ? "pendiente abierto" : "pendientes abiertos"
-        }}. Cambia el estado cuando avances o deja un comentario; a Carlos le
-        llega el aviso.
+        @if (alcance() === "tarea") {
+          Este pendiente te lo asignaron. Cambia el estado cuando avances o deja
+          un comentario; a Carlos le llega el aviso. Esta liga solo abre este
+          pendiente.
+        } @else {
+          {{ abiertos().length }}
+          {{
+            abiertos().length === 1
+              ? "pendiente abierto"
+              : "pendientes abiertos"
+          }}. Cambia el estado cuando avances o deja un comentario; a Carlos le
+          llega el aviso.
+        }
       </p>
 
       @if (abiertos().length === 0) {
         <div class="card card-pad mt-4 text-center">
           <pt-icon name="ok" class="mx-auto h-8 w-8 text-ok" />
           <p class="mt-2 text-sm font-medium text-ink">
-            Nada pendiente a tu nombre.
+            @if (alcance() === "tarea") {
+              Este pendiente ya está cerrado o ya no está a tu nombre.
+            } @else {
+              Nada pendiente a tu nombre.
+            }
           </p>
         </div>
       }

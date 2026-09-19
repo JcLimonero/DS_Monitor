@@ -50,6 +50,8 @@ export class MioComponent {
     undefined
   );
   readonly pendientes = signal<TaskItem[]>([]);
+  /** "tarea": la liga del correo de asignación (un solo pendiente); "todos": la de estatus. */
+  readonly alcance = signal<'tarea' | 'todos'>('todos');
   readonly error = signal<string | undefined>(undefined);
   readonly cargando = signal(true);
   readonly verHechos = signal(false);
@@ -84,11 +86,13 @@ export class MioComponent {
     this.http
       .get<{
         persona: { name: string; role?: string };
+        alcance?: 'tarea' | 'todos';
         pendientes: TaskItem[];
       }>(`${this.config.gatewayUrl}/mio/${this.token}/tasks`)
       .subscribe({
         next: (r) => {
           this.persona.set(r.persona);
+          this.alcance.set(r.alcance ?? 'todos');
           this.pendientes.set(r.pendientes);
           this.cargando.set(false);
         },

@@ -273,9 +273,12 @@ export class PendientesComponent {
     }
     const due = this.newDueDate();
     const hora = due ? this.newDueTime() : '';
+    const personal = this.vista() === 'personales';
     this.local.add({
       title: this.newTitle(),
-      priority: this.newPriority(),
+      // Lo personal siempre es alta, y urgente si tiene fecha (el puente lo
+      // vuelve a aplicar al guardar, por si viene de otro lado).
+      priority: personal ? (due ? 'urgente' : 'alta') : this.newPriority(),
       // El input de tipo date entrega "2026-03-12"; sin hora se ancla a
       // mediodia para que caiga en ese día sin importar la zona horaria.
       dueDate: due
