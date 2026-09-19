@@ -1,5 +1,4 @@
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import type { Persistencia } from '../datos/persistencia.js';
 import type { TipoIngesta } from './modelos.js';
 
 /**
@@ -7,13 +6,8 @@ import type { TipoIngesta } from './modelos.js';
  *
  * Con pull, un reinicio se cura solo en el siguiente ciclo. Con push no: si el
  * puente se reinicia y pierde lo recibido, el portal se queda en blanco hasta
- * que alguien vuelva a mandar, que puede ser en horas. Por eso esto se escribe
- * a disco.
- *
- * El archivo se escribe primero con otro nombre y luego se renombra. Un
- * renombrado es atomico en el mismo sistema de archivos, asi que un corte de
- * luz a media escritura deja el archivo anterior intacto en lugar de uno a
- * medias que no se puede leer.
+ * que alguien vuelva a mandar, que puede ser en horas. Por eso cada envio se
+ * persiste (coleccion `ingesta`, un documento por tipo y origen).
  */
 
 export interface Snapshot<T = unknown> {
@@ -52,48 +46,34 @@ export class AlmacenIngesta {
   private readonly snapshots = new Map<string, Snapshot>();
 
   constructor(
-    private readonly directorio: string | undefined,
+    private readonly persistencia: Persistencia | undefined,
     private readonly ahora: () => Date = () => new Date()
   ) {}
 
-  /** Lee del disco lo guardado en corridas anteriores. */
+  /** Lee lo guardado en corridas anteriores. */
   async cargar(): Promise<number> {
-    if (!this.directorio) {
+    if (!this.persistencia) {
       return 0;
     }
     try {
-      await mkdir(this.directorio, { recursive: true });
-      const archivos = await readdir(this.directorio);
       let cargados = 0;
-      for (const archivo of archivos.filter((nombre) =>
-        nombre.endsWith('.json')
-      )) {
-        try {
-          const contenido = await readFile(
-            join(this.directorio, archivo),
-            'utf8'
-          );
-          const snapshot = JSON.parse(contenido) as Snapshot;
-          if (
-            snapshot.tipo &&
-            snapshot.origen &&
-            Array.isArray(snapshot.elementos)
-          ) {
-            this.snapshots.set(
-              llaveDe(snapshot.tipo, snapshot.origen),
-              snapshot
-            );
-            cargados++;
-          }
-        } catch {
-          // Un archivo corrupto no debe impedir que arranque el puente ni que
-          // se lean los demas; se ignora y el siguiente envio lo reescribe.
-          console.warn(`[puente] no se pudo leer ${archivo}, se ignora`);
+      for (const valor of (
+        await this.persistencia.leerColeccion('ingesta')
+      ).values()) {
+        const snapshot = valor as Snapshot;
+        if (
+          snapshot &&
+          snapshot.tipo &&
+          snapshot.origen &&
+          Array.isArray(snapshot.elementos)
+        ) {
+          this.snapshots.set(llaveDe(snapshot.tipo, snapshot.origen), snapshot);
+          cargados++;
         }
       }
       return cargados;
     } catch (error) {
-      console.warn('[puente] no se pudo leer el directorio de ingesta', error);
+      console.warn('[puente] no se pudo leer lo recibido', error);
       return 0;
     }
   }
@@ -180,19 +160,15 @@ export class AlmacenIngesta {
   }
 
   private async escribir(llave: string, snapshot: Snapshot): Promise<void> {
-    if (!this.directorio) {
+    if (!this.persistencia) {
       return;
     }
-    const destino = join(this.directorio, `${llave}.json`);
-    const temporal = `${destino}.tmp`;
     try {
-      await mkdir(this.directorio, { recursive: true });
-      await writeFile(temporal, JSON.stringify(snapshot), 'utf8');
-      await rename(temporal, destino);
+      await this.persistencia.guardar('ingesta', llave, snapshot);
     } catch (error) {
       // Que no se pueda escribir no debe tirar el envio: el dato ya esta en
       // memoria y el portal lo va a ver. Solo se pierde si el puente reinicia.
-      console.error(`[puente] no se pudo guardar ${llave} en disco`, error);
+      console.error(`[puente] no se pudo guardar ${llave}`, error);
     }
   }
 }

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { AlmacenJson } from '../datos/almacen-json.js';
+import { PersistenciaArchivos } from '../datos/persistencia.js';
 import { Acceso, type Sesion } from './acceso.js';
 
 const CONFIG = {
@@ -18,7 +19,11 @@ async function nuevo() {
   const dir = await mkdtemp(join(tmpdir(), 'acceso-'));
   const enviados: { correo: string; codigo: string }[] = [];
   const acceso = new Acceso(
-    new AlmacenJson<Sesion[]>(join(dir, 'sesiones.json'), []),
+    new AlmacenJson<Sesion[]>(
+      new PersistenciaArchivos({ datos: dir }),
+      'sesiones',
+      []
+    ),
     async (_config, correo, codigo) => {
       enviados.push({ correo, codigo });
     }

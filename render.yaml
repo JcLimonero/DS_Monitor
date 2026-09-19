@@ -7,9 +7,19 @@
 # web service con su disco. Después, en el dashboard, llenar las variables
 # marcadas sync: false (credenciales) y las de .env.example que hagan falta.
 #
-# El disco importa: ahí quedan las credenciales capturadas desde Ajustes, los
-# dominios, el equipo, las sesiones y lo recibido por ingesta. Sin disco todo
-# eso se pierde en cada deploy.
+# Los datos viven en la base de Postgres (ds-monitor-db): credenciales
+# capturadas desde Ajustes, equipo, pendientes, trazabilidad, ejecuciones y lo
+# recibido por ingesta. El disco se conserva como respaldo de la época en que
+# todo eran archivos JSON: la primera vez que el puente arranca con la base
+# vacía copia lo que haya ahí.
+databases:
+  - name: ds-monitor-db
+    plan: basic_256mb
+    region: oregon
+    databaseName: ds_monitor
+    user: ds_monitor
+    postgresMajorVersion: "16"
+
 services:
   - type: web
     name: ds-monitor-puente
@@ -33,6 +43,10 @@ services:
         value: https://ds-monitor-nine.vercel.app,https://portal.dealersolutions.com.mx
       - key: PUENTE_URL_PUBLICA
         value: https://ds-monitor-nine.vercel.app/api/portal
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ds-monitor-db
+          property: connectionString
       - key: DATOS_DIRECTORIO
         value: /var/data
       - key: INGESTA_DIRECTORIO

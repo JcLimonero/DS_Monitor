@@ -1,28 +1,36 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import type { Persistencia } from './persistencia.js';
 
 /**
- * Un archivo JSON como almacen de una sola cosa: la lista del equipo, la de
- * dominios, las sesiones. Se lee al arrancar y se escribe completo en cada
- * cambio. Para listas de decenas de elementos es lo correcto: una base de
- * datos traeria una dependencia y una migracion para guardar diez renglones.
+ * Una lista o un mapa chico (equipo, dominios, sesiones, anotaciones...) que
+ * vive en memoria y se persiste completo cada vez que cambia. Es un
+ * documento de la coleccion `datos`, con su clave (`equipo`, `dominios`...).
  */
 export class AlmacenJson<T> {
   private valor: T;
 
   constructor(
-    private readonly ruta: string,
-    private readonly porOmision: T
+    private readonly persistencia: Persistencia,
+    private readonly clave: string,
+    private readonly porOmision: T,
+    private readonly coleccion = 'datos'
   ) {
     this.valor = porOmision;
   }
 
+  /** Lee lo guardado; si no hay nada, se queda con lo por omision. */
   async cargar(): Promise<T> {
-    try {
-      this.valor = JSON.parse(await readFile(this.ruta, 'utf8')) as T;
-    } catch {
-      this.valor = this.porOmision;
-    }
+    const todos = await this.persistencia.leerColeccion(this.coleccion);
+    this.valor = todos.has(this.clave)
+      ? (todos.get(this.clave) as T)
+      : this.porOmision;
+    return this.valor;
+  }
+
+  /** Igual que cargar, pero con la coleccion ya leida (para no leerla 20 veces). */
+  cargarDe(todos: Map<string, unknown>): T {
+    this.valor = todos.has(this.clave)
+      ? (todos.get(this.clave) as T)
+      : this.porOmision;
     return this.valor;
   }
 
@@ -32,8 +40,7 @@ export class AlmacenJson<T> {
 
   async escribir(valor: T): Promise<T> {
     this.valor = valor;
-    await mkdir(dirname(this.ruta), { recursive: true, mode: 0o700 });
-    await writeFile(this.ruta, JSON.stringify(valor, null, 2), { mode: 0o600 });
+    await this.persistencia.guardar(this.coleccion, this.clave, valor);
     return valor;
   }
 }

@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
+import { PersistenciaArchivos } from '../datos/persistencia.js';
 import { AlmacenIngesta, mezclarPorId, origenValido } from './almacen.js';
 
 describe('almacén de lo recibido', () => {
@@ -17,7 +18,9 @@ describe('almacén de lo recibido', () => {
   });
 
   it('guarda y devuelve un envío', async () => {
-    const almacen = new AlmacenIngesta(directorio);
+    const almacen = new AlmacenIngesta(
+      new PersistenciaArchivos({ ingesta: directorio })
+    );
     const resultado = await almacen.guardar(
       'pendientes',
       'ops',
@@ -30,7 +33,9 @@ describe('almacén de lo recibido', () => {
   });
 
   it('sobrevive a un reinicio', async () => {
-    const primero = new AlmacenIngesta(directorio);
+    const primero = new AlmacenIngesta(
+      new PersistenciaArchivos({ ingesta: directorio })
+    );
     await primero.guardar(
       'pendientes',
       'ops',
@@ -41,14 +46,18 @@ describe('almacén de lo recibido', () => {
 
     // Con push, perder lo recibido en un reinicio deja el portal en blanco
     // hasta el siguiente envío, que puede tardar horas.
-    const segundo = new AlmacenIngesta(directorio);
+    const segundo = new AlmacenIngesta(
+      new PersistenciaArchivos({ ingesta: directorio })
+    );
     const cargados = await segundo.cargar();
     assert.equal(cargados, 1);
     assert.equal(segundo.leer('pendientes', 'ops')?.elementos.length, 1);
   });
 
   it('no deja que un envío viejo pise a uno nuevo', async () => {
-    const almacen = new AlmacenIngesta(directorio);
+    const almacen = new AlmacenIngesta(
+      new PersistenciaArchivos({ ingesta: directorio })
+    );
     await almacen.guardar(
       'pendientes',
       'ops',
@@ -73,7 +82,9 @@ describe('almacén de lo recibido', () => {
   });
 
   it('en modo agregar mezcla en vez de borrar', async () => {
-    const almacen = new AlmacenIngesta(directorio);
+    const almacen = new AlmacenIngesta(
+      new PersistenciaArchivos({ ingesta: directorio })
+    );
     await almacen.guardar(
       'despliegues',
       'ci',
@@ -116,7 +127,10 @@ describe('almacén de lo recibido', () => {
 
   it('reporta la frescura y qué venció', async () => {
     let ahora = Date.parse('2026-09-14T12:00:00Z');
-    const almacen = new AlmacenIngesta(directorio, () => new Date(ahora));
+    const almacen = new AlmacenIngesta(
+      new PersistenciaArchivos({ ingesta: directorio }),
+      () => new Date(ahora)
+    );
     await almacen.guardar(
       'pendientes',
       'ops',

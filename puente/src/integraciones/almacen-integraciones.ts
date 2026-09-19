@@ -1,11 +1,10 @@
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { leerConfiguracion, type Configuracion } from '../config/entorno.js';
+import type { Persistencia } from '../datos/persistencia.js';
 
 /**
  * Variables de integraciones capturadas desde Ajustes.
  *
- * Un archivo por integracion (`datos/integraciones/github.json`) con las
+ * Un documento por integracion (coleccion `integraciones`) con las
  * variables tal cual irian en el `.env`. Al leer la configuracion se ponen
  * encima del entorno: asi una credencial capturada desde el portal y una del
  * panel del servidor se comportan igual, y `.env.example` sigue siendo la
@@ -20,25 +19,13 @@ interface Guardado {
 export class AlmacenIntegraciones {
   private readonly guardadas = new Map<string, Guardado>();
 
-  constructor(private readonly directorio: string) {}
+  constructor(private readonly persistencia: Persistencia) {}
 
   async cargar(): Promise<number> {
-    let nombres: string[];
-    try {
-      nombres = await readdir(this.directorio);
-    } catch {
-      return 0;
-    }
-    for (const nombre of nombres) {
-      if (!nombre.endsWith('.json')) {
-        continue;
-      }
-      try {
-        const crudo = await readFile(join(this.directorio, nombre), 'utf8');
-        this.guardadas.set(nombre.slice(0, -5), JSON.parse(crudo) as Guardado);
-      } catch (error) {
-        console.warn(`[puente] no se pudo leer ${nombre}:`, error);
-      }
+    for (const [id, valor] of await this.persistencia.leerColeccion(
+      'integraciones'
+    )) {
+      this.guardadas.set(id, valor as Guardado);
     }
     return this.guardadas.size;
   }
@@ -77,20 +64,12 @@ export class AlmacenIntegraciones {
         variables[nombre] = valor.trim();
       }
     }
-    this.guardadas.set(id, {
+    const guardado: Guardado = {
       variables,
       actualizadoEn: new Date().toISOString()
-    });
-    await mkdir(this.directorio, { recursive: true, mode: 0o700 });
-    await writeFile(
-      join(this.directorio, `${id}.json`),
-      JSON.stringify(
-        { variables, actualizadoEn: new Date().toISOString() },
-        null,
-        2
-      ),
-      { mode: 0o600 }
-    );
+    };
+    this.guardadas.set(id, guardado);
+    await this.persistencia.guardar('integraciones', id, guardado);
     return variables;
   }
 }

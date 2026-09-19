@@ -9,6 +9,15 @@ import {
   AlmacenIntegraciones,
   Configurador
 } from './integraciones/almacen-integraciones.js';
+import {
+  COLECCIONES,
+  PersistenciaArchivos,
+  type Persistencia
+} from './datos/persistencia.js';
+import {
+  PersistenciaPostgres,
+  copiarPersistencia
+} from './datos/persistencia-postgres.js';
 import { Cache } from './nucleo/cache.js';
 import { programar } from './nucleo/programador.js';
 import type { Programable } from './servidor/rutas-ia.js';
@@ -72,26 +81,61 @@ config.directorioIntegraciones = directorioEscribible(
 );
 config.directorioDatos = directorioEscribible(config.directorioDatos);
 
-// Lo recibido se lee del disco antes de escuchar: si no, el portal vería el
-// buzón vacío entre el reinicio y el siguiente envío, que puede ser horas.
-const almacen = new AlmacenIngesta(config.directorioIngesta);
+// Donde se guarda todo. Con DATABASE_URL (la base de Render) es Postgres;
+// sin ella, archivos JSON en los directorios de siempre. La primera vez que
+// arranca con base y la encuentra vacia, copia lo que haya en los archivos
+// para no empezar de cero; los archivos se quedan como estaban.
+const archivos = new PersistenciaArchivos({
+  datos: config.directorioDatos,
+  ingesta: config.directorioIngesta ?? 'datos/ingesta',
+  correo: config.directorioCorreo,
+  integraciones: config.directorioIntegraciones
+});
+let persistencia: Persistencia = archivos;
+const urlBase = process.env['DATABASE_URL'];
+if (urlBase) {
+  const postgres = new PersistenciaPostgres(urlBase);
+  try {
+    await postgres.preparar();
+    if ((await postgres.total()) === 0) {
+      const copiados = await copiarPersistencia(
+        archivos,
+        postgres,
+        COLECCIONES
+      );
+      if (copiados > 0) {
+        console.log(
+          `[puente] base vacía: se copiaron ${copiados} documentos desde los archivos`
+        );
+      }
+    }
+    persistencia = postgres;
+  } catch (error) {
+    console.error(
+      `[puente] no se pudo usar la base de datos (${error instanceof Error ? error.message : error}); se sigue con archivos`
+    );
+  }
+}
+console.log(`[puente] datos en ${persistencia.descripcion}`);
+
+// Lo recibido se lee antes de escuchar: si no, el portal vería el buzón
+// vacío entre el reinicio y el siguiente envío, que puede ser horas.
+const almacen = new AlmacenIngesta(persistencia);
 const recuperados = await almacen.cargar();
 
-// Las credenciales de buzones capturadas desde Ajustes tambien viven en disco.
-const almacenCorreo = new AlmacenCorreo(config.directorioCorreo);
+// Las credenciales de buzones capturadas desde Ajustes.
+const almacenCorreo = new AlmacenCorreo(persistencia);
 const buzonesGuardados = await almacenCorreo.cargar();
 
 // Y las variables de integraciones (GitHub, Claude, Odoo...) capturadas desde
 // Ajustes, que se ponen encima del entorno.
-const almacenIntegraciones = new AlmacenIntegraciones(
-  config.directorioIntegraciones
-);
+const almacenIntegraciones = new AlmacenIntegraciones(persistencia);
 const integracionesGuardadas = await almacenIntegraciones.cargar();
 const configurador = new Configurador(almacenIntegraciones);
 
-// Equipo, dominios y sesiones: listas chicas en JSON, una por archivo.
-const datos = abrirDatos(config.directorioDatos);
-await cargarDatos(datos);
+// Equipo, dominios, anotaciones, ejecuciones...: documentos chicos.
+const datos = abrirDatos(persistencia);
+await cargarDatos(datos, persistencia);
 
 // Lo que corre solo: releer buzones, el correo del lunes, el resumen del dia.
 const programables: Programable[] = [];
@@ -101,6 +145,7 @@ const servidor = createServer(
     construirRutas(
       config,
       new Cache(),
+      persistencia,
       almacen,
       almacenCorreo,
       { almacen: almacenIntegraciones, configurador },
@@ -133,7 +178,7 @@ servidor.listen(config.puerto, () => {
     console.log(
       `[puente] ${config.clientesIngesta.length} emisores autorizados: ` +
         config.clientesIngesta.map((cliente) => cliente.nombre).join(', ') +
-        ` · ${recuperados} envíos recuperados del disco`
+        ` · ${recuperados} envíos recuperados`
     );
   }
   console.log(
@@ -172,6 +217,8 @@ servidor.listen(config.puerto, () => {
 for (const senal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(senal, () => {
     console.log(`[puente] ${senal}, cerrando`);
-    servidor.close(() => process.exit(0));
+    servidor.close(() => {
+      void persistencia.cerrar().finally(() => process.exit(0));
+    });
   });
 }

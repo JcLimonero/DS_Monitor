@@ -1,5 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import type { Persistencia } from '../datos/persistencia.js';
 import type {
   ConfiguracionCorreo,
   ConfiguracionGoogle,
@@ -13,8 +12,7 @@ import type {
  * Pero conectar un buzon es un tramite con idas y vueltas: probar una
  * contraseña, corregir el host, pasar por el consentimiento de Microsoft y
  * guardar el refresh token que regresa. Eso se hace desde el portal, y lo que
- * resulta se guarda aqui, un archivo por buzon, con permisos solo para el
- * usuario del proceso.
+ * resulta se guarda aqui, un documento por buzon (coleccion `correo`).
  *
  * Lo guardado se pone encima de lo del entorno: si un buzon existe en los dos
  * lados, gana lo capturado, que es lo mas reciente.
@@ -37,29 +35,12 @@ export interface CredencialesGuardadas {
 export class AlmacenCorreo {
   private readonly guardadas = new Map<string, CredencialesGuardadas>();
 
-  constructor(private readonly directorio: string) {}
+  constructor(private readonly persistencia: Persistencia) {}
 
-  /** Lee del disco lo guardado en corridas anteriores. */
+  /** Lee lo guardado en corridas anteriores. */
   async cargar(): Promise<number> {
-    let nombres: string[];
-    try {
-      nombres = await readdir(this.directorio);
-    } catch {
-      return 0;
-    }
-    for (const nombre of nombres) {
-      if (!nombre.endsWith('.json')) {
-        continue;
-      }
-      try {
-        const crudo = await readFile(join(this.directorio, nombre), 'utf8');
-        this.guardadas.set(
-          nombre.slice(0, -5),
-          JSON.parse(crudo) as CredencialesGuardadas
-        );
-      } catch (error) {
-        console.warn(`[puente] no se pudo leer ${nombre}:`, error);
-      }
+    for (const [id, valor] of await this.persistencia.leerColeccion('correo')) {
+      this.guardadas.set(id, valor as CredencialesGuardadas);
     }
     return this.guardadas.size;
   }
@@ -74,12 +55,7 @@ export class AlmacenCorreo {
       actualizadoEn: new Date().toISOString()
     };
     this.guardadas.set(id, nuevo);
-    await mkdir(this.directorio, { recursive: true, mode: 0o700 });
-    await writeFile(
-      join(this.directorio, `${id}.json`),
-      JSON.stringify(nuevo, null, 2),
-      { mode: 0o600 }
-    );
+    await this.persistencia.guardar('correo', id, nuevo);
   }
 
   obtener(id: string): CredencialesGuardadas | undefined {
@@ -114,12 +90,7 @@ export class AlmacenCorreo {
       actualizadoEn: new Date().toISOString()
     };
     this.guardadas.set(id, nuevo);
-    await mkdir(this.directorio, { recursive: true, mode: 0o700 });
-    await writeFile(
-      join(this.directorio, `${id}.json`),
-      JSON.stringify(nuevo, null, 2),
-      { mode: 0o600 }
-    );
+    await this.persistencia.guardar('correo', id, nuevo);
     return nuevo;
   }
 

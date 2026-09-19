@@ -9,6 +9,10 @@ import { Acceso, type Sesion } from '../acceso/acceso.js';
 import { AlmacenCorreo } from '../correo/almacen-correo.js';
 import { AlmacenJson } from '../datos/almacen-json.js';
 import {
+  PersistenciaArchivos,
+  type Persistencia
+} from '../datos/persistencia.js';
+import {
   dominiosComoLicencias,
   validarDominio,
   type Dominio
@@ -180,7 +184,9 @@ export interface Estado {
 /** Qué conexiones están encendidas. Lo consume `/salud`. */
 export function estadoDeConexiones(
   config: Configuracion,
-  almacenCorreo = new AlmacenCorreo(config.directorioCorreo),
+  almacenCorreo = new AlmacenCorreo(
+    new PersistenciaArchivos({ correo: config.directorioCorreo })
+  ),
   hayEmisoresOps: () => boolean = () => false
 ): Estado[] {
   const filas: [string, boolean, string[]][] = [
@@ -318,96 +324,77 @@ export interface Aviso {
   leido: boolean;
 }
 
-/** Lee todos los almacenes del disco; se llama una vez al arrancar. */
-export async function cargarDatos(datos: Datos): Promise<void> {
-  await Promise.all(
-    Object.values(datos).map((almacen) =>
-      (almacen as AlmacenJson<unknown>).cargar()
-    )
-  );
+/** Lee todos los almacenes (una sola lectura de la coleccion); al arrancar. */
+export async function cargarDatos(
+  datos: Datos,
+  persistencia: Persistencia
+): Promise<void> {
+  const todos = await persistencia.leerColeccion('datos');
+  for (const almacen of Object.values(datos)) {
+    (almacen as AlmacenJson<unknown>).cargarDe(todos);
+  }
 }
 
-export function abrirDatos(directorio: string): Datos {
+export function abrirDatos(persistencia: Persistencia): Datos {
   return {
-    equipo: new AlmacenJson<Person[]>(join(directorio, 'equipo.json'), []),
-    dominios: new AlmacenJson<Dominio[]>(join(directorio, 'dominios.json'), []),
-    sesiones: new AlmacenJson<Sesion[]>(join(directorio, 'sesiones.json'), []),
-    personales: new AlmacenJson<TaskItem[]>(
-      join(directorio, 'personales.json'),
-      []
-    ),
-    emisores: new AlmacenJson<ClienteIngesta[]>(
-      join(directorio, 'emisores.json'),
-      []
-    ),
-    ejecuciones: new AlmacenJson<Ejecuciones>(
-      join(directorio, 'ejecuciones.json'),
-      {}
-    ),
-    anotaciones: new AlmacenJson<Anotaciones>(
-      join(directorio, 'anotaciones.json'),
-      {}
-    ),
+    equipo: new AlmacenJson<Person[]>(persistencia, 'equipo', []),
+    dominios: new AlmacenJson<Dominio[]>(persistencia, 'dominios', []),
+    sesiones: new AlmacenJson<Sesion[]>(persistencia, 'sesiones', []),
+    personales: new AlmacenJson<TaskItem[]>(persistencia, 'personales', []),
+    emisores: new AlmacenJson<ClienteIngesta[]>(persistencia, 'emisores', []),
+    ejecuciones: new AlmacenJson<Ejecuciones>(persistencia, 'ejecuciones', {}),
+    anotaciones: new AlmacenJson<Anotaciones>(persistencia, 'anotaciones', {}),
     registroCorreo: new AlmacenJson<Registro>(
-      join(directorio, 'pendientes-correo.json'),
+      persistencia,
+      'pendientes-correo',
       {}
     ),
     iaCorreo: new AlmacenJson<Record<string, Clasificacion>>(
-      join(directorio, 'ia-correo.json'),
+      persistencia,
+      'ia-correo',
       {}
     ),
-    iaResumen: new AlmacenJson(join(directorio, 'ia-resumen.json'), null),
-    iaAlertas: new AlmacenJson(join(directorio, 'ia-alertas.json'), {}),
-    costosHistorial: new AlmacenJson(
-      join(directorio, 'licencias-historial.json'),
-      {}
-    ),
-    iaAcuerdos: new AlmacenJson(join(directorio, 'ia-acuerdos.json'), {}),
-    iaCrm: new AlmacenJson(join(directorio, 'ia-crm.json'), {}),
-    iaDiagnosticos: new AlmacenJson(
-      join(directorio, 'ia-diagnosticos.json'),
-      {}
-    ),
-    iaRepos: new AlmacenJson(join(directorio, 'ia-repos.json'), null),
-    iaSemana: new AlmacenJson(join(directorio, 'ia-semana.json'), {}),
-    iaPendientes: new AlmacenJson(join(directorio, 'ia-pendientes.json'), {}),
-    pushClaves: new AlmacenJson(join(directorio, 'push-claves.json'), null),
-    pushSuscripciones: new AlmacenJson(
-      join(directorio, 'push-suscripciones.json'),
-      []
-    ),
-    pushCola: new AlmacenJson(join(directorio, 'push-cola.json'), {}),
-    pushAvisados: new AlmacenJson(join(directorio, 'push-avisados.json'), {}),
+    iaResumen: new AlmacenJson(persistencia, 'ia-resumen', null),
+    iaAlertas: new AlmacenJson(persistencia, 'ia-alertas', {}),
+    costosHistorial: new AlmacenJson(persistencia, 'licencias-historial', {}),
+    iaAcuerdos: new AlmacenJson(persistencia, 'ia-acuerdos', {}),
+    iaCrm: new AlmacenJson(persistencia, 'ia-crm', {}),
+    iaDiagnosticos: new AlmacenJson(persistencia, 'ia-diagnosticos', {}),
+    iaRepos: new AlmacenJson(persistencia, 'ia-repos', null),
+    iaSemana: new AlmacenJson(persistencia, 'ia-semana', {}),
+    iaPendientes: new AlmacenJson(persistencia, 'ia-pendientes', {}),
+    pushClaves: new AlmacenJson(persistencia, 'push-claves', null),
+    pushSuscripciones: new AlmacenJson(persistencia, 'push-suscripciones', []),
+    pushCola: new AlmacenJson(persistencia, 'push-cola', {}),
+    pushAvisados: new AlmacenJson(persistencia, 'push-avisados', {}),
     ejecucionesAvisadas: new AlmacenJson<AvisosEjecuciones>(
-      join(directorio, 'ejecuciones-avisadas.json'),
+      persistencia,
+      'ejecuciones-avisadas',
       {}
     ),
     sitiosAvisados: new AlmacenJson<SitiosAvisados>(
-      join(directorio, 'sitios-avisados.json'),
+      persistencia,
+      'sitios-avisados',
       {}
     ),
     iaBitacora: new AlmacenJson<EntradaBitacora[]>(
-      join(directorio, 'ia-bitacora.json'),
+      persistencia,
+      'ia-bitacora',
       []
     ),
-    aprendido: new AlmacenJson<Aprendizajes>(
-      join(directorio, 'aprendido.json'),
-      {}
-    ),
-    iaUsos: new AlmacenJson<UsosIa>(
-      join(directorio, 'ia-usos.json'),
-      USOS_POR_OMISION
-    ),
-    ligasEquipo: new AlmacenJson(join(directorio, 'ligas-equipo.json'), {}),
-    avisos: new AlmacenJson(join(directorio, 'avisos.json'), []),
-    estatusPedido: new AlmacenJson(join(directorio, 'estatus-pedido.json'), {}),
+    aprendido: new AlmacenJson<Aprendizajes>(persistencia, 'aprendido', {}),
+    iaUsos: new AlmacenJson<UsosIa>(persistencia, 'ia-usos', USOS_POR_OMISION),
+    ligasEquipo: new AlmacenJson(persistencia, 'ligas-equipo', {}),
+    avisos: new AlmacenJson(persistencia, 'avisos', []),
+    estatusPedido: new AlmacenJson(persistencia, 'estatus-pedido', {}),
     // De inicio martes y jueves a las 9; se cambia desde Equipo → Configuración.
-    estatusConfig: new AlmacenJson(join(directorio, 'estatus-config.json'), {
+    estatusConfig: new AlmacenJson(persistencia, 'estatus-config', {
       dias: [2, 4],
       hora: 9
     }),
     firefliesProcesadas: new AlmacenJson(
-      join(directorio, 'fireflies-procesadas.json'),
+      persistencia,
+      'fireflies-procesadas',
       {}
     )
   };
@@ -553,13 +540,19 @@ const PENDIENTES_DE_CONSTRUIR: [string, string][] = [];
 export function construirRutas(
   configInicial: Configuracion,
   cache = new Cache(),
-  almacen = new AlmacenIngesta(configInicial.directorioIngesta),
-  almacenCorreo = new AlmacenCorreo(configInicial.directorioCorreo),
+  persistencia: Persistencia = new PersistenciaArchivos({
+    datos: configInicial.directorioDatos,
+    ingesta: configInicial.directorioIngesta ?? 'datos/ingesta',
+    correo: configInicial.directorioCorreo,
+    integraciones: configInicial.directorioIntegraciones
+  }),
+  almacen = new AlmacenIngesta(persistencia),
+  almacenCorreo = new AlmacenCorreo(persistencia),
   integraciones?: {
     almacen: AlmacenIntegraciones;
     configurador: Configurador;
   },
-  datos = abrirDatos(configInicial.directorioDatos),
+  datos = abrirDatos(persistencia),
   /** Donde se apuntan las tareas que corren solas (index.ts las programa). */
   programables: Programable[] = []
 ): Router {
