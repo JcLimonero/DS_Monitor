@@ -279,11 +279,11 @@ export const INTEGRACIONES: Integracion[] = [
     campos: [
       {
         variable: 'PROMETHEUS_URL',
-        etiqueta: 'URL de Prometheus',
-        tipo: 'texto',
+        etiqueta: 'Servidores (uno por línea: nombre|url)',
+        tipo: 'largo',
         obligatoria: true,
         ayuda:
-          'La raíz, por ejemplo https://monitor.midominio.com:9090 (sin /api). En cada VPS va node_exporter y cAdvisor; la guía está en infra/vps-monitoreo/README.md.'
+          'Un Prometheus por VPS (el kit central en cada uno) o uno que vea a varios. Por ejemplo: nexus-1|http://74.208.151.19:9090. Sin /api. Todos con el mismo usuario y contraseña. Guía: infra/vps-monitoreo/README.md.'
       },
       {
         variable: 'PROMETHEUS_USUARIO',
@@ -311,8 +311,8 @@ export const INTEGRACIONES: Integracion[] = [
       }
     ],
     probar: async (config) => {
-      const { estadoVps } = await import('../proveedores/prometheus.js');
-      const lista = await estadoVps(
+      const { estadoServidores } = await import('../proveedores/prometheus.js');
+      const lista = await estadoServidores(
         exigir(config.prometheus, 'la URL de Prometheus')
       );
       const arriba = lista.filter((v) => v.online).length;

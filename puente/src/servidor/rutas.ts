@@ -151,7 +151,7 @@ import {
   destinosMonitoreados,
   type HistorialMonitoreo
 } from '../proveedores/monitoreo.js';
-import { estadoVps } from '../proveedores/prometheus.js';
+import { estadoServidores } from '../proveedores/prometheus.js';
 import {
   desplieguesVercel,
   estadoPlataformaVercel,
@@ -1034,7 +1034,7 @@ export function construirRutas(
 
   const vps = () =>
     cache.obtener('vps:estado', ttl.vps, () =>
-      estadoVps(exigir(cfg().prometheus, 'prometheus'))
+      estadoServidores(exigir(cfg().prometheus, 'prometheus'))
     );
 
   router.get('/vps/estado', () => vps());

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { fuentesPrometheus } from '../config/entorno.js';
 import { saludDe } from './prometheus.js';
 
 describe('salud de un VPS', () => {
@@ -19,5 +20,26 @@ describe('salud de un VPS', () => {
     const c = saludDe({ online: true, diskPct: 96, memPct: 95 });
     assert.equal(c.health, 'critico');
     assert.match(c.reason ?? '', /disco al 96 %, memoria al 95 %/);
+  });
+});
+
+describe('lista de servidores Prometheus', () => {
+  const comun = { usuario: 'u', etiquetaNombre: 'nombre', accountId: 'vps' };
+
+  it('acepta una URL sola o varias líneas nombre|url', () => {
+    assert.deepEqual(
+      fuentesPrometheus('http://a:9090/', comun).map((f) => [f.nombre, f.url]),
+      [[undefined, 'http://a:9090']]
+    );
+    assert.deepEqual(
+      fuentesPrometheus(
+        'Nexus 1|http://74.208.151.19:9090\n# comentario\nOperativAI|https://mon.op.ai\nbasura',
+        comun
+      ).map((f) => [f.nombre, f.url]),
+      [
+        ['Nexus 1', 'http://74.208.151.19:9090'],
+        ['OperativAI', 'https://mon.op.ai']
+      ]
+    );
   });
 });

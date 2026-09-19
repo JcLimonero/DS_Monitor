@@ -187,6 +187,11 @@ export interface ConfiguracionFireflies {
 export interface ConfiguracionPrometheus {
   /** Raiz, por ejemplo https://vps.midominio.com:9090 (sin /api). */
   url: string;
+  /**
+   * Nombre de esta instancia de Prometheus (lo que va antes de `|` en la
+   * lista). Se usa como nombre del servidor cuando el VPS no trae etiqueta.
+   */
+  nombre?: string;
   /** Basic auth de Prometheus (web.config.yml), si se activo. */
   usuario?: string;
   contrasena?: string;
@@ -195,6 +200,39 @@ export interface ConfiguracionPrometheus {
   /** Etiqueta con el nombre legible del servidor; por omision `nombre`. */
   etiquetaNombre: string;
   accountId: string;
+}
+
+/**
+ * Las instancias de Prometheus que se leen: una por VPS (cada uno con su
+ * Prometheus) o una central que ve a varios. Comparten usuario, contraseña
+ * y token. `PROMETHEUS_URL` admite varias lineas `nombre|url` (o solo url).
+ */
+export interface ConfiguracionServidores {
+  fuentes: ConfiguracionPrometheus[];
+}
+
+export function fuentesPrometheus(
+  texto: string,
+  comun: Pick<
+    ConfiguracionPrometheus,
+    'usuario' | 'contrasena' | 'token' | 'etiquetaNombre' | 'accountId'
+  >
+): ConfiguracionPrometheus[] {
+  return texto
+    .split(/[\n;]+/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'))
+    .map((linea) => {
+      const partes = linea.split('|').map((x) => x.trim());
+      const url = (partes.length > 1 ? partes[1] : partes[0]) ?? '';
+      const nombre = partes.length > 1 ? partes[0] : undefined;
+      return {
+        ...comun,
+        url: url.replace(/\/+$/, ''),
+        nombre: nombre || undefined
+      };
+    })
+    .filter((f) => /^https?:\/\//.test(f.url));
 }
 
 export interface ConfiguracionTelegram {
@@ -256,7 +294,7 @@ export interface Configuracion {
   microsoftApp?: Omit<ConfiguracionMicrosoft, 'refreshToken' | 'conectadaComo'>;
   ia?: ConfiguracionIa;
   fireflies?: ConfiguracionFireflies;
-  prometheus?: ConfiguracionPrometheus;
+  prometheus?: ConfiguracionServidores;
   telegram?: ConfiguracionTelegram;
   /** La aplicacion OAuth de Google que usan todos los buzones de Gmail. */
   googleApp?: Omit<ConfiguracionGoogle, 'refreshToken' | 'conectadaComo'>;
@@ -581,16 +619,16 @@ function leer(): Configuracion {
           maximo: numeroCon('OPENROUTER_MAXIMO', 40)
         }
       : undefined,
-    prometheus: texto('PROMETHEUS_URL')
-      ? {
-          url: (texto('PROMETHEUS_URL') as string).replace(/\/+$/, ''),
-          usuario: texto('PROMETHEUS_USUARIO'),
-          contrasena: texto('PROMETHEUS_CONTRASENA'),
-          token: texto('PROMETHEUS_TOKEN'),
-          etiquetaNombre: texto('PROMETHEUS_ETIQUETA_NOMBRE') ?? 'nombre',
-          accountId: 'vps'
-        }
-      : undefined,
+    prometheus: (() => {
+      const fuentes = fuentesPrometheus(texto('PROMETHEUS_URL') ?? '', {
+        usuario: texto('PROMETHEUS_USUARIO'),
+        contrasena: texto('PROMETHEUS_CONTRASENA'),
+        token: texto('PROMETHEUS_TOKEN'),
+        etiquetaNombre: texto('PROMETHEUS_ETIQUETA_NOMBRE') ?? 'nombre',
+        accountId: 'vps'
+      });
+      return fuentes.length > 0 ? { fuentes } : undefined;
+    })(),
     fireflies: texto('FIREFLIES_API_KEY')
       ? { apiKey: texto('FIREFLIES_API_KEY') as string }
       : undefined,

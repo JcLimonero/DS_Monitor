@@ -1,4 +1,7 @@
-import type { ConfiguracionPrometheus } from '../config/entorno.js';
+import type {
+  ConfiguracionPrometheus,
+  ConfiguracionServidores
+} from '../config/entorno.js';
 import type {
   VpsContainer,
   VpsHealth,
@@ -308,7 +311,11 @@ export async function estadoVps(
   }
 
   // Un servidor por instancia de node_exporter (aunque este caido: up=0).
+  // El nombre que se ve (portal, carrusel, Telegram) es la etiqueta que se
+  // capturo en Integraciones (lo que va antes de `|`); si ese Prometheus ve
+  // varios servidores, se le agrega la etiqueta de prometheus.yml o el host.
   const salida: VpsStatus[] = [];
+  const unico = up.length === 1;
   for (const m of up) {
     const clave = claveDe(m.metric, n);
     const online = m.value[1] === '1';
@@ -324,8 +331,12 @@ export async function estadoVps(
     const diskSizeB = valor(mapas.diskSize, clave);
     const diskAvailB = valor(mapas.diskAvail, clave);
     salida.push({
-      id: clave,
-      name: m.metric[n] || hostDe(m.metric['instance'] ?? clave),
+      id: config.nombre ? `${config.nombre}/${clave}` : clave,
+      name: config.nombre
+        ? unico
+          ? config.nombre
+          : `${config.nombre} · ${m.metric[n] || hostDe(m.metric['instance'] ?? clave)}`
+        : m.metric[n] || hostDe(m.metric['instance'] ?? clave),
       health,
       reason,
       ...base,
@@ -358,4 +369,42 @@ export async function estadoVps(
     });
   }
   return salida.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Todos los servidores de todas las instancias de Prometheus configuradas.
+ * Una instancia que no contesta no tira a las demas: sus servidores salen
+ * como "sin señal" con el motivo.
+ */
+export async function estadoServidores(
+  config: ConfiguracionServidores,
+  ahora = new Date()
+): Promise<VpsStatus[]> {
+  const resultados = await Promise.all(
+    config.fuentes.map(async (fuente) => {
+      try {
+        return await estadoVps(fuente, ahora);
+      } catch (error) {
+        if (config.fuentes.length === 1) {
+          throw error;
+        }
+        const razon = error instanceof Error ? error.message : String(error);
+        return [
+          {
+            id: fuente.nombre ?? fuente.url,
+            name:
+              fuente.nombre ?? hostDe(fuente.url.replace(/^https?:\/\//, '')),
+            online: false,
+            health: 'sin_senal' as const,
+            reason: razon,
+            cpuHistory: [],
+            memHistory: [],
+            containers: [],
+            accountId: fuente.accountId
+          }
+        ];
+      }
+    })
+  );
+  return resultados.flat().sort((a, b) => a.name.localeCompare(b.name));
 }

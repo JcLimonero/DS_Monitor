@@ -53,13 +53,24 @@ le habla por la red interna.) Abre **9100** y **8080** únicamente a la IP del V
 el VPS en `prometheus.yml` del principal, en los jobs `node` y `cadvisor`, con
 su etiqueta `nombre`, y recarga: `docker compose --profile central restart prometheus`.
 
+## Variante: un Prometheus en cada VPS
+
+Si prefieres no abrir 9100/8080 entre servidores, corre el perfil `central`
+en **cada** VPS (Prometheus + exporters, misma contraseña en todos) y en DS
+Monitor pones una línea por servidor. Es lo más simple cuando son pocos.
+
 ## 3. En DS Monitor
 
 Integraciones → Servicios → **Servidores (Prometheus)**:
 
-- URL: `https://monitor.tudominio.com` (o `http://IP:9090`), sin `/api`.
-- Usuario `dsmonitor` y la contraseña que pusiste en `web.yml`.
-- Etiqueta con el nombre: `nombre` (la de prometheus.yml).
+- Servidores, uno por línea, como `etiqueta|url`; la etiqueta es como se ve
+  en el portal, el carrusel y Telegram:
+  ```
+  Nexus 1|http://74.208.151.19:9090
+  OperativAI|https://monitor.operativai.com.mx
+  ```
+- Usuario `dsmonitor` y la contraseña de `web.yml` (la misma en todos).
+- "Etiqueta con el nombre del servidor": vacío.
 
 "Probar" debe decir cuántos servidores reportan. A partir de ahí:
 **Servidores** en el menú, la diapositiva del carrusel, el aviso en Hoy y los
