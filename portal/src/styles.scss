@@ -94,6 +94,30 @@ body {
     @apply border-transparent bg-accent text-[#04202B] hover:brightness-110;
   }
 
+  /* Acciones destructivas (borrar, olvidar): se distinguen del resto. */
+  .btn-danger {
+    @apply border-rose-300 text-rose-800 hover:bg-rose-50
+      dark:border-rose-500/40 dark:text-rose-200 dark:hover:bg-rose-500/10;
+  }
+
+  /*
+   * Avisos de pagina (demo, puente reiniciando, fuente sin conexion). Una sola
+   * forma para todos; el tono dice que tan grave es.
+   */
+  .banner {
+    @apply flex items-center gap-3 rounded-lg border px-4 py-3 text-sm;
+  }
+
+  .banner-warn {
+    @apply border-amber-200 bg-amber-50 text-amber-900
+      dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200;
+  }
+
+  .banner-danger {
+    @apply border-rose-200 bg-rose-50 text-rose-900
+      dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200;
+  }
+
   .field {
     @apply h-10 w-full rounded-lg border border-line bg-surface px-3 text-base leading-none text-ink sm:text-sm
       placeholder:text-ink-subtle focus:border-accent focus:outline-none
