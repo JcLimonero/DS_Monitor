@@ -4,17 +4,15 @@
   <div class="flex rounded-lg border border-line p-0.5">
     <button
       type="button"
-      class="rounded-md px-3 py-1.5 text-xs font-semibold transition"
-      [class.bg-brand]="vista() === 'negocio'"
-      [class.text-white]="vista() === 'negocio'"
+      class="rounded-md border border-transparent px-3 py-1.5 text-xs font-semibold transition"
+      [class.btn-activo]="vista() === 'negocio'"
       (click)="vista.set('negocio')">
       Del negocio
     </button>
     <button
       type="button"
-      class="rounded-md px-3 py-1.5 text-xs font-semibold transition"
-      [class.bg-brand]="vista() === 'personales'"
-      [class.text-white]="vista() === 'personales'"
+      class="rounded-md border border-transparent px-3 py-1.5 text-xs font-semibold transition"
+      [class.btn-activo]="vista() === 'personales'"
       (click)="vista.set('personales')">
       Míos
     </button>
@@ -261,9 +259,7 @@
   <button
     type="button"
     class="btn h-8 gap-1.5 px-3 text-xs"
-    [class.bg-brand]="foco() === 'vencidos'"
-    [class.text-white]="foco() === 'vencidos'"
-    [class.border-brand]="foco() === 'vencidos'"
+    [class.btn-activo]="foco() === 'vencidos'"
     [attr.aria-pressed]="foco() === 'vencidos'"
     (click)="enfocar('vencidos')">
     <span class="tabular-nums">{{ vencidos() }}</span>
@@ -272,9 +268,7 @@
   <button
     type="button"
     class="btn h-8 gap-1.5 px-3 text-xs"
-    [class.bg-brand]="foco() === 'hoy'"
-    [class.text-white]="foco() === 'hoy'"
-    [class.border-brand]="foco() === 'hoy'"
+    [class.btn-activo]="foco() === 'hoy'"
     [attr.aria-pressed]="foco() === 'hoy'"
     (click)="enfocar('hoy')">
     <span class="tabular-nums">{{ deHoy() }}</span>
@@ -284,9 +278,7 @@
     <button
       type="button"
       class="btn h-8 gap-1.5 px-3 text-xs"
-      [class.bg-brand]="owner() === 'nadie'"
-      [class.text-white]="owner() === 'nadie'"
-      [class.border-brand]="owner() === 'nadie'"
+      [class.btn-activo]="owner() === 'nadie'"
       [attr.aria-pressed]="owner() === 'nadie'"
       (click)="owner.set(owner() === 'nadie' ? 'todos' : 'nadie')">
       <pt-icon name="equipo" class="h-3.5 w-3.5" />

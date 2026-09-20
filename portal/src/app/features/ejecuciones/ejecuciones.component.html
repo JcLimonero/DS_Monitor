@@ -27,8 +27,7 @@
     <button
       type="button"
       class="btn h-10 border-transparent px-3 lg:h-8"
-      [class.bg-brand]="filtro() === 'todas'"
-      [class.text-white]="filtro() === 'todas'"
+      [class.btn-activo]="filtro() === 'todas'"
       [attr.aria-pressed]="filtro() === 'todas'"
       (click)="filtro.set('todas')">
       Todas
@@ -37,14 +36,13 @@
       <button
         type="button"
         class="btn h-10 border-transparent px-3 lg:h-8"
-        [class.bg-brand]="filtro() === estado"
-        [class.text-white]="filtro() === estado"
+        [class.btn-activo]="filtro() === estado"
         [attr.aria-pressed]="filtro() === estado"
         (click)="filtro.set(estado)">
         {{ etiqueta[estado] }}
         <span
           class="text-xs font-normal tabular-nums"
-          [class.text-white/80]="filtro() === estado"
+          [class.opacity-80]="filtro() === estado"
           [class.text-ink-muted]="filtro() !== estado"
           >{{ conteo()[estado] }}</span
         >

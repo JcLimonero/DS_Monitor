@@ -171,7 +171,7 @@ export class EquipoComponent {
 
   readonly unassignedHint = computed(
     () =>
-      `${plural(this.unassigned().length, 'pendiente')} abiertos que nadie tiene a su nombre`
+      `${plural(this.unassigned().length, 'pendiente')} ${this.unassigned().length === 1 ? 'abierto' : 'abiertos'} que nadie tiene a su nombre`
   );
 
   barWidth(open: number): number {

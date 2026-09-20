@@ -49,14 +49,17 @@ const CLASE_ESTADO: Record<DeploymentState, string> = {
 const MINIMO_PARA_FILTRAR = 5;
 
 /**
- * La primera linea de un mensaje de commit, sin los trailers que agregan las
- * herramientas (Co-Authored-By, Signed-off-by…). Es lo que cabe en un renglon.
+ * Trailers que agregan las herramientas al final del commit. Solo estos se
+ * descartan: una primera linea como "fix: corrige X" es el titulo, no un trailer.
  */
+const TRAILER = /^(Co-Authored-By|Signed-off-by|Reviewed-by):\s/i;
+
+/** La primera linea de un mensaje de commit: lo que cabe en un renglon. */
 export function primeraLinea(mensaje: string): string {
   const linea = mensaje
     .split('\n')
     .map((l) => l.trim())
-    .find((l) => l.length > 0 && !/^[A-Za-z-]+:\s/.test(l));
+    .find((l) => l.length > 0 && !TRAILER.test(l));
   return linea ?? mensaje.trim();
 }
 
@@ -64,7 +67,7 @@ export function primeraLinea(mensaje: string): string {
 export function mensajeCompleto(mensaje: string): string {
   return mensaje
     .split('\n')
-    .filter((l) => !/^(Co-Authored-By|Signed-off-by|Reviewed-by):\s/i.test(l))
+    .filter((l) => !TRAILER.test(l))
     .join('\n')
     .trim();
 }

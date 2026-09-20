@@ -3,7 +3,8 @@ import {
   Component,
   computed,
   inject,
-  signal
+  signal,
+  DestroyRef
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -63,6 +64,7 @@ export class EjecucionesComponent {
   /** Clave del servicio que espera el "Sí / No" de Olvidar. */
   readonly confirmando = signal<string | undefined>(undefined);
   private temporizador: ReturnType<typeof setTimeout> | undefined;
+  private readonly destroyRef = inject(DestroyRef);
   readonly etiqueta = ESTADO_EJECUCION_LABEL;
   readonly estados: Estado[] = ['error', 'atrasada', 'aviso', 'ok'];
 
@@ -128,6 +130,7 @@ export class EjecucionesComponent {
       () => this.confirmando.set(undefined),
       CONFIRMACION_MS
     );
+    this.destroyRef.onDestroy(() => clearTimeout(this.temporizador));
   }
 
   cancelarOlvidar(): void {

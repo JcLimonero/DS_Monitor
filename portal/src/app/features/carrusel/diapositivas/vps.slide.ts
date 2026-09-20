@@ -135,7 +135,8 @@ export class VpsSlideComponent implements DiapositivaConContenido {
 
   readonly lista = this.servicio.lista;
   /** Ya respondio el puente y no hay servidores que enseñar. */
-  readonly vacia = computed(() => (this.lista() ?? []).length === 0);
+  /** Vacia solo cuando ya respondio y no hay nada; cargando no cuenta. */
+  readonly vacia = computed(() => this.lista()?.length === 0);
   readonly etiqueta = VPS_HEALTH_LABEL;
   readonly ordenados = computed(() => {
     const peso: Record<VpsHealth, number> = {

@@ -4,7 +4,8 @@ import {
   computed,
   inject,
   input,
-  signal
+  signal,
+  DestroyRef
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -146,7 +147,7 @@ const ESPERA_BORRAR_MS = 5000;
               @if (done()) {
                 <button
                   type="button"
-                  class="btn ml-auto h-8 px-3 text-xs"
+                  class="btn ml-auto h-10 px-3 text-xs lg:h-8"
                   [disabled]="saving()"
                   (click)="toggle()">
                   Reabrir
@@ -154,7 +155,7 @@ const ESPERA_BORRAR_MS = 5000;
               } @else {
                 <button
                   type="button"
-                  class="btn btn-primary ml-auto h-8 px-3 text-xs"
+                  class="btn btn-primary ml-auto h-10 px-3 text-xs lg:h-8"
                   [disabled]="saving()"
                   (click)="toggle()">
                   <pt-icon name="ok" class="h-3.5 w-3.5" />
@@ -686,14 +687,14 @@ const ESPERA_BORRAR_MS = 5000;
             <span class="text-xs font-medium text-ink">¿Borrar?</span>
             <button
               type="button"
-              class="btn btn-danger h-8 px-3 text-xs"
+              class="btn btn-danger h-10 px-3 text-xs lg:h-8"
               [disabled]="saving()"
               (click)="borrarConfirmado()">
               Sí
             </button>
             <button
               type="button"
-              class="btn h-8 px-3 text-xs"
+              class="btn h-10 px-3 text-xs lg:h-8"
               (click)="cancelarBorrar()">
               No
             </button>
@@ -766,6 +767,7 @@ export class TaskCardComponent {
   /** El icono de borrar se volvió pregunta ("¿Borrar? Sí / No"). */
   readonly confirmandoBorrar = signal(false);
   private temporizadorBorrar: ReturnType<typeof setTimeout> | undefined;
+  private readonly destroyRef = inject(DestroyRef);
   /** Para decidir una solicitud de reasignación: a quién y una nota. */
   readonly reasignarA = signal('');
   readonly notaDecision = signal('');
@@ -1171,6 +1173,7 @@ export class TaskCardComponent {
       () => this.confirmandoBorrar.set(false),
       ESPERA_BORRAR_MS
     );
+    this.destroyRef.onDestroy(() => clearTimeout(this.temporizadorBorrar));
   }
 
   cancelarBorrar(): void {

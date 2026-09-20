@@ -151,7 +151,8 @@ export class EjecucionesSlideComponent implements DiapositivaConContenido {
 
   readonly lista = this.servicio.lista;
   /** Ya respondio el puente y no hay servicios que enseñar. */
-  readonly vacia = computed(() => (this.lista() ?? []).length === 0);
+  /** Vacia solo cuando ya respondio y no hay nada; cargando no cuenta. */
+  readonly vacia = computed(() => this.lista()?.length === 0);
   /** Una tarjeta por integracion, lo malo primero. */
   readonly grupos = computed(() => agrupar(this.lista() ?? []));
   readonly visibles = computed(() => this.grupos().slice(0, MAXIMO));

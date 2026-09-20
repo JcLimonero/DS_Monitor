@@ -94,6 +94,15 @@ body {
     @apply border-transparent bg-accent text-[#04202B] hover:bg-accent hover:brightness-110;
   }
 
+  /*
+   * Boton "encendido" de un segmentado o un filtro: fondo de la marca y texto
+   * del color de la superficie, que contrasta en claro (navy) y en oscuro
+   * (cobre). El hover conserva el fondo para que no se vuelva ilegible.
+   */
+  .btn-activo {
+    @apply border-brand bg-brand text-surface hover:bg-brand hover:brightness-110;
+  }
+
   /* Acciones destructivas (borrar, olvidar): se distinguen del resto. */
   .btn-danger {
     @apply border-rose-300 text-rose-800 hover:bg-rose-50

@@ -28,19 +28,15 @@
         type="button"
         class="shrink-0 rounded-lg px-3 py-2 text-left text-sm transition lg:shrink"
         [attr.data-tab]="p.id"
+        [title]="p.detalle"
         [class.bg-brand]="activa() === p.id"
-        [class.text-white]="activa() === p.id"
+        [class.text-surface]="activa() === p.id"
         [class.hover:bg-surface-muted]="activa() !== p.id"
         [class.text-ink]="activa() !== p.id"
         [attr.aria-current]="activa() === p.id ? 'page' : null"
         (click)="elegir(p.id)">
+        <!-- El detalle va en el subtitulo de la pagina; aqui solo el nombre, para que las once quepan sin scroll. -->
         <span class="block font-medium">{{ p.titulo }}</span>
-        <span
-          class="hidden text-xs lg:block"
-          [class.text-white/80]="activa() === p.id"
-          [class.text-ink-muted]="activa() !== p.id">
-          {{ p.detalle }}
-        </span>
       </button>
     }
   </nav>

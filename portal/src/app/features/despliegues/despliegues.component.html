@@ -60,9 +60,16 @@
     @for (despliegue of despliegues(); track despliegue.id) {
       <!-- El renglon completo abre el mensaje de commit cuando hay mas lineas -->
       <li
-        class="card px-4 py-3"
+        class="card px-4 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
         [class.cursor-pointer]="tieneMas(despliegue)"
-        (click)="alternar(despliegue)">
+        [attr.role]="tieneMas(despliegue) ? 'button' : null"
+        [attr.tabindex]="tieneMas(despliegue) ? 0 : null"
+        [attr.aria-expanded]="
+          tieneMas(despliegue) ? abierto() === despliegue.id : null
+        "
+        (click)="alternar(despliegue)"
+        (keydown.enter)="alternar(despliegue)"
+        (keydown.space)="$event.preventDefault(); alternar(despliegue)">
         <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
           <span class="chip shrink-0" [class]="claseEstado(despliegue)">
             {{ estadoLabel[despliegue.state] }}
