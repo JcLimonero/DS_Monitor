@@ -257,7 +257,9 @@ export class CarruselComponent {
       }
       const r = await fetch('/index.html', { cache: 'no-store' });
       const publicado = /main-[A-Z0-9]+\.js/i.exec(await r.text())?.[0];
-      if (publicado && publicado !== actual) {
+      // Con un dialogo abierto (alguien escribiendo) no se recarga: se
+      // intenta en la siguiente revision.
+      if (publicado && publicado !== actual && !this.enDialogo()) {
         location.reload();
       }
     } catch {

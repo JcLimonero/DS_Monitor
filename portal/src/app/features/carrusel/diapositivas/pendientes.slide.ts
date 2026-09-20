@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   signal
@@ -55,6 +56,9 @@ interface Columna {
  * marcar hecho sin salir de la pantalla. Mientras el dialogo esta abierto el
  * carrusel no avanza (`enDialogo`).
  */
+/** Clase en <html> mientras el dialogo esta abierto. */
+const CLASE_DIALOGO = 'con-dialogo';
+
 @Component({
   selector: 'pt-slide-pendientes',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -81,7 +85,8 @@ interface Columna {
                 <li
                   class="flex shrink-0 cursor-pointer items-start gap-3 rounded-lg border border-line px-3 py-2 transition hover:border-brand/60 hover:bg-surface-muted"
                   [class.border-danger]="esVencido(tarea)"
-                  role="link"
+                  role="button"
+                  aria-haspopup="dialog"
                   tabindex="0"
                   [attr.aria-label]="'Abrir ' + tarea.title"
                   (click)="abrir(tarea)"
@@ -206,6 +211,7 @@ interface Columna {
 export class PendientesSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
   private readonly avisos = inject(AvisosService);
+  private readonly destroyRef = inject(DestroyRef);
 
   /** Ninguna de las tres columnas tiene algo. */
   readonly vacia = computed(() =>
@@ -243,6 +249,10 @@ export class PendientesSlideComponent implements DiapositivaConContenido {
         this.respaldo.set(tarea);
       }
     });
+    // Si el carrusel cambia de diapositiva con el dialogo abierto, la clase no se queda pegada.
+    this.destroyRef.onDestroy(() =>
+      document.documentElement.classList.remove(CLASE_DIALOGO)
+    );
   }
 
   /**
@@ -254,6 +264,9 @@ export class PendientesSlideComponent implements DiapositivaConContenido {
     this.avisos.abrir.set(tarea.id);
     this.respaldo.set(tarea);
     this.seleccionadaId.set(tarea.id);
+    // En celular el carrusel achica la raiz; con el dialogo abierto vuelve
+    // al tamaño normal (ver styles.scss).
+    document.documentElement.classList.add(CLASE_DIALOGO);
   }
 
   cerrar(): void {
@@ -266,6 +279,7 @@ export class PendientesSlideComponent implements DiapositivaConContenido {
     }
     this.seleccionadaId.set(undefined);
     this.respaldo.set(undefined);
+    document.documentElement.classList.remove(CLASE_DIALOGO);
   }
 
   readonly columnas = computed<Columna[]>(() => {

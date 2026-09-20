@@ -189,9 +189,10 @@ body {
   /*
    * Con un dialogo de edicion abierto (una hoja a pantalla completa que tapa
    * el carrusel) se vuelve al tamaño normal: los selectores y botones tienen
-   * que poderse tocar con el dedo.
+   * que poderse tocar con el dedo. La clase la pone la diapositiva al abrir
+   * (no `:has`, que los iPad viejos no entienden).
    */
-  html.kiosco:has(.dialogo-carrusel) {
+  html.kiosco.con-dialogo {
     font-size: 16px;
   }
 }
