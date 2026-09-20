@@ -99,7 +99,7 @@ const ACTIVIDADES = 5;
       <h2 class="shrink-0 tv-label">Siguientes actividades</h2>
       @if (actividades().length > 0) {
         <ul
-          class="mt-2 flex min-h-0 flex-1 flex-col justify-around overflow-hidden">
+          class="mt-2 flex min-h-0 flex-1 flex-col justify-around overflow-y-auto">
           @for (actividad of actividades(); track actividad.id) {
             <li class="flex items-center gap-5">
               <span

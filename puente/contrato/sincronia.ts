@@ -30,6 +30,7 @@ type _Deployment = Igual<Portal.Deployment, Puente.Deployment>;
 type _PlatformStatus = Igual<Portal.PlatformStatus, Puente.PlatformStatus>;
 type _VpsStatus = Igual<Portal.VpsStatus, Puente.VpsStatus>;
 type _VpsContainer = Igual<Portal.VpsContainer, Puente.VpsContainer>;
+type _HostedApp = Igual<Portal.HostedApp, Puente.HostedApp>;
 type _RepoStatus = Igual<Portal.RepoStatus, Puente.RepoStatus>;
 type _RepoPullRequest = Igual<Portal.RepoPullRequest, Puente.RepoPullRequest>;
 type _RepoCommit = Igual<Portal.RepoCommit, Puente.RepoCommit>;

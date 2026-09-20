@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { MonitorTarget, VpsStatus } from './contrato.js';
-import { avisosDeSitios, avisosDeVps } from './vigilancia.js';
+import type { HostedApp, MonitorTarget, VpsStatus } from './contrato.js';
+import { avisosDePortales, avisosDeSitios, avisosDeVps } from './vigilancia.js';
 
 const AHORA = new Date('2026-09-18T12:00:00Z');
 
@@ -105,6 +105,48 @@ describe('avisosDeVps', () => {
     assert.match(
       avisosDeVps([vps('sin_senal', 'No reporta')], {}, AHORA).lineas[0]!,
       /📡.*sin señal/
+    );
+  });
+});
+
+describe('avisosDePortales', () => {
+  const portal = (
+    status: HostedApp['status'],
+    healthy?: boolean
+  ): HostedApp => ({
+    id: 'app-1',
+    name: 'Portal Vanguardia',
+    kind: 'app',
+    status,
+    healthy,
+    server: 'nexus-1',
+    url: 'https://vgd.com.mx',
+    accountId: 'coolify'
+  });
+
+  it('avisa cuando se detiene y cuando vuelve', () => {
+    const uno = avisosDePortales([portal('stopped')], {}, AHORA);
+    assert.match(
+      uno.lineas[0]!,
+      /🟥.*Portal Vanguardia.*\(nexus-1\): portal detenido/
+    );
+    assert.deepEqual(
+      avisosDePortales([portal('stopped')], uno.avisados, AHORA).lineas,
+      []
+    );
+    const vuelta = avisosDePortales(
+      [portal('running', true)],
+      uno.avisados,
+      new Date(AHORA.getTime() + 10 * 60_000)
+    );
+    assert.match(vuelta.lineas[0]!, /🟩.*volvió después de 10 min/);
+    assert.deepEqual(vuelta.avisados, {});
+  });
+
+  it('corriendo pero sin salud también avisa', () => {
+    assert.match(
+      avisosDePortales([portal('running', false)], {}, AHORA).lineas[0]!,
+      /sin salud/
     );
   });
 });

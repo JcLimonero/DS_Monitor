@@ -273,6 +273,38 @@ export const INTEGRACIONES: Integracion[] = [
     }
   },
   {
+    id: 'coolify',
+    etiqueta: 'Coolify (portales montados)',
+    kind: 'coolify',
+    campos: [
+      {
+        variable: 'COOLIFY_URL',
+        etiqueta: 'URL de Coolify',
+        tipo: 'texto',
+        obligatoria: true,
+        ayuda: 'La raíz, por ejemplo https://coolify.midominio.com (sin /api).'
+      },
+      {
+        variable: 'COOLIFY_TOKEN',
+        etiqueta: 'API token',
+        tipo: 'secreto',
+        obligatoria: true,
+        ayuda:
+          'En Coolify: Keys & Tokens → API tokens → Create (con permiso de lectura basta). Con él se listan aplicaciones, servicios, servidores y despliegues.'
+      }
+    ],
+    probar: async (config) => {
+      const { portalesCoolify } = await import('../proveedores/coolify.js');
+      const lista = await portalesCoolify(
+        exigir(config.coolify, 'la URL y el token de Coolify')
+      );
+      const corriendo = lista.filter((p) => p.status === 'running').length;
+      return lista.length === 0
+        ? 'Coolify responde, pero no tiene aplicaciones ni servicios.'
+        : `${lista.length} portales, ${corriendo} corriendo.`;
+    }
+  },
+  {
     id: 'monitoreo',
     etiqueta: 'Monitoreo',
     kind: 'monitor',

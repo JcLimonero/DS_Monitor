@@ -41,6 +41,7 @@ import {
   type Dominio
 } from '../datos/dominios.js';
 import type {
+  HostedApp,
   LicenseUsage,
   Meeting,
   MonitorTarget,
@@ -125,8 +126,10 @@ import {
   type Ejecuciones
 } from '../ingesta/ejecuciones.js';
 import {
+  avisosDePortales,
   avisosDeSitios,
   avisosDeVps,
+  type PortalesAvisados,
   type SitiosAvisados,
   type VpsAvisados
 } from '../nucleo/vigilancia.js';
@@ -160,6 +163,7 @@ import {
   type HistorialMonitoreo
 } from '../proveedores/monitoreo.js';
 import { estadoServidores, estadoVps } from '../proveedores/prometheus.js';
+import { portalesCoolify } from '../proveedores/coolify.js';
 import {
   desplieguesVercel,
   estadoPlataformaVercel,
@@ -201,6 +205,7 @@ const CREDENCIAL_DE: Record<string, string> = {
   vercel: 'VERCEL_TOKEN',
   monitoreo: 'MONITOREO_DESTINOS',
   prometheus: 'PROMETHEUS_URL',
+  coolify: 'COOLIFY_URL y COOLIFY_TOKEN',
   github: 'GITHUB_TOKEN',
   odoo: 'ODOO_URL, ODOO_DB, ODOO_USUARIO y ODOO_API_KEY',
   ops: 'un emisor con tipo pendientes (Pendientes → API)'
@@ -242,6 +247,7 @@ export function estadoDeConexiones(
     ['vercel', config.vercel !== undefined, ['deployments', 'licenses']],
     ['monitoreo', config.monitoreo !== undefined, ['monitors']],
     ['prometheus', config.prometheus !== undefined || hayServidores(), ['vps']],
+    ['coolify', config.coolify !== undefined, ['portales']],
     ['odoo', config.odoo !== undefined, ['crm']],
     ['github', config.github !== undefined, ['repos']],
     [
@@ -338,6 +344,8 @@ export interface Datos {
   vpsAvisados: AlmacenJson<VpsAvisados>;
   /** Los servidores vigilados: cada uno con su Prometheus y credenciales. */
   servidores: AlmacenJson<ServidorVps[]>;
+  /** Portales de Coolify que ya se avisaron como caidos. */
+  portalesAvisados: AlmacenJson<PortalesAvisados>;
   /** Donde se permite usar el modelo (Integraciones → IA). */
   iaUsos: AlmacenJson<UsosIa>;
   /** Bitacora de llamadas al modelo. */
@@ -453,6 +461,11 @@ export function abrirDatos(persistencia: Persistencia): Datos {
       persistencia,
       TABLA_SERVIDORES,
       []
+    ),
+    portalesAvisados: new AlmacenJson<PortalesAvisados>(
+      persistencia,
+      'portales-avisados',
+      {}
     ),
     iaBitacora: new AlmacenJson<EntradaBitacora[]>(
       persistencia,
@@ -1074,6 +1087,15 @@ export function construirRutas(
     });
 
   router.get('/vps/estado', () => vps());
+
+  // --- Portales montados en Coolify ---
+
+  const portales = () =>
+    cache.obtener('coolify:portales', ttl.coolify, () =>
+      portalesCoolify(exigir(cfg().coolify, 'coolify'))
+    );
+
+  router.get('/portales', () => portales());
 
   // --- Servidores: la lista, cada uno con su Prometheus ---
 
@@ -3422,6 +3444,14 @@ export function construirRutas(
         ? await vps().catch(() => [] as VpsStatus[])
         : [];
       const deVps = avisosDeVps(servidores, datos.vpsAvisados.leer(), ahora);
+      const lista = cfg().coolify
+        ? await portales().catch(() => [] as HostedApp[])
+        : [];
+      const dePortales = avisosDePortales(
+        lista,
+        datos.portalesAvisados.leer(),
+        ahora
+      );
       const deEjecuciones = avisosPendientes(
         datos.ejecuciones.leer(),
         datos.ejecucionesAvisadas.leer(),
@@ -3430,13 +3460,14 @@ export function construirRutas(
       const lineas = [
         ...deSitios.lineas,
         ...deVps.lineas,
+        ...dePortales.lineas,
         ...deEjecuciones.lineas
       ];
       if (lineas.length === 0) {
         return;
       }
       const destino =
-        deVps.lineas.length > 0
+        deVps.lineas.length > 0 || dePortales.lineas.length > 0
           ? 'vps'
           : deSitios.lineas.length > 0
             ? 'monitoreo'
@@ -3447,6 +3478,7 @@ export function construirRutas(
       if (await mandarTelegram(texto)) {
         await datos.sitiosAvisados.escribir(deSitios.avisados);
         await datos.vpsAvisados.escribir(deVps.avisados);
+        await datos.portalesAvisados.escribir(dePortales.avisados);
         await datos.ejecucionesAvisadas.escribir(deEjecuciones.avisadas);
       }
     }

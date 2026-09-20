@@ -17,6 +17,7 @@ import { accountsOf } from '../../core/util/meetings.util';
 import { AvisosService } from '../../core/avisos/avisos.service';
 import { EjecucionesService } from '../../core/ejecuciones/ejecuciones.service';
 import { VpsService } from '../../core/vps/vps.service';
+import { PortalesService } from '../../core/portales/portales.service';
 import {
   CLASE_PLAZO,
   PUNTO_PLAZO,
@@ -53,6 +54,8 @@ export class HoyComponent {
   readonly ejecucionesMal = inject(EjecucionesService).mal;
   /** Servidores con atención (umbral o sin señal). */
   readonly vpsMal = inject(VpsService).mal;
+  /** Portales de Coolify detenidos o sin salud. */
+  readonly portalesMal = inject(PortalesService).mal;
 
   readonly fecha = new Date().toLocaleDateString('es-MX', {
     weekday: 'long',

@@ -65,7 +65,7 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
 
     @if (despliegues().length > 0) {
       <ul
-        class="flex min-h-0 flex-1 flex-col justify-center gap-3 overflow-hidden">
+        class="flex min-h-0 flex-1 flex-col justify-center gap-3 overflow-y-auto">
         @for (despliegue of despliegues(); track despliegue.id) {
           <li
             class="tv-card flex shrink-0 items-center gap-5 px-6 py-4"

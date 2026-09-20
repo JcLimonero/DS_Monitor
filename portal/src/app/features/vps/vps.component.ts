@@ -8,7 +8,9 @@ import {
 import { RouterLink } from '@angular/router';
 import { VpsHealth, VpsStatus } from '../../core/models';
 import { plural } from '../../core/util/text.util';
+import { PortalesService } from '../../core/portales/portales.service';
 import { VpsService } from '../../core/vps/vps.service';
+import { PortalChipComponent } from '../../ui/portal-chip.component';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
@@ -73,6 +75,7 @@ export function tiempoArriba(segundos: number | undefined): string {
     EmptyStateComponent,
     IconComponent,
     PageHeaderComponent,
+    PortalChipComponent,
     RelativePipe,
     RouterLink,
     SerieComponent
@@ -81,6 +84,7 @@ export function tiempoArriba(segundos: number | undefined): string {
 })
 export class VpsComponent {
   private readonly servicio = inject(VpsService);
+  readonly portales = inject(PortalesService);
 
   readonly disponible = this.servicio.disponible;
   readonly lista = this.servicio.lista;
@@ -106,6 +110,8 @@ export class VpsComponent {
     if (!lista) {
       return 'Cargando…';
     }
+    const portales = this.portales.lista() ?? [];
+    const portalesMal = this.portales.mal().length;
     const mal = lista.filter((v) => v.health !== 'bien').length;
     const cont = lista.reduce(
       (n, v) => n + v.containers.filter((c) => c.running).length,
@@ -114,7 +120,12 @@ export class VpsComponent {
     return [
       plural(lista.length, 'servidor', 'servidores'),
       mal > 0 ? `${mal} con atención` : 'todos bien',
-      `${plural(cont, 'contenedor', 'contenedores')} corriendo`
+      `${plural(cont, 'contenedor', 'contenedores')} corriendo`,
+      ...(portales.length > 0
+        ? [
+            `${plural(portales.length, 'portal', 'portales')} en Coolify${portalesMal > 0 ? `, ${portalesMal} con atención` : ''}`
+          ]
+        : [])
     ].join(' · ');
   });
 

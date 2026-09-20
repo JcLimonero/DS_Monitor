@@ -32,7 +32,7 @@ const RENGLONES = 6;
 
         @if (columna.juntas.length > 0) {
           <ul
-            class="mt-3 flex min-h-0 flex-1 flex-col justify-center gap-2.5 overflow-hidden">
+            class="mt-3 flex min-h-0 flex-1 flex-col justify-center gap-2.5 overflow-y-auto">
             @for (junta of columna.juntas; track junta.id) {
               <li
                 class="tv-card relative flex shrink-0 items-center gap-4 overflow-hidden py-5 pl-6 pr-5">

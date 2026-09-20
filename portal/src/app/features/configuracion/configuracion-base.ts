@@ -56,7 +56,8 @@ const KIND_LABEL: Record<SourceKind, string> = {
   vercel: 'Vercel',
   github: 'GitHub',
   openrouter: 'OpenRouter',
-  prometheus: 'Servidores (Prometheus)'
+  prometheus: 'Servidores (Prometheus)',
+  coolify: 'Coolify'
 };
 
 const CAPABILITY_LABEL: Record<SourceConnection['provides'][number], string> = {
@@ -212,7 +213,8 @@ export class ConfiguracionBase {
       case 'envio':
         return {
           label: 'Por barrido',
-          clase: 'bg-sky-100 text-sky-700 dark:bg-stone-500/20 dark:text-stone-200'
+          clase:
+            'bg-sky-100 text-sky-700 dark:bg-stone-500/20 dark:text-stone-200'
         };
       default:
         return {

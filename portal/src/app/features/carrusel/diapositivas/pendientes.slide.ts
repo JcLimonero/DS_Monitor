@@ -4,6 +4,7 @@ import {
   computed,
   inject
 } from '@angular/core';
+import { Router } from '@angular/router';
 import {
   TASK_PRIORITY_LABEL,
   TaskItem,
@@ -21,8 +22,8 @@ import { plural } from '../../../core/util/text.util';
 import { IconComponent } from '../../../ui/icon.component';
 import { DayPipe, TimePipe } from '../../../ui/portal.pipes';
 
-/** Cuantos renglones caben por columna sin que haya que hacer scroll. */
-const RENGLONES = 8;
+/** Tope por columna; con scroll en la columna, alcanza para todo el dia. */
+const RENGLONES = 60;
 
 const CLASE_PRIORIDAD: Record<TaskPriority, string> = {
   urgente: 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200',
@@ -61,11 +62,16 @@ interface Columna {
           </h2>
 
           @if (col.tareas.length > 0) {
-            <ul class="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+            <ul class="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
               @for (tarea of col.tareas; track tarea.id) {
                 <li
-                  class="flex shrink-0 items-start gap-3 rounded-lg border border-line px-3 py-2"
-                  [class.border-danger]="esVencido(tarea)">
+                  class="flex shrink-0 cursor-pointer items-start gap-3 rounded-lg border border-line px-3 py-2 transition hover:border-brand/60 hover:bg-surface-muted"
+                  [class.border-danger]="esVencido(tarea)"
+                  role="link"
+                  tabindex="0"
+                  [attr.aria-label]="'Abrir ' + tarea.title"
+                  (click)="abrir(tarea)"
+                  (keydown.enter)="abrir(tarea)">
                   <span
                     class="mt-2 h-2.5 w-2.5 shrink-0 rounded-full"
                     [class]="punto(tarea)"></span>
@@ -141,6 +147,14 @@ interface Columna {
 })
 export class PendientesSlideComponent {
   private readonly store = inject(PortalStore);
+  private readonly router = inject(Router);
+
+  /** Al tocar un pendiente en la pantalla se abre su detalle para editarlo. */
+  abrir(tarea: TaskItem): void {
+    void this.router.navigate(['/pendientes'], {
+      queryParams: { abrir: tarea.id }
+    });
+  }
 
   readonly columnas = computed<Columna[]>(() => {
     const ahora = new Date();

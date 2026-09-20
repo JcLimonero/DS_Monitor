@@ -109,7 +109,7 @@ const SIGUIENTES = 4;
         <h2 class="tv-label shrink-0">Lo que sigue</h2>
         @if (siguientes().length > 0) {
           <ul
-            class="mt-3 flex min-h-0 flex-1 flex-col justify-around overflow-hidden">
+            class="mt-3 flex min-h-0 flex-1 flex-col justify-around overflow-y-auto">
             @for (junta of siguientes(); track junta.id) {
               <li class="flex items-baseline gap-5">
                 <span
@@ -143,7 +143,7 @@ const SIGUIENTES = 4;
         <h2 class="tv-label shrink-0">Requiere atención</h2>
         @if (avisos().length > 0) {
           <ul
-            class="mt-3 flex min-h-0 flex-1 flex-col justify-around overflow-hidden">
+            class="mt-3 flex min-h-0 flex-1 flex-col justify-around overflow-y-auto">
             @for (aviso of avisos(); track aviso.id) {
               <li class="flex items-start gap-3">
                 <pt-icon

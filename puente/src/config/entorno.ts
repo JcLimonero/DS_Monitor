@@ -241,6 +241,15 @@ export interface ConfiguracionTelegram {
   secreto: string;
 }
 
+/** Coolify: los portales (aplicaciones y servicios) montados en los VPS. */
+export interface ConfiguracionCoolify {
+  /** Raiz de Coolify, por ejemplo https://coolify.midominio.com (sin /api). */
+  url: string;
+  /** API token de Coolify (Keys & Tokens → API tokens; con permiso de lectura). */
+  token: string;
+  accountId: string;
+}
+
 export interface ConfiguracionGithub {
   token: string;
   accountId: string;
@@ -261,6 +270,7 @@ export interface Configuracion {
     estadoPlataforma: number;
     monitoreo: number;
     vps: number;
+    coolify: number;
     crm: number;
     repos: number;
     correo: number;
@@ -295,6 +305,7 @@ export interface Configuracion {
   ia?: ConfiguracionIa;
   fireflies?: ConfiguracionFireflies;
   prometheus?: ConfiguracionServidores;
+  coolify?: ConfiguracionCoolify;
   telegram?: ConfiguracionTelegram;
   /** La aplicacion OAuth de Google que usan todos los buzones de Gmail. */
   googleApp?: Omit<ConfiguracionGoogle, 'refreshToken' | 'conectadaComo'>;
@@ -504,6 +515,7 @@ function leer(): Configuracion {
       estadoPlataforma: numeroCon('CACHE_ESTADO_SEGUNDOS', 60),
       monitoreo: numeroCon('CACHE_MONITOREO_SEGUNDOS', 60),
       vps: numeroCon('CACHE_VPS_SEGUNDOS', 60),
+      coolify: numeroCon('CACHE_COOLIFY_SEGUNDOS', 60),
       crm: numeroCon('CACHE_CRM_SEGUNDOS', 120),
       repos: numeroCon('CACHE_REPOS_SEGUNDOS', 120),
       // Leer un buzon completo por IMAP es lento y los proveedores limitan las
@@ -629,6 +641,14 @@ function leer(): Configuracion {
       });
       return fuentes.length > 0 ? { fuentes } : undefined;
     })(),
+    coolify:
+      texto('COOLIFY_URL') && texto('COOLIFY_TOKEN')
+        ? {
+            url: (texto('COOLIFY_URL') as string).replace(/\/+$/, ''),
+            token: texto('COOLIFY_TOKEN') as string,
+            accountId: 'coolify'
+          }
+        : undefined,
     fireflies: texto('FIREFLIES_API_KEY')
       ? { apiKey: texto('FIREFLIES_API_KEY') as string }
       : undefined,

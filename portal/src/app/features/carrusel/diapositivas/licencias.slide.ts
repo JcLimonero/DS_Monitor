@@ -42,7 +42,7 @@ const RENGLONES = 24;
   host: { class: 'flex h-full flex-col gap-4' },
   template: `
     <div
-      class="grid min-h-0 flex-1 auto-rows-min grid-cols-2 content-start gap-x-4 gap-y-2 overflow-hidden xl:grid-cols-3">
+      class="grid min-h-0 flex-1 auto-rows-min grid-cols-2 content-start gap-x-4 gap-y-2 overflow-y-auto xl:grid-cols-3">
       @for (licencia of licencias(); track licencia.id) {
         <article
           class="tv-card flex items-center gap-4 px-4 py-2.5"

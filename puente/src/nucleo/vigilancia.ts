@@ -1,4 +1,9 @@
-import type { MonitorTarget, VpsHealth, VpsStatus } from './contrato.js';
+import type {
+  HostedApp,
+  MonitorTarget,
+  VpsHealth,
+  VpsStatus
+} from './contrato.js';
 
 /**
  * Vigilancia de los sitios monitoreados para avisar por Telegram: cuando uno
@@ -101,6 +106,56 @@ export function avisosDeVps(
       lineas.push(
         `🟢 ${nombre} volvió a estar bien${fuera > 0 ? ` después de ${enPalabras(fuera)}` : ''}.`
       );
+    }
+  }
+  return { lineas, avisados: nuevos };
+}
+
+/**
+ * Vigilancia de los portales montados en Coolify: se avisa una vez cuando
+ * uno deja de correr (detenido, con error o sin salud) y otra cuando vuelve.
+ */
+export type PortalesAvisados = Record<
+  string,
+  { desde: string; estado: string }
+>;
+
+export function avisosDePortales(
+  portales: HostedApp[],
+  avisados: PortalesAvisados,
+  ahora = new Date()
+): { lineas: string[]; avisados: PortalesAvisados } {
+  const lineas: string[] = [];
+  const nuevos: PortalesAvisados = {};
+  for (const p of portales) {
+    const previo = avisados[p.id];
+    const nombre = `<b>${escapar(p.name)}</b>${p.server ? ` (${escapar(p.server)})` : ''}`;
+    const mal =
+      p.status === 'stopped' ||
+      p.status === 'error' ||
+      (p.status === 'running' && p.healthy === false);
+    const estado =
+      p.status === 'running'
+        ? 'sin salud'
+        : p.status === 'error'
+          ? 'con error'
+          : 'detenido';
+    if (mal) {
+      if (!previo || previo.estado !== estado) {
+        lineas.push(
+          `🟥 ${nombre}: portal ${estado}${p.rawStatus ? ` (${escapar(p.rawStatus)})` : ''}${p.url ? ` · ${escapar(p.url)}` : ''}.`
+        );
+        nuevos[p.id] = { desde: previo?.desde ?? ahora.toISOString(), estado };
+      } else {
+        nuevos[p.id] = previo;
+      }
+    } else if (previo && p.status === 'running') {
+      const fuera = ahora.getTime() - Date.parse(previo.desde);
+      lineas.push(
+        `🟩 ${nombre}: el portal volvió${fuera > 0 ? ` después de ${enPalabras(fuera)}` : ''}.`
+      );
+    } else if (previo) {
+      nuevos[p.id] = previo;
     }
   }
   return { lineas, avisados: nuevos };

@@ -46,3 +46,29 @@ export interface VpsStatus {
   containers: VpsContainer[];
   accountId: string;
 }
+
+// --- Portales montados en Coolify ---
+
+export type HostedAppStatus = 'running' | 'stopped' | 'error' | 'unknown';
+
+/** Una aplicacion o servicio montado en Coolify. */
+export interface HostedApp {
+  id: string;
+  name: string;
+  kind: 'app' | 'service';
+  status: HostedAppStatus;
+  /** Lo que dice Coolify tal cual, por ejemplo "running:healthy". */
+  rawStatus?: string;
+  /** Sano segun el healthcheck, si Coolify lo reporta. */
+  healthy?: boolean;
+  url?: string;
+  server?: string;
+  project?: string;
+  environment?: string;
+  repo?: string;
+  branch?: string;
+  lastDeployAt?: string;
+  lastDeployStatus?: string;
+  updatedAt?: string;
+  accountId: string;
+}

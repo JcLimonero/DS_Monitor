@@ -40,6 +40,28 @@
     </a>
   }
 
+  @if (portalesMal().length > 0) {
+    <a
+      routerLink="/vps"
+      class="mt-4 flex items-center gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900 transition hover:brightness-95 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+      <pt-icon name="despliegue" class="h-4 w-4 shrink-0" />
+      <span class="min-w-0 flex-1">
+        <span class="block font-medium">
+          {{ portalesMal().length }}
+          {{ portalesMal().length === 1 ? "portal" : "portales" }} de Coolify
+          sin correr bien
+        </span>
+        <span class="block truncate text-xs opacity-80">
+          @for (p of portalesMal(); track p.id; let last = $last) {
+            {{ p.name }}{{ p.server ? " (" + p.server + ")" : ""
+            }}{{ last ? "" : " · " }}
+          }
+        </span>
+      </span>
+      <span class="shrink-0 text-xs">Ver →</span>
+    </a>
+  }
+
   @if (ejecucionesMal().length > 0) {
     <a
       routerLink="/ejecuciones"
