@@ -2,9 +2,12 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  inject
+  effect,
+  inject,
+  signal
 } from '@angular/core';
-import { Router } from '@angular/router';
+import { RouterLink } from '@angular/router';
+import { AvisosService } from '../../../core/avisos/avisos.service';
 import {
   TASK_PRIORITY_LABEL,
   TaskItem,
@@ -21,6 +24,7 @@ import {
 import { plural } from '../../../core/util/text.util';
 import { IconComponent } from '../../../ui/icon.component';
 import { DayPipe, TimePipe } from '../../../ui/portal.pipes';
+import { TaskCardComponent } from '../../../ui/task-card.component';
 import { DiapositivaConContenido } from '../carrusel.model';
 
 /** Tope por columna: a tamaño de television no caben mas sin scroll. */
@@ -45,12 +49,20 @@ interface Columna {
  * mañana, y lo que viene después con su fecha y un punto de color según lo
  * que falta. Lo sin fecha no sale aquí: no compite con lo que sí tiene
  * compromiso.
+ *
+ * Al tocar un renglon se abre el pendiente en un dialogo encima del carrusel,
+ * con la misma tarjeta de la lista ya desplegada, para comentar, reasignar o
+ * marcar hecho sin salir de la pantalla. Mientras el dialogo esta abierto el
+ * carrusel no avanza (`enDialogo`).
  */
 @Component({
   selector: 'pt-slide-pendientes',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DayPipe, IconComponent, TimePipe],
-  host: { class: 'flex h-full flex-col' },
+  imports: [DayPipe, IconComponent, RouterLink, TaskCardComponent, TimePipe],
+  host: {
+    class: 'flex h-full flex-col',
+    '(document:keydown.escape)': 'cerrar()'
+  },
   template: `
     <div
       class="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3 lg:grid-rows-[minmax(0,1fr)] lg:gap-5">
@@ -144,22 +156,116 @@ interface Columna {
         </section>
       }
     </div>
+
+    <!--
+      El detalle del pendiente, encima del carrusel (y de sus controles
+      flotantes). En el celular y el iPad vertical es una hoja a pantalla
+      completa con la barra de arriba fija y el cuerpo con scroll; desde el
+      iPad apaisado (lg) es una ventana centrada. Clic fuera, Escape o el
+      boton lo cierran.
+    -->
+    @if (seleccionada(); as tarea) {
+      <div
+        class="dialogo-carrusel fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-0 lg:items-center lg:p-6"
+        (click)="cerrar()">
+        <div
+          class="card flex h-full w-full max-w-3xl flex-col rounded-none lg:h-auto lg:max-h-[90dvh] lg:rounded-xl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dialogo-pendiente-titulo"
+          (click)="$event.stopPropagation()">
+          <header
+            class="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2 lg:px-5">
+            <h2
+              id="dialogo-pendiente-titulo"
+              class="text-sm font-semibold text-ink">
+              Pendiente
+            </h2>
+            <a
+              class="ml-auto text-sm font-semibold text-brand hover:underline"
+              routerLink="/pendientes"
+              [queryParams]="{ abrir: tarea.id }">
+              Ver en Pendientes →
+            </a>
+            <button
+              type="button"
+              class="flex h-11 w-11 items-center justify-center rounded-lg text-ink-subtle hover:bg-surface-muted hover:text-ink"
+              aria-label="Cerrar"
+              (click)="cerrar()">
+              <pt-icon name="cerrar" class="h-5 w-5" />
+            </button>
+          </header>
+          <div class="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5">
+            <pt-task-card [task]="tarea" />
+          </div>
+        </div>
+      </div>
+    }
   `
 })
 export class PendientesSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
-  private readonly router = inject(Router);
+  private readonly avisos = inject(AvisosService);
 
   /** Ninguna de las tres columnas tiene algo. */
   readonly vacia = computed(() =>
     this.columnas().every((col) => col.tareas.length === 0)
   );
 
-  /** Al tocar un pendiente en la pantalla se abre su detalle para editarlo. */
-  abrir(tarea: TaskItem): void {
-    void this.router.navigate(['/pendientes'], {
-      queryParams: { abrir: tarea.id }
+  /**
+   * El id del pendiente abierto en el dialogo. Se guarda el id y no el objeto
+   * para que la tarjeta refleje lo que se edite (estado, responsable) con la
+   * misma copia que tiene el store.
+   */
+  private readonly seleccionadaId = signal<string | undefined>(undefined);
+  /**
+   * La ultima copia que se vio de ese pendiente. Mientras las fuentes
+   * refrescan, `tasks()` puede venir un momento sin el; con el respaldo el
+   * dialogo no parpadea ni se cierra a media edicion.
+   */
+  private readonly respaldo = signal<TaskItem | undefined>(undefined);
+  private readonly enStore = computed(() => {
+    const id = this.seleccionadaId();
+    return id ? this.store.tasks().find((t) => t.id === id) : undefined;
+  });
+  readonly seleccionada = computed(() =>
+    this.seleccionadaId() ? (this.enStore() ?? this.respaldo()) : undefined
+  );
+
+  /** Le dice al carrusel que no avance mientras alguien edita. */
+  readonly enDialogo = computed(() => !!this.seleccionada());
+
+  constructor() {
+    // Cada vez que el store trae el pendiente, se actualiza el respaldo.
+    effect(() => {
+      const tarea = this.enStore();
+      if (tarea) {
+        this.respaldo.set(tarea);
+      }
     });
+  }
+
+  /**
+   * Abre el pendiente en el dialogo. Se avisa antes por `avisos.abrir` para
+   * que la tarjeta nazca desplegada, igual que cuando se llega desde la
+   * campana.
+   */
+  abrir(tarea: TaskItem): void {
+    this.avisos.abrir.set(tarea.id);
+    this.respaldo.set(tarea);
+    this.seleccionadaId.set(tarea.id);
+  }
+
+  cerrar(): void {
+    const id = this.seleccionadaId();
+    if (!id) {
+      return;
+    }
+    if (this.avisos.abrir() === id) {
+      this.avisos.abrir.set(undefined);
+    }
+    this.seleccionadaId.set(undefined);
+    this.respaldo.set(undefined);
   }
 
   readonly columnas = computed<Columna[]>(() => {
