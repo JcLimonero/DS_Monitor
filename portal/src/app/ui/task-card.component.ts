@@ -7,6 +7,7 @@ import {
   signal
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { IaService, describirError } from '../core/ia/ia.service';
 import { PuenteAdminService } from '../core/sources/gateway/puente-admin.service';
 import { AvisosService } from '../core/avisos/avisos.service';
@@ -17,12 +18,14 @@ import {
   TASK_PRIORITY_LABEL,
   TASK_STATUS_LABEL,
   TaskItem,
+  TaskOrigin,
   TaskPriority,
   TaskStatus
 } from '../core/models';
 import { LocalTaskStore } from '../core/sources/local/local-task.store';
 import { PortalStore } from '../core/state/portal.store';
 import { isOverdue } from '../core/util/date.util';
+import { sinPrefijosDeCorreo } from '../core/util/text.util';
 import {
   CLASE_PLAZO,
   PUNTO_PLAZO,
@@ -60,6 +63,17 @@ const COMPANY_CLASS: Record<string, string> = {
     'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300'
 };
 
+/** El origen en minúsculas, para el chip "cuenta · origen". */
+const ORIGIN_SHORT: Record<TaskOrigin, string> = {
+  odoo: 'Odoo',
+  ops: 'Ops',
+  correo: 'correo',
+  local: 'propio'
+};
+
+/** Cuanto dura la pregunta "¿Borrar?" antes de volver al icono. */
+const ESPERA_BORRAR_MS = 5000;
+
 /**
  * Renglon de pendiente. Lo comparten el panel, la lista y la vista de equipo.
  *
@@ -67,6 +81,9 @@ const COMPANY_CLASS: Record<string, string> = {
  * marcar hecho, asignar a alguien del equipo y, si vino por correo, pedir un
  * borrador de respuesta. Todo eso se guarda en el puente y aplica a cualquier
  * origen: correo, Ops, Odoo o propios.
+ *
+ * Los metadatos van siempre en el mismo orden (fecha, estado, responsable,
+ * prioridad, cuenta · origen) para que se lean igual aquí, en Hoy y en Equipo.
  */
 @Component({
   selector: 'pt-task-card',
@@ -75,6 +92,7 @@ const COMPANY_CLASS: Record<string, string> = {
     AccountChipComponent,
     FormsModule,
     IconComponent,
+    RouterLink,
     DayPipe,
     TimePipe,
     RelativePipe
@@ -93,11 +111,8 @@ const COMPANY_CLASS: Record<string, string> = {
               [class.line-through]="done()"
               [class.text-ink-subtle]="done()"
               (click)="open.set(!open())">
-              {{ task().title }}
+              {{ titulo() }}
             </button>
-            <span class="chip" [class]="priorityClass()">{{
-              priorityLabel()
-            }}</span>
             @if (task().company; as company) {
               <span class="chip" [class]="companyClass()">{{ company }}</span>
             }
@@ -126,6 +141,27 @@ const COMPANY_CLASS: Record<string, string> = {
                 {{ comments().length === 1 ? 'comentario' : 'comentarios' }}
               </span>
             }
+            <!-- Abierto: hecho o reabrir de un clic, sin pasar por el selector. -->
+            @if (open() && puedeMarcar()) {
+              @if (done()) {
+                <button
+                  type="button"
+                  class="btn ml-auto h-8 px-3 text-xs"
+                  [disabled]="saving()"
+                  (click)="toggle()">
+                  Reabrir
+                </button>
+              } @else {
+                <button
+                  type="button"
+                  class="btn btn-primary ml-auto h-8 px-3 text-xs"
+                  [disabled]="saving()"
+                  (click)="toggle()">
+                  <pt-icon name="ok" class="h-3.5 w-3.5" />
+                  Marcar hecho
+                </button>
+              }
+            }
           </div>
 
           @if (task().description) {
@@ -136,15 +172,24 @@ const COMPANY_CLASS: Record<string, string> = {
             </p>
           }
 
+          <!-- Orden fijo: fecha, estado, responsable, prioridad, cuenta · origen. -->
           <div
             class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
-            <pt-account-chip [accountId]="task().accountId" />
-            @for (cuenta of task().alsoIn ?? []; track cuenta) {
-              <pt-account-chip [accountId]="cuenta" />
+            @if (task().dueDate; as due) {
+              <span
+                class="inline-flex items-center gap-1 font-medium"
+                [class]="done() ? 'text-ink-subtle' : clasePlazo()">
+                <span
+                  class="h-2 w-2 rounded-full"
+                  [class]="done() ? 'bg-ink-subtle' : puntoPlazo()"></span>
+                {{ due | dia
+                }}{{ task().dueHasTime ? ' ' + (due | hora) : '' }} ·
+                {{ textoPlazo() }}
+              </span>
             }
             @if (ia.disponible) {
               <select
-                class="h-7 rounded border border-line bg-surface px-1 text-xs font-medium"
+                class="h-10 rounded border border-line bg-surface px-1 text-xs font-medium lg:h-8"
                 [class]="statusClass()"
                 [disabled]="saving()"
                 [ngModel]="task().status"
@@ -162,7 +207,7 @@ const COMPANY_CLASS: Record<string, string> = {
               <label class="inline-flex items-center gap-1">
                 <pt-icon name="equipo" class="h-3.5 w-3.5" />
                 <select
-                  class="h-7 max-w-40 rounded border border-line bg-surface px-1 text-xs text-ink"
+                  class="h-10 max-w-40 rounded border border-line bg-surface px-1 text-xs text-ink lg:h-8"
                   [class.text-ink-subtle]="!task().assignee"
                   [disabled]="saving()"
                   [ngModel]="responsableValor()"
@@ -175,6 +220,15 @@ const COMPANY_CLASS: Record<string, string> = {
                   }
                 </select>
               </label>
+            } @else if (ia.disponible && !task().assignee) {
+              <!-- Con puente pero sin equipo capturado: el selector saldria vacio. -->
+              <a
+                routerLink="/integraciones"
+                [queryParams]="{ tab: 'equipo' }"
+                class="inline-flex items-center gap-1 rounded px-1 text-brand transition hover:bg-surface-muted hover:underline">
+                <pt-icon name="equipo" class="h-3.5 w-3.5" />
+                Captura tu equipo para asignar
+              </a>
             } @else {
               <button
                 type="button"
@@ -185,33 +239,35 @@ const COMPANY_CLASS: Record<string, string> = {
                 {{ task().assignee?.name ?? 'Sin asignar · asignar' }}
               </button>
             }
+            <span class="chip" [class]="priorityClass()">{{
+              priorityLabel()
+            }}</span>
+            <pt-account-chip
+              [accountId]="task().accountId"
+              [sufijo]="origenCorto()" />
+            @for (cuenta of task().alsoIn ?? []; track cuenta) {
+              <pt-account-chip [accountId]="cuenta" />
+            }
             @if (task().senderKind; as kind) {
-              <span
+              <!-- El chip del remitente abre "Quién lo pide" en el formulario de edición. -->
+              <button
+                type="button"
                 class="chip"
                 [class]="
                   kind === 'por_identificar'
-                    ? 'bg-amber-100 text-amber-800'
+                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200'
                     : kind === 'equipo'
                       ? 'bg-sky-100 text-sky-800 dark:bg-stone-500/20 dark:text-stone-200'
                       : 'bg-surface-muted text-ink-muted'
-                ">
+                "
+                [disabled]="!ia.disponible"
+                title="Cambiar quién lo pide"
+                (click)="abrirRemitente()">
                 {{ senderLabel[kind] }}
-              </span>
+              </button>
             }
             @if (task().project; as project) {
               <span class="text-ink-subtle">{{ project }}</span>
-            }
-            @if (task().dueDate; as due) {
-              <span
-                class="inline-flex items-center gap-1 font-medium"
-                [class]="done() ? 'text-ink-subtle' : clasePlazo()">
-                <span
-                  class="h-2 w-2 rounded-full"
-                  [class]="done() ? 'bg-ink-subtle' : puntoPlazo()"></span>
-                {{ due | dia
-                }}{{ task().dueHasTime ? ' ' + (due | hora) : '' }} ·
-                {{ textoPlazo() }}
-              </span>
             }
           </div>
 
@@ -329,30 +385,8 @@ const COMPANY_CLASS: Record<string, string> = {
               }
 
               @if (ia.disponible) {
-                <form
-                  class="flex flex-wrap items-end gap-2"
-                  (ngSubmit)="comment()">
-                  <label class="min-w-0 flex-1">
-                    <span class="mb-1 block text-xs font-medium text-ink-muted"
-                      >Comentario</span
-                    >
-                    <input
-                      class="field"
-                      type="text"
-                      placeholder="Qué pasó, qué falta…"
-                      [ngModel]="draft()"
-                      (ngModelChange)="draft.set($event)"
-                      name="comentario-{{ task().id }}" />
-                  </label>
-                  <button
-                    type="submit"
-                    class="btn"
-                    [disabled]="!draft().trim() || saving()">
-                    Comentar
-                  </button>
-                </form>
-
-                <div class="flex flex-wrap items-end gap-2">
+                <!-- Acciones arriba del comentario; el resultado sale junto a ellas. -->
+                <div class="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     class="btn"
@@ -395,7 +429,45 @@ const COMPANY_CLASS: Record<string, string> = {
                       {{ drafting() ? 'Redactando…' : 'Borrador de respuesta' }}
                     </button>
                   }
+                  @if (message(); as m) {
+                    @if (m.error) {
+                      <p class="banner banner-danger basis-full py-2 text-xs">
+                        {{ m.texto }}
+                      </p>
+                    } @else {
+                      <p class="text-xs font-medium text-ok">{{ m.texto }}</p>
+                    }
+                  }
                 </div>
+
+                <form
+                  class="flex flex-wrap items-end gap-2"
+                  (ngSubmit)="comment()">
+                  <label class="min-w-0 flex-1">
+                    <span class="mb-1 block text-xs font-medium text-ink-muted"
+                      >Comentario</span
+                    >
+                    <input
+                      class="field"
+                      type="text"
+                      placeholder="Qué pasó, qué falta…"
+                      [ngModel]="draft()"
+                      (ngModelChange)="draft.set($event)"
+                      name="comentario-{{ task().id }}" />
+                  </label>
+                  <button
+                    type="submit"
+                    class="btn"
+                    [disabled]="!draft().trim() || saving()">
+                    Comentar
+                  </button>
+                </form>
+              } @else if (message(); as m) {
+                <p
+                  class="text-xs font-medium"
+                  [class]="m.error ? 'text-danger' : 'text-ok'">
+                  {{ m.texto }}
+                </p>
               }
 
               @if (editing(); as e) {
@@ -533,10 +605,6 @@ const COMPANY_CLASS: Record<string, string> = {
                 </form>
               }
 
-              @if (message(); as m) {
-                <p class="text-xs text-ink-muted">{{ m }}</p>
-              }
-
               @if (sugerencia(); as sg) {
                 <div
                   class="rounded-lg border border-line bg-surface-muted p-3 text-sm">
@@ -604,44 +672,66 @@ const COMPANY_CLASS: Record<string, string> = {
               }
             </div>
           } @else if (message(); as m) {
-            <p class="mt-2 text-xs text-ink-muted">{{ m }}</p>
+            <p
+              class="mt-2 text-xs font-medium"
+              [class]="m.error ? 'text-danger' : 'text-ok'">
+              {{ m.texto }}
+            </p>
           }
         </div>
 
-        <div class="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
-            [attr.aria-label]="
-              open() ? 'Cerrar detalle' : 'Comentar, asignar o marcar'
-            "
-            [attr.aria-expanded]="open()"
-            (click)="open.set(!open())">
-            <pt-icon
-              name="siguiente"
-              class="h-4 w-4 transition"
-              [class.rotate-90]="open()" />
-          </button>
-          @if (task().url; as url) {
-            <a
-              class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
-              [href]="url"
-              target="_blank"
-              rel="noopener"
-              [attr.aria-label]="'Abrir ' + task().title + ' en su sistema'">
-              <pt-icon name="externo" class="h-4 w-4" />
-            </a>
-          }
-          @if (task().origin === 'local' || done()) {
+        <!-- Iconos con area tactil de 44 px en celular; en escritorio, compactos. -->
+        <div class="flex shrink-0 flex-wrap items-center justify-end gap-1">
+          @if (confirmandoBorrar()) {
+            <span class="text-xs font-medium text-ink">¿Borrar?</span>
             <button
               type="button"
-              class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-danger"
+              class="btn btn-danger h-8 px-3 text-xs"
               [disabled]="saving()"
-              [attr.aria-label]="'Eliminar ' + task().title"
-              title="Eliminar"
-              (click)="remove()">
-              <pt-icon name="basura" class="h-4 w-4" />
+              (click)="borrarConfirmado()">
+              Sí
             </button>
+            <button
+              type="button"
+              class="btn h-8 px-3 text-xs"
+              (click)="cancelarBorrar()">
+              No
+            </button>
+          } @else {
+            <button
+              type="button"
+              class="inline-flex min-h-11 min-w-11 items-center justify-center rounded p-2 text-ink-subtle transition hover:bg-surface-muted hover:text-ink lg:min-h-0 lg:min-w-0"
+              [attr.aria-label]="
+                open() ? 'Cerrar detalle' : 'Comentar, asignar o marcar'
+              "
+              [attr.aria-expanded]="open()"
+              (click)="open.set(!open())">
+              <pt-icon
+                name="siguiente"
+                class="h-4 w-4 transition"
+                [class.rotate-90]="open()" />
+            </button>
+            @if (task().url; as url) {
+              <a
+                class="inline-flex min-h-11 min-w-11 items-center justify-center rounded p-2 text-ink-subtle transition hover:bg-surface-muted hover:text-ink lg:min-h-0 lg:min-w-0"
+                [href]="url"
+                target="_blank"
+                rel="noopener"
+                [attr.aria-label]="'Abrir ' + task().title + ' en su sistema'">
+                <pt-icon name="externo" class="h-4 w-4" />
+              </a>
+            }
+            @if (task().origin === 'local' || done()) {
+              <button
+                type="button"
+                class="inline-flex min-h-11 min-w-11 items-center justify-center rounded p-2 text-ink-subtle transition hover:bg-surface-muted hover:text-danger lg:min-h-0 lg:min-w-0"
+                [disabled]="saving()"
+                [attr.aria-label]="'Eliminar ' + task().title"
+                title="Eliminar"
+                (click)="remove()">
+                <pt-icon name="basura" class="h-4 w-4" />
+              </button>
+            }
           }
         </div>
       </div>
@@ -669,7 +759,13 @@ export class TaskCardComponent {
       }
     | undefined
   >(undefined);
-  readonly message = signal<string | undefined>(undefined);
+  /** Resultado de la última acción; `error` decide el tono con que se pinta. */
+  readonly message = signal<{ texto: string; error?: boolean } | undefined>(
+    undefined
+  );
+  /** El icono de borrar se volvió pregunta ("¿Borrar? Sí / No"). */
+  readonly confirmandoBorrar = signal(false);
+  private temporizadorBorrar: ReturnType<typeof setTimeout> | undefined;
   /** Para decidir una solicitud de reasignación: a quién y una nota. */
   readonly reasignarA = signal('');
   readonly notaDecision = signal('');
@@ -694,6 +790,16 @@ export class TaskCardComponent {
   >(undefined);
 
   readonly done = computed(() => this.task().status === 'hecho');
+  /** El asunto sin los "RE: RV: Fwd:" que acumula el correo. */
+  readonly titulo = computed(() => sinPrefijosDeCorreo(this.task().title));
+  readonly origenCorto = computed(() => ORIGIN_SHORT[this.task().origin]);
+  /**
+   * Hecho/Reabrir de un clic: con puente vale para cualquier origen; sin
+   * puente (demostración) solo para los propios, que cambian en memoria.
+   */
+  readonly puedeMarcar = computed(
+    () => this.ia.disponible || this.task().origin === 'local'
+  );
   readonly overdue = computed(
     () => !this.done() && isOverdue(this.task().dueDate)
   );
@@ -802,6 +908,23 @@ export class TaskCardComponent {
     });
   }
 
+  /** Abre el formulario de edición con el foco en "Quién lo pide". */
+  abrirRemitente(): void {
+    if (!this.ia.disponible) {
+      return;
+    }
+    this.open.set(true);
+    if (!this.editing()) {
+      this.startEdit();
+    }
+    setTimeout(() => {
+      const select = document.querySelector<HTMLSelectElement>(
+        `select[name="e-rem-${CSS.escape(this.task().id)}"]`
+      );
+      select?.focus();
+    });
+  }
+
   /** El estado se elige del selector; Hecho y reabrir son dos de sus valores. */
   cambiarEstado(estado: TaskStatus): void {
     if (estado === this.task().status) {
@@ -809,11 +932,12 @@ export class TaskCardComponent {
     }
     this.store.marcarRecienHecho(this.task().id, estado === 'hecho');
     this.guardar({ estado }, () =>
-      this.message.set(
-        estado === 'hecho'
-          ? 'Marcado como hecho. Si fue un error, cambia el estado.'
-          : `Estado: ${TASK_STATUS_LABEL[estado]}.`
-      )
+      this.message.set({
+        texto:
+          estado === 'hecho'
+            ? 'Marcado como hecho. Si fue un error, cambia el estado.'
+            : `Estado: ${TASK_STATUS_LABEL[estado]}.`
+      })
     );
   }
 
@@ -828,9 +952,11 @@ export class TaskCardComponent {
       return;
     }
     this.guardar({ hecho }, () =>
-      this.message.set(
-        hecho ? 'Marcado como hecho. Si fue un error, Reabrir.' : 'Reabierto.'
-      )
+      this.message.set({
+        texto: hecho
+          ? 'Marcado como hecho. Si fue un error, Reabrir.'
+          : 'Reabierto.'
+      })
     );
   }
 
@@ -862,12 +988,12 @@ export class TaskCardComponent {
           this.saving.set(false);
           this.reasignarA.set('');
           this.notaDecision.set('');
-          this.message.set(r.aviso ?? 'Listo.');
+          this.message.set({ texto: r.aviso ?? 'Listo.' });
           this.store.refreshTasks();
         },
         error: (error: unknown) => {
           this.saving.set(false);
-          this.message.set(describirError(error));
+          this.message.set({ texto: describirError(error), error: true });
         }
       });
   }
@@ -892,7 +1018,7 @@ export class TaskCardComponent {
         this.sugiriendo.set(false);
       },
       error: (error: unknown) => {
-        this.message.set(describirError(error));
+        this.message.set({ texto: describirError(error), error: true });
         this.sugiriendo.set(false);
       }
     });
@@ -928,7 +1054,7 @@ export class TaskCardComponent {
         this.drafting.set(false);
       },
       error: (error: unknown) => {
-        this.message.set(describirError(error));
+        this.message.set({ texto: describirError(error), error: true });
         this.drafting.set(false);
       }
     });
@@ -1011,14 +1137,14 @@ export class TaskCardComponent {
       .subscribe({
         next: (r) => {
           this.saving.set(false);
-          this.message.set(
-            `Agendada en ${cuenta.usuario}.${r.joinUrl ? ' Con liga de Teams.' : ''}`
-          );
+          this.message.set({
+            texto: `Agendada en ${cuenta.usuario}.${r.joinUrl ? ' Con liga de Teams.' : ''}`
+          });
           this.store.refreshMeetings();
         },
         error: (error: unknown) => {
           this.saving.set(false);
-          this.message.set(describirError(error));
+          this.message.set({ texto: describirError(error), error: true });
         }
       });
   }
@@ -1027,18 +1153,33 @@ export class TaskCardComponent {
     const b = this.borrador();
     if (b) {
       void navigator.clipboard?.writeText(b.cuerpo);
-      this.message.set('Copiado.');
+      this.message.set({ texto: 'Copiado.' });
     }
   }
 
   /**
    * Los propios se borran siempre; los demás (correo, Ops, Odoo) solo cuando
    * ya están hechos, y lo que se borra es la vista: la fuente no se toca.
+   *
+   * El primer clic vuelve el icono pregunta ("¿Borrar? Sí / No"); sin
+   * respuesta en unos segundos, regresa el icono.
    */
   remove(): void {
-    if (!confirm(`¿Eliminar "${this.task().title}"?`)) {
-      return;
-    }
+    this.confirmandoBorrar.set(true);
+    clearTimeout(this.temporizadorBorrar);
+    this.temporizadorBorrar = setTimeout(
+      () => this.confirmandoBorrar.set(false),
+      ESPERA_BORRAR_MS
+    );
+  }
+
+  cancelarBorrar(): void {
+    clearTimeout(this.temporizadorBorrar);
+    this.confirmandoBorrar.set(false);
+  }
+
+  borrarConfirmado(): void {
+    this.cancelarBorrar();
     if (!this.ia.disponible) {
       this.local.remove(this.task().id);
       this.store.refreshTasks();
@@ -1056,14 +1197,14 @@ export class TaskCardComponent {
     this.ia.anotar(this.task().id, cambio).subscribe({
       next: (r) => {
         this.saving.set(false);
-        this.message.set(r.aviso);
+        this.message.set(r.aviso ? { texto: r.aviso } : undefined);
         luego?.();
         this.local.invalidar();
         this.store.refreshTasks();
       },
       error: (error: unknown) => {
         this.saving.set(false);
-        this.message.set(describirError(error));
+        this.message.set({ texto: describirError(error), error: true });
       }
     });
   }

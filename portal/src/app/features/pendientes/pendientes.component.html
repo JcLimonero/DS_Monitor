@@ -19,13 +19,35 @@
       Míos
     </button>
   </div>
-  @if (sinAsignar() > 0 && owner() !== "nadie" && vista() === "negocio") {
-    <button type="button" class="btn" (click)="owner.set('nadie')">
-      <pt-icon name="equipo" class="h-4 w-4" />
-      {{ sinAsignar() }} sin asignar
+  <!-- Buscar y Nuevo siempre a la mano; el resto de filtros, detras de un boton en celular. -->
+  <label class="relative block w-full sm:w-64">
+    <span class="sr-only">Buscar</span>
+    <pt-icon
+      name="buscar"
+      class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
+    <input
+      class="field pl-9"
+      type="search"
+      placeholder="Buscar título, proyecto o etiqueta"
+      [ngModel]="search()"
+      (ngModelChange)="search.set($event)"
+      name="buscar" />
+  </label>
+  @if (vista() === "negocio") {
+    <button
+      type="button"
+      class="btn lg:hidden"
+      [attr.aria-expanded]="filtrosAbiertos()"
+      (click)="filtrosAbiertos.set(!filtrosAbiertos())">
+      Filtros{{ filtrosActivos() > 0 ? " · " + filtrosActivos() : "" }}
     </button>
   }
-  <a routerLink="/dictado" class="btn">
+  @if (filtrosActivos() > 0) {
+    <button type="button" class="btn" (click)="clearFilters()">
+      Limpiar filtros
+    </button>
+  }
+  <a routerLink="/dictado" class="btn hidden lg:inline-flex">
     <pt-icon name="microfono" class="h-4 w-4" />
     Dictar
   </a>
@@ -35,18 +57,6 @@
     (click)="mostrarAlta.set(!mostrarAlta())">
     <pt-icon name="mas" class="h-4 w-4" />
     Nuevo
-  </button>
-  @if (porIdentificar() > 0 && sender() !== "por_identificar") {
-    <button
-      type="button"
-      class="btn border-amber-300 bg-amber-50 text-amber-900"
-      (click)="sender.set('por_identificar')">
-      <pt-icon name="alerta" class="h-4 w-4" />
-      {{ porIdentificar() }} por identificar
-    </button>
-  }
-  <button type="button" class="btn" (click)="clearFilters()">
-    Limpiar filtros
   </button>
 </pt-page-header>
 
@@ -59,12 +69,14 @@
           : "Nuevo pendiente"
       }}
     </h2>
-    <form class="mt-3 flex flex-wrap items-end gap-3" (ngSubmit)="addTask()">
-      <label class="min-w-0 basis-full flex-1 sm:basis-auto">
+    <!-- Titulo a todo lo ancho; fecha, hora y empresa en la segunda fila. -->
+    <form class="mt-3 space-y-3" (ngSubmit)="addTask()">
+      <label class="block">
         <span class="mb-1 block text-xs font-medium text-ink-muted"
           >Qué hay que hacer</span
         >
         <input
+          #tituloNuevo
           class="field"
           type="text"
           placeholder="Por ejemplo: revisar el corte de facturación"
@@ -72,206 +84,244 @@
           (ngModelChange)="newTitle.set($event)"
           name="titulo" />
       </label>
-      @if (vista() === "negocio") {
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        @if (vista() === "negocio") {
+          <label>
+            <span class="mb-1 block text-xs font-medium text-ink-muted"
+              >Prioridad</span
+            >
+            <select
+              class="field"
+              [ngModel]="newPriority()"
+              (ngModelChange)="newPriority.set($event)"
+              name="prioridad">
+              @for (option of priorities; track option) {
+                <option [value]="option">{{ priorityLabel[option] }}</option>
+              }
+            </select>
+          </label>
+        } @else {
+          <!-- Lo personal siempre es alta, y urgente si tiene fecha: no se elige. -->
+          <p class="self-end pb-2 text-xs text-ink-muted">
+            Prioridad: {{ newDueDate() ? "urgente (tiene fecha)" : "alta" }}
+          </p>
+        }
         <label>
           <span class="mb-1 block text-xs font-medium text-ink-muted"
-            >Prioridad</span
+            >Para cuándo</span
           >
-          <select
+          <input
             class="field"
-            [ngModel]="newPriority()"
-            (ngModelChange)="newPriority.set($event)"
-            name="prioridad">
-            @for (option of priorities; track option) {
-              <option [value]="option">{{ priorityLabel[option] }}</option>
-            }
-          </select>
+            type="date"
+            [ngModel]="newDueDate()"
+            (ngModelChange)="newDueDate.set($event)"
+            name="fecha" />
         </label>
-      } @else {
-        <!-- Lo personal siempre es alta, y urgente si tiene fecha: no se elige. -->
-        <p class="self-end pb-2 text-xs text-ink-muted">
-          Prioridad: {{ newDueDate() ? "urgente (tiene fecha)" : "alta" }}
-        </p>
-      }
-      <label>
-        <span class="mb-1 block text-xs font-medium text-ink-muted"
-          >Para cuándo</span
-        >
-        <input
-          class="field"
-          type="date"
-          [ngModel]="newDueDate()"
-          (ngModelChange)="newDueDate.set($event)"
-          name="fecha" />
-      </label>
-      <label>
-        <span class="mb-1 block text-xs font-medium text-ink-muted"
-          >Hora (opcional)</span
-        >
-        <input
-          class="field"
-          type="time"
-          [disabled]="!newDueDate()"
-          [ngModel]="newDueTime()"
-          (ngModelChange)="newDueTime.set($event)"
-          name="hora" />
-      </label>
-      @if (vista() === "negocio") {
         <label>
           <span class="mb-1 block text-xs font-medium text-ink-muted"
-            >Empresa</span
+            >Hora (opcional)</span
           >
-          <select
+          <input
             class="field"
-            [ngModel]="newCompany()"
-            (ngModelChange)="newCompany.set($event)"
-            name="empresa">
-            <option value="">Elige la empresa</option>
-            @for (empresa of empresas; track empresa) {
-              <option [value]="empresa">{{ empresa }}</option>
-            }
-          </select>
+            type="time"
+            [disabled]="!newDueDate()"
+            [ngModel]="newDueTime()"
+            (ngModelChange)="newDueTime.set($event)"
+            name="hora" />
         </label>
-      }
-      <button type="submit" class="btn btn-primary" [disabled]="!canAdd()">
-        <pt-icon name="mas" class="h-4 w-4" />
-        Agregar
-      </button>
+        @if (vista() === "negocio") {
+          <label>
+            <span class="mb-1 block text-xs font-medium text-ink-muted"
+              >Empresa</span
+            >
+            <select
+              class="field"
+              [ngModel]="newCompany()"
+              (ngModelChange)="newCompany.set($event)"
+              name="empresa">
+              <option value="">Elige la empresa</option>
+              @for (empresa of empresas; track empresa) {
+                <option [value]="empresa">{{ empresa }}</option>
+              }
+            </select>
+          </label>
+        }
+      </div>
+      <div class="flex gap-2">
+        <button type="submit" class="btn btn-primary" [disabled]="!canAdd()">
+          Guardar
+        </button>
+        <button type="button" class="btn" (click)="mostrarAlta.set(false)">
+          Cancelar
+        </button>
+      </div>
     </form>
   </section>
 }
 
 @if (vista() === "negocio") {
-  <details class="card mt-4" [open]="filtrosAbiertos()">
-    <summary
-      class="cursor-pointer select-none px-4 py-3 text-xs font-bold uppercase tracking-wide text-ink-subtle"
-      (click)="
-        filtrosAbiertos.set(!filtrosAbiertos()); $event.preventDefault()
-      ">
-      Filtros
-      @if (filtrosActivos() > 0) {
-        <span class="chip ml-2 bg-brand-soft text-brand"
-          >{{ filtrosActivos() }} activos</span
+  <!-- En escritorio siempre a la vista; en celular solo cuando se pide con "Filtros". -->
+  <section
+    class="card card-pad mt-4 lg:block"
+    [class.hidden]="!filtrosAbiertos()">
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Responsable</span
         >
-      }
-    </summary>
-    <section class="card-pad pt-0">
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label class="lg:col-span-2">
-          <span class="mb-1 block text-xs font-medium text-ink-muted"
-            >Buscar</span
-          >
-          <span class="relative block">
-            <pt-icon
-              name="buscar"
-              class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
-            <input
-              class="field pl-9"
-              type="search"
-              placeholder="Título, proyecto o etiqueta"
-              [ngModel]="search()"
-              (ngModelChange)="search.set($event)"
-              name="buscar" />
-          </span>
-        </label>
-        <label>
-          <span class="mb-1 block text-xs font-medium text-ink-muted"
-            >Responsable</span
-          >
-          <select
-            class="field"
-            [ngModel]="owner()"
-            (ngModelChange)="owner.set($event)"
-            name="responsable">
-            <option value="todos">Todos</option>
-            <option value="mios">Solo míos</option>
-            <option value="nadie">Sin asignar</option>
-            @for (person of people(); track person.id) {
-              <option [value]="person.id">{{ person.name }}</option>
-            }
-          </select>
-        </label>
-        <label>
-          <span class="mb-1 block text-xs font-medium text-ink-muted"
-            >Origen</span
-          >
-          <select
-            class="field"
-            [ngModel]="origin()"
-            (ngModelChange)="origin.set($event)"
-            name="origen">
-            <option value="todos">Todos</option>
-            @for (option of origins; track option) {
-              <option [value]="option">{{ originLabel[option] }}</option>
-            }
-          </select>
-        </label>
-        <label>
-          <span class="mb-1 block text-xs font-medium text-ink-muted"
-            >Prioridad</span
-          >
-          <select
-            class="field"
-            [ngModel]="priority()"
-            (ngModelChange)="priority.set($event)"
-            name="filtro-prioridad">
-            <option value="todas">Todas</option>
-            @for (option of priorities; track option) {
-              <option [value]="option">{{ priorityLabel[option] }}</option>
-            }
-          </select>
-        </label>
-        <label>
-          <span class="mb-1 block text-xs font-medium text-ink-muted"
-            >Empresa</span
-          >
-          <select
-            class="field"
-            [ngModel]="company()"
-            (ngModelChange)="company.set($event)"
-            name="filtro-empresa">
-            <option value="todas">Todas</option>
-            @for (empresa of empresas; track empresa) {
-              <option [value]="empresa">{{ empresa }}</option>
-            }
-            <option value="ninguna">Sin empresa</option>
-          </select>
-        </label>
-        <label>
-          <span class="mb-1 block text-xs font-medium text-ink-muted"
-            >Quién lo pide</span
-          >
-          <select
-            class="field"
-            [ngModel]="sender()"
-            (ngModelChange)="sender.set($event)"
-            name="filtro-remitente">
-            <option value="todos">Todos</option>
-            @for (k of senders; track k) {
-              <option [value]="k">{{ senderLabel[k] }}</option>
-            }
-          </select>
-        </label>
-        <label class="flex items-center gap-2 sm:pt-6">
-          <input
-            type="checkbox"
-            class="h-4 w-4 rounded border-line text-brand focus:ring-brand"
-            [ngModel]="includeDone()"
-            (ngModelChange)="includeDone.set($event)"
-            name="incluir-hechos" />
-          <span class="text-sm text-ink-muted">Incluir los hechos</span>
-        </label>
-      </div>
-    </section>
-  </details>
+        <select
+          class="field"
+          [ngModel]="owner()"
+          (ngModelChange)="owner.set($event)"
+          name="responsable">
+          <option value="todos">Todos</option>
+          <option value="mios">Solo míos</option>
+          <option value="nadie">Sin asignar</option>
+          @for (person of people(); track person.id) {
+            <option [value]="person.id">{{ person.name }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Origen</span
+        >
+        <select
+          class="field"
+          [ngModel]="origin()"
+          (ngModelChange)="origin.set($event)"
+          name="origen">
+          <option value="todos">Todos</option>
+          @for (option of origins; track option) {
+            <option [value]="option">{{ originLabel[option] }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Prioridad</span
+        >
+        <select
+          class="field"
+          [ngModel]="priority()"
+          (ngModelChange)="priority.set($event)"
+          name="filtro-prioridad">
+          <option value="todas">Todas</option>
+          @for (option of priorities; track option) {
+            <option [value]="option">{{ priorityLabel[option] }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Empresa</span
+        >
+        <select
+          class="field"
+          [ngModel]="company()"
+          (ngModelChange)="company.set($event)"
+          name="filtro-empresa">
+          <option value="todas">Todas</option>
+          @for (empresa of empresas; track empresa) {
+            <option [value]="empresa">{{ empresa }}</option>
+          }
+          <option value="ninguna">Sin empresa</option>
+        </select>
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Quién lo pide</span
+        >
+        <select
+          class="field"
+          [ngModel]="sender()"
+          (ngModelChange)="sender.set($event)"
+          name="filtro-remitente">
+          <option value="todos">Todos</option>
+          @for (k of senders; track k) {
+            <option [value]="k">{{ senderLabel[k] }}</option>
+          }
+        </select>
+      </label>
+      <label class="flex items-center gap-2 self-end pb-2.5">
+        <input
+          type="checkbox"
+          class="h-4 w-4 rounded border-line text-brand focus:ring-brand"
+          [ngModel]="includeDone()"
+          (ngModelChange)="includeDone.set($event)"
+          name="incluir-hechos" />
+        <span class="text-sm text-ink-muted">Incluir los hechos</span>
+      </label>
+    </div>
+  </section>
 }
 
+<!-- Resumen del filtro actual como accesos: un clic aplica ese recorte. -->
+<div class="mt-4 flex flex-wrap gap-2">
+  <button
+    type="button"
+    class="btn h-8 gap-1.5 px-3 text-xs"
+    [class.bg-brand]="foco() === 'vencidos'"
+    [class.text-white]="foco() === 'vencidos'"
+    [class.border-brand]="foco() === 'vencidos'"
+    [attr.aria-pressed]="foco() === 'vencidos'"
+    (click)="enfocar('vencidos')">
+    <span class="tabular-nums">{{ vencidos() }}</span>
+    vencidos
+  </button>
+  <button
+    type="button"
+    class="btn h-8 gap-1.5 px-3 text-xs"
+    [class.bg-brand]="foco() === 'hoy'"
+    [class.text-white]="foco() === 'hoy'"
+    [class.border-brand]="foco() === 'hoy'"
+    [attr.aria-pressed]="foco() === 'hoy'"
+    (click)="enfocar('hoy')">
+    <span class="tabular-nums">{{ deHoy() }}</span>
+    de hoy
+  </button>
+  @if (vista() === "negocio") {
+    <button
+      type="button"
+      class="btn h-8 gap-1.5 px-3 text-xs"
+      [class.bg-brand]="owner() === 'nadie'"
+      [class.text-white]="owner() === 'nadie'"
+      [class.border-brand]="owner() === 'nadie'"
+      [attr.aria-pressed]="owner() === 'nadie'"
+      (click)="owner.set(owner() === 'nadie' ? 'todos' : 'nadie')">
+      <pt-icon name="equipo" class="h-3.5 w-3.5" />
+      <span class="tabular-nums">{{ sinAsignar() }}</span>
+      sin responsable
+    </button>
+    @if (porIdentificar() > 0 || sender() === "por_identificar") {
+      <button
+        type="button"
+        class="btn h-8 gap-1.5 px-3 text-xs"
+        [class]="
+          sender() === 'por_identificar'
+            ? 'border-amber-400 bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200'
+            : 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200'
+        "
+        [attr.aria-pressed]="sender() === 'por_identificar'"
+        (click)="
+          sender.set(
+            sender() === 'por_identificar' ? 'todos' : 'por_identificar'
+          )
+        ">
+        <pt-icon name="alerta" class="h-3.5 w-3.5" />
+        <span class="tabular-nums">{{ porIdentificar() }}</span>
+        por identificar
+      </button>
+    }
+  }
+</div>
+
 @if (groups().length > 0 || sinFecha().length > 0) {
+  <!-- En escritorio la pagina no hace scroll: cada columna lo hace por su cuenta. -->
   <div
-    class="mt-4 grid items-start gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] md:gap-6">
+    class="mt-4 grid items-start gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] md:gap-6 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)] lg:items-stretch">
     <!-- Con fecha: para trabajar, por cuándo vence -->
-    <div
-      class="min-w-0 space-y-6 md:max-h-[calc(100vh-11rem)] md:overflow-y-auto md:pr-1">
+    <div class="min-w-0 space-y-6 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
       @for (group of groups(); track group.bucket) {
         <section>
           <h2
@@ -298,8 +348,7 @@
     </div>
 
     <!-- Sin fecha: lo más reciente primero, hasta que se le ponga entrega -->
-    <section
-      class="min-w-0 md:max-h-[calc(100vh-11rem)] md:overflow-y-auto md:pr-1">
+    <section class="min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
       <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
         Sin fecha de entrega
         <span class="chip bg-surface-muted text-ink-muted">{{
@@ -328,6 +377,12 @@
   <div class="card mt-4">
     <pt-empty-state
       title="Nada por aquí"
-      hint="Ningún pendiente cumple con los filtros. Prueba a limpiarlos." />
+      hint="Ningún pendiente cumple con los filtros.">
+      @if (filtrosActivos() > 0) {
+        <button type="button" class="btn" (click)="clearFilters()">
+          Limpiar filtros
+        </button>
+      }
+    </pt-empty-state>
   </div>
 }

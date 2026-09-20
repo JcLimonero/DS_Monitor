@@ -1,5 +1,19 @@
 <pt-page-header title="Equipo" [subtitle]="subtitle()" />
 
+<!-- Lo que nadie tiene a su nombre va primero: es lo que hay que repartir. -->
+@if (unassigned().length > 0) {
+  <a
+    routerLink="/pendientes"
+    [queryParams]="{ owner: 'nadie' }"
+    class="card card-pad mb-4 flex items-center justify-between gap-3 border-amber-300 transition hover:border-amber-400 dark:border-amber-500/40">
+    <span>
+      <span class="block text-sm font-semibold text-ink">Sin asignar</span>
+      <span class="block text-xs text-ink-muted">{{ unassignedHint() }}</span>
+    </span>
+    <span class="shrink-0 text-sm text-brand">Ver en Pendientes →</span>
+  </a>
+}
+
 @if (loads().length > 0) {
   <div class="space-y-3">
     @for (load of loads(); track load.person.id) {
@@ -21,6 +35,30 @@
             <span class="block text-xs text-ink-muted">{{
               load.person.role ?? "Sin rol"
             }}</span>
+            <!-- En celular las cifras van bajo el nombre, en vez de esconderse. -->
+            <span
+              class="mt-1 flex gap-3 text-xs tabular-nums text-ink-subtle sm:hidden">
+              <span
+                ><span class="font-semibold text-ink">{{ load.open }}</span>
+                abiertos</span
+              >
+              <span
+                ><span
+                  class="font-semibold"
+                  [class]="load.overdue > 0 ? 'text-danger' : 'text-ink'"
+                  >{{ load.overdue }}</span
+                >
+                vencidos</span
+              >
+              <span
+                ><span
+                  class="font-semibold"
+                  [class]="load.blocked > 0 ? 'text-warn' : 'text-ink'"
+                  >{{ load.blocked }}</span
+                >
+                bloqueados</span
+              >
+            </span>
             <span
               class="mt-2 block h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-surface-muted">
               <span
@@ -85,10 +123,16 @@
                   ligaOcupada() === load.person.id || !load.person.email
                 "
                 (click)="mandarLiga(load.person.id)">
-                Mandar por correo
+                {{
+                  ligaVigente(load.person.id)
+                    ? "Liga vigente · reenviar"
+                    : "Mandar por correo"
+                }}
               </button>
               @if (ligaMensaje()[load.person.id]; as m) {
-                <span class="text-ink">{{ m }}</span>
+                <span [class]="m.error ? 'text-danger' : 'text-ink'">{{
+                  m.texto
+                }}</span>
               }
             </div>
             @for (task of openTasksOf(load.person.id); track task.id) {
@@ -107,25 +151,16 @@
   <div class="card">
     <pt-empty-state
       icon="equipo"
-      title="Sin pendientes asignados"
-      hint="Ninguna fuente devolvió pendientes con responsable." />
+      title="Todavía no hay equipo"
+      hint="Captura a las personas del equipo y aquí verás su carga, sus pendientes y su liga personal.">
+      <a
+        class="btn btn-primary"
+        routerLink="/integraciones"
+        [queryParams]="{ tab: 'equipo' }"
+        >Capturar equipo</a
+      >
+    </pt-empty-state>
   </div>
-}
-
-@if (unassigned().length > 0) {
-  <a
-    routerLink="/pendientes"
-    [queryParams]="{ owner: 'nadie' }"
-    class="card card-pad mt-4 flex items-center justify-between gap-3 transition hover:border-brand/40">
-    <span>
-      <span class="block text-sm font-semibold text-ink">Sin asignar</span>
-      <span class="block text-xs text-ink-muted">
-        {{ unassigned().length }} pendientes abiertos que nadie tiene a su
-        nombre
-      </span>
-    </span>
-    <span class="text-sm text-brand">Ver en Pendientes →</span>
-  </a>
 }
 
 <p class="mt-4 text-xs text-ink-muted">

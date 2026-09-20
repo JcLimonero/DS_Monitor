@@ -8,3 +8,15 @@
 export function plural(count: number, singular: string, many?: string): string {
   return `${count} ${count === 1 ? singular : (many ?? `${singular}s`)}`;
 }
+
+/**
+ * Prefijos de respuesta y reenvío que el correo va acumulando en el asunto
+ * ("RE: RE: Fwd: ..."). Se quitan solo al mostrar; lo guardado no se toca.
+ */
+const PREFIJOS_CORREO = /^(?:\s*(?:re|rv|fw|fwd|enc)\s*:)+\s*/i;
+
+/** "RE: RV: Fwd: Corte de mayo" -> "Corte de mayo". */
+export function sinPrefijosDeCorreo(texto: string): string {
+  const limpio = texto.replace(PREFIJOS_CORREO, '').trim();
+  return limpio || texto;
+}

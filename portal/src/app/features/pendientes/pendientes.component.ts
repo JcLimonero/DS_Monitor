@@ -1,9 +1,12 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
+  effect,
   inject,
-  signal
+  signal,
+  viewChild
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
@@ -24,7 +27,8 @@ import { LocalTaskStore } from '../../core/sources/local/local-task.store';
 import {
   groupByDue,
   openTasks,
-  overdueTasks
+  overdueTasks,
+  tasksDueToday
 } from '../../core/state/portal.selectors';
 import { PortalStore } from '../../core/state/portal.store';
 import { DUE_BUCKET_LABEL, DUE_BUCKET_ORDER } from '../../core/util/date.util';
@@ -36,6 +40,9 @@ import { TaskCardComponent } from '../../ui/task-card.component';
 
 /** Quien filtra la lista: yo, alguien del equipo, o todos. */
 type OwnerFilter = 'todos' | 'mios' | string;
+
+/** Recorte rapido desde los accesos de arriba: vencidos o de hoy. */
+type Foco = 'todos' | 'vencidos' | 'hoy';
 
 const ORIGIN_LABEL: Record<TaskOrigin, string> = {
   odoo: 'Odoo',
@@ -55,7 +62,11 @@ const ORIGIN_LABEL: Record<TaskOrigin, string> = {
     PageHeaderComponent,
     TaskCardComponent
   ],
-  templateUrl: './pendientes.component.html'
+  templateUrl: './pendientes.component.html',
+  // En escritorio la pagina ocupa el alto disponible (cabecera del shell de
+  // 4rem con su borde, mas 1.5rem de relleno arriba y abajo) y solo las
+  // columnas hacen scroll.
+  host: { class: 'block lg:flex lg:h-[calc(100dvh-7rem-1px)] lg:flex-col' }
 })
 export class PendientesComponent {
   private readonly store = inject(PortalStore);
@@ -63,7 +74,17 @@ export class PendientesComponent {
   private readonly avisos = inject(AvisosService);
   private readonly sesion = inject(SesionService);
 
+  /** El campo de titulo del alta; recibe el foco al abrir el formulario. */
+  private readonly tituloNuevo =
+    viewChild<ElementRef<HTMLInputElement>>('tituloNuevo');
+
   constructor() {
+    effect(() => {
+      const campo = this.tituloNuevo();
+      if (this.mostrarAlta() && campo) {
+        campo.nativeElement.focus();
+      }
+    });
     // Llegar desde un aviso (o desde una liga en el correo) abre ese
     // pendiente aunque este hecho o no pase los filtros.
     const params = inject(ActivatedRoute).snapshot.queryParamMap;
@@ -114,11 +135,13 @@ export class PendientesComponent {
   );
   readonly empresas = EMPRESAS;
   readonly includeDone = signal(false);
+  /** Vencidos o de hoy, desde los accesos; "todos" no recorta. */
+  readonly foco = signal<Foco>('todos');
   /** Del negocio (lo normal) o personales (lo que no es del negocio). */
   readonly vista = signal<'negocio' | 'personales'>('negocio');
   /** El formulario de alta se abre a pedido: la lista es lo primero. */
   readonly mostrarAlta = signal(false);
-  /** Los filtros se pliegan para que las dos columnas quepan en pantalla. */
+  /** En celular los filtros se pliegan detras del boton "Filtros". */
   readonly filtrosAbiertos = signal(false);
   readonly filtrosActivos = computed(
     () =>
@@ -129,7 +152,8 @@ export class PendientesComponent {
         this.priority() !== 'todas',
         this.company() !== 'todas',
         this.sender() !== 'todos',
-        this.includeDone()
+        this.includeDone(),
+        this.foco() !== 'todos'
       ].filter(Boolean).length
   );
   readonly sinAsignar = computed(
@@ -160,7 +184,8 @@ export class PendientesComponent {
       .sort((a, b) => a.name.localeCompare(b.name));
   });
 
-  private readonly filtered = computed<TaskItem[]>(() => {
+  /** Lo que pasa los filtros, antes del recorte de los accesos. */
+  private readonly filtradoSinFoco = computed<TaskItem[]>(() => {
     const term = this.search().trim().toLowerCase();
     const owner = this.owner();
     const origin = this.origin();
@@ -231,6 +256,27 @@ export class PendientesComponent {
       return true;
     });
   });
+
+  private readonly filtered = computed<TaskItem[]>(() => {
+    const foco = this.foco();
+    const base = this.filtradoSinFoco();
+    return foco === 'vencidos'
+      ? overdueTasks(base)
+      : foco === 'hoy'
+        ? tasksDueToday(base)
+        : base;
+  });
+
+  /** Cifras de los accesos: cuentan sobre el filtro actual, sin el recorte. */
+  readonly vencidos = computed(
+    () => overdueTasks(this.filtradoSinFoco()).length
+  );
+  readonly deHoy = computed(() => tasksDueToday(this.filtradoSinFoco()).length);
+
+  /** Un acceso activo se vuelve a pulsar para quitarlo. */
+  enfocar(foco: Foco): void {
+    this.foco.set(this.foco() === foco ? 'todos' : foco);
+  }
 
   /** Columna izquierda: lo que tiene fecha, agrupado por cuándo vence. */
   readonly groups = computed(() =>
@@ -312,6 +358,7 @@ export class PendientesComponent {
     this.company.set('todas');
     this.sender.set('todos');
     this.includeDone.set(false);
+    this.foco.set('todos');
   }
 }
 
