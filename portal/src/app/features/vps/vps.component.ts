@@ -38,6 +38,12 @@ export function claseUso(pct: number | undefined): string {
   return pct >= 90 ? 'bg-danger' : pct >= 75 ? 'bg-warn' : 'bg-ok';
 }
 
+/**
+ * Umbral de aviso de cada medidor, en por ciento. Son los mismos que aplica
+ * el puente (disco pasa a critico en 95); la barra los marca con una raya.
+ */
+export const UMBRAL_AVISO = { cpu: 85, mem: 90, disk: 85 } as const;
+
 export function bytesPorSegundo(bps: number | undefined): string {
   if (bps === undefined) {
     return '—';
@@ -90,6 +96,7 @@ export class VpsComponent {
   readonly sinConfigurar = this.servicio.sinConfigurar;
   readonly abierto = signal<string | undefined>(undefined);
   readonly etiqueta = VPS_HEALTH_LABEL;
+  readonly umbral = UMBRAL_AVISO;
 
   readonly ordenados = computed(() => {
     const peso: Record<VpsHealth, number> = {
@@ -107,6 +114,9 @@ export class VpsComponent {
     const lista = this.lista();
     if (!lista) {
       return 'Cargando…';
+    }
+    if (lista.length === 0) {
+      return 'Sin servidores capturados';
     }
     const portales = this.portales.lista() ?? [];
     const portalesMal = this.portales.mal().length;

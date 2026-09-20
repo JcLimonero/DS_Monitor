@@ -1,9 +1,14 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  afterNextRender,
+  computed,
   inject,
-  signal
+  signal,
+  viewChildren
 } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CorreoConfigComponent } from '../configuracion/correo-config.component';
 import { DominiosConfigComponent } from '../configuracion/dominios-config.component';
@@ -108,23 +113,48 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
     LicenciasConfigComponent,
     RespaldoComponent,
     ServidoresConfigComponent,
+    FormsModule,
     PageHeaderComponent
   ],
   templateUrl: './integraciones.component.html'
 })
 export class IntegracionesComponent {
   private readonly router = inject(Router);
+  /** Los botones de la franja, para traer el activo a la vista. */
+  private readonly botones = viewChildren<ElementRef<HTMLButtonElement>>('tab');
   readonly pestanas = PESTANAS;
   readonly activa = signal<Pestana>(
     (inject(ActivatedRoute).snapshot.queryParamMap.get('tab') as Pestana) ??
       'correo'
   );
 
+  /** Lo que dice la pestaña activa, como subtítulo de la página. */
+  readonly detalle = computed(
+    () => PESTANAS.find((p) => p.id === this.activa())?.detalle ?? ''
+  );
+
+  constructor() {
+    afterNextRender(() => this.mostrarActiva());
+  }
+
   elegir(id: Pestana): void {
     this.activa.set(id);
     void this.router.navigate([], {
       queryParams: { tab: id },
       replaceUrl: true
+    });
+    this.mostrarActiva();
+  }
+
+  /** Con once pestañas, en angosto la activa puede quedar fuera de la franja. */
+  private mostrarActiva(): void {
+    const id = this.activa();
+    const boton = this.botones().find(
+      (b) => b.nativeElement.dataset['tab'] === id
+    );
+    boton?.nativeElement.scrollIntoView({
+      inline: 'center',
+      block: 'nearest'
     });
   }
 }

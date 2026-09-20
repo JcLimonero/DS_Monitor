@@ -31,17 +31,13 @@ const CLASE_ESTADO: Record<Estado, string> = {
   atrasada: 'bg-surface-muted text-ink-muted'
 };
 
-const PUNTO_ESTADO: Record<Estado, string> = {
-  ok: 'bg-ok',
-  aviso: 'bg-amber-500',
-  error: 'bg-danger',
-  atrasada: 'bg-ink-subtle'
-};
+/** Cuanto dura la pregunta "¿Olvidar?" antes de volver al boton normal. */
+const CONFIRMACION_MS = 5_000;
 
 /**
- * La última corrida de cada integración: qué corrió, cuándo, cómo le fue y
+ * La última corrida de cada servicio: qué corrió, cuándo, cómo le fue y
  * cuánto tardó. Lo manda cada aplicación con su token (Integraciones → API
- * de ingesta). Las que están mal van primero; el detalle se abre por renglón.
+ * de ingesta). Los que están mal van primero; el detalle se abre por renglón.
  */
 @Component({
   selector: 'pt-ejecuciones',
@@ -64,6 +60,9 @@ export class EjecucionesComponent {
   readonly error = this.servicio.error;
   readonly filtro = signal<Estado | 'todas'>('todas');
   readonly abierta = signal<string | undefined>(undefined);
+  /** Clave del servicio que espera el "Sí / No" de Olvidar. */
+  readonly confirmando = signal<string | undefined>(undefined);
+  private temporizador: ReturnType<typeof setTimeout> | undefined;
   readonly etiqueta = ESTADO_EJECUCION_LABEL;
   readonly estados: Estado[] = ['error', 'atrasada', 'aviso', 'ok'];
 
@@ -87,13 +86,18 @@ export class EjecucionesComponent {
     );
   });
 
+  /** La columna Duración solo se enseña si algun servicio la reporta. */
+  readonly conDuracion = computed(() =>
+    this.visibles().some((e) => e.duracionMs !== undefined)
+  );
+
   readonly subtitulo = computed(() => {
     const lista = this.ejecuciones();
     if (!lista) {
       return 'Cargando…';
     }
     const c = this.conteo();
-    const partes = [plural(lista.length, 'integración', 'integraciones')];
+    const partes = [plural(lista.length, 'servicio')];
     if (c.error > 0) {
       partes.push(`${c.error} con error`);
     }
@@ -116,14 +120,24 @@ export class EjecucionesComponent {
     this.abierta.set(this.abierta() === clave ? undefined : clave);
   }
 
-  borrar(e: Ejecucion): void {
-    if (
-      !confirm(
-        `¿Quitar "${e.nombre}" de la lista? Si vuelve a correr, reaparece.`
-      )
-    ) {
-      return;
-    }
+  /** Primer clic en Olvidar: pregunta en linea y se arrepiente sola a los 5 s. */
+  pedirOlvidar(e: Ejecucion): void {
+    clearTimeout(this.temporizador);
+    this.confirmando.set(e.clave);
+    this.temporizador = setTimeout(
+      () => this.confirmando.set(undefined),
+      CONFIRMACION_MS
+    );
+  }
+
+  cancelarOlvidar(): void {
+    clearTimeout(this.temporizador);
+    this.confirmando.set(undefined);
+  }
+
+  /** Borra el registro; si el servicio vuelve a correr, reaparece. */
+  olvidar(e: Ejecucion): void {
+    this.cancelarOlvidar();
     this.servicio.borrar(e.clave);
   }
 
@@ -131,8 +145,10 @@ export class EjecucionesComponent {
     return CLASE_ESTADO[e.estado];
   }
 
-  punto(e: Ejecucion): string {
-    return PUNTO_ESTADO[e.estado];
+  /** "Falló · 3" cuando lleva varios errores seguidos; si no, solo el estado. */
+  textoEstado(e: Ejecucion): string {
+    const base = ESTADO_EJECUCION_LABEL[e.estado];
+    return e.erroresSeguidos > 1 ? `${base} · ${e.erroresSeguidos}` : base;
   }
 
   duracion(e: Ejecucion): string {
