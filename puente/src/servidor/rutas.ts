@@ -31,6 +31,8 @@ import {
 } from '../datos/tablas.js';
 import {
   comoFuente,
+  fuentesCombinadas,
+  sembrarDesdeEntorno,
   sinSecretos,
   validarServidor,
   type ServidorVps
@@ -1069,10 +1071,10 @@ export function construirRutas(
   // Los Prometheus que se leen: los capturados en Integraciones → Servidores
   // mas, por compatibilidad, los de PROMETHEUS_URL en el entorno.
   const fuentesVps = (): ConfiguracionServidores => ({
-    fuentes: [
-      ...datos.servidores.leer().map(comoFuente),
-      ...(cfg().prometheus?.fuentes ?? [])
-    ]
+    fuentes: fuentesCombinadas(
+      datos.servidores.leer(),
+      cfg().prometheus?.fuentes ?? []
+    )
   });
   const hayServidores = () => fuentesVps().fuentes.length > 0;
 
@@ -1099,9 +1101,15 @@ export function construirRutas(
 
   // --- Servidores: la lista, cada uno con su Prometheus ---
 
-  router.get('/vps/servidores', async () =>
-    datos.servidores.leer().map(sinSecretos)
-  );
+  // Si la lista esta vacia pero hay PROMETHEUS_URL en el entorno, esos
+  // servidores pasan a la lista para que se vean y se puedan editar.
+  router.get('/vps/servidores', async () => {
+    await sembrarDesdeEntorno(
+      datos.servidores,
+      cfg().prometheus?.fuentes ?? []
+    );
+    return datos.servidores.leer().map(sinSecretos);
+  });
 
   router.post('/vps/servidores/guardar', async (contexto) => {
     exigirAdmin(contexto, cfg(), acceso);
