@@ -30,7 +30,8 @@ import { plural } from '../../core/util/text.util';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
-import { DayPipe, RelativePipe, TimePipe } from '../../ui/portal.pipes';
+import { formatDay, formatTime } from '../../core/util/date.util';
+import { RelativePipe } from '../../ui/portal.pipes';
 
 const CLASE_ESTADO: Record<DeploymentState, string> = {
   listo:
@@ -43,6 +44,30 @@ const CLASE_ESTADO: Record<DeploymentState, string> = {
   cancelado:
     'bg-slate-200 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400'
 };
+
+/** A partir de cuantos despliegues vale la pena enseñar los filtros. */
+const MINIMO_PARA_FILTRAR = 5;
+
+/**
+ * La primera linea de un mensaje de commit, sin los trailers que agregan las
+ * herramientas (Co-Authored-By, Signed-off-by…). Es lo que cabe en un renglon.
+ */
+export function primeraLinea(mensaje: string): string {
+  const linea = mensaje
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.length > 0 && !/^[A-Za-z-]+:\s/.test(l));
+  return linea ?? mensaje.trim();
+}
+
+/** El mensaje completo, sin trailers, para cuando se abre el renglon. */
+export function mensajeCompleto(mensaje: string): string {
+  return mensaje
+    .split('\n')
+    .filter((l) => !/^(Co-Authored-By|Signed-off-by|Reviewed-by):\s/i.test(l))
+    .join('\n')
+    .trim();
+}
 
 const CLASE_PLATAFORMA: Record<PlatformIndicator, string> = {
   operativo: 'text-ok',
@@ -58,15 +83,13 @@ const CLASE_PLATAFORMA: Record<PlatformIndicator, string> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     IaDiagnosticosComponent,
-    DayPipe,
     EmptyStateComponent,
     FormsModule,
     IconComponent,
     PageHeaderComponent,
     PortalChipComponent,
     RelativePipe,
-    RouterLink,
-    TimePipe
+    RouterLink
   ],
   templateUrl: './despliegues.component.html'
 })
@@ -83,6 +106,29 @@ export class DesplieguesComponent {
   /** Filtros de la lista. Vacio quiere decir "todos". */
   readonly proyecto = signal<'todos' | string>('todos');
   readonly soloProblemas = signal(false);
+  /** Renglon con el mensaje de commit abierto completo. */
+  readonly abierto = signal<string | undefined>(undefined);
+
+  /** Con pocos despliegues los filtros estorban mas de lo que ayudan. */
+  readonly conFiltros = computed(
+    () => this.store.deployments().length > MINIMO_PARA_FILTRAR
+  );
+
+  readonly hayVercel = computed(() => this.store.deployments().length > 0);
+  readonly hayCoolify = computed(
+    () => (this.portales.lista() ?? []).length > 0
+  );
+  /** Coolify ya contesto (con datos, vacio o sin configurar) o no hay puente. */
+  readonly coolifyResuelto = computed(
+    () =>
+      !this.disponible ||
+      this.portales.sinConfigurar() ||
+      this.portales.lista() !== undefined
+  );
+  /** Ni Vercel ni Coolify tienen nada: un solo estado vacio para las dos. */
+  readonly sinFuentes = computed(
+    () => !this.hayVercel() && !this.hayCoolify() && this.coolifyResuelto()
+  );
 
   readonly proyectos = computed(() =>
     [...new Set(this.store.deployments().map((d) => d.project))].sort()
@@ -146,5 +192,32 @@ export class DesplieguesComponent {
   limpiarFiltros(): void {
     this.proyecto.set('todos');
     this.soloProblemas.set(false);
+  }
+
+  /** Fecha y hora completas para el `title` de la fecha relativa. */
+  fechaCompleta(despliegue: Deployment): string {
+    return `${formatDay(despliegue.createdAt)} ${formatTime(despliegue.createdAt)}`;
+  }
+
+  resumen(despliegue: Deployment): string {
+    return primeraLinea(despliegue.commitMessage ?? '');
+  }
+
+  completo(despliegue: Deployment): string {
+    return mensajeCompleto(despliegue.commitMessage ?? '');
+  }
+
+  /** Si el mensaje tiene mas que la primera linea, el renglon se puede abrir. */
+  tieneMas(despliegue: Deployment): boolean {
+    return this.completo(despliegue) !== this.resumen(despliegue);
+  }
+
+  alternar(despliegue: Deployment): void {
+    if (!this.tieneMas(despliegue)) {
+      return;
+    }
+    this.abierto.set(
+      this.abierto() === despliegue.id ? undefined : despliegue.id
+    );
   }
 }

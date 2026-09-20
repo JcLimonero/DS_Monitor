@@ -1,4 +1,15 @@
-<pt-page-header title="Servidores" [subtitle]="subtitulo()" />
+<pt-page-header title="Servidores" [subtitle]="subtitulo()">
+  @if (disponible && !sinConfigurar()) {
+    <button
+      type="button"
+      class="btn px-2"
+      title="Volver a pedir"
+      aria-label="Volver a pedir"
+      (click)="cargar()">
+      <pt-icon name="refrescar" class="h-4 w-4" />
+    </button>
+  }
+</pt-page-header>
 
 @if (!disponible) {
   <div class="card">
@@ -12,33 +23,19 @@
     <pt-empty-state
       icon="monitoreo"
       title="Prometheus sin conectar"
-      hint="Agrega cada VPS (etiqueta, URL de su Prometheus y credenciales) en Integraciones → Servidores. La guía para instalar Prometheus en cada VPS está en el repositorio: infra/vps-monitoreo." />
-    <p class="pb-4 text-center text-xs">
+      hint="Agrega cada VPS (etiqueta, URL de su Prometheus y credenciales) en Integraciones → Servidores. La guía para instalar Prometheus en cada VPS está en el repositorio: infra/vps-monitoreo.">
       <a
-        class="text-brand hover:underline"
+        class="btn btn-primary"
         routerLink="/integraciones"
         [queryParams]="{ tab: 'servidores' }"
-        >Ir a Integraciones →</a
+        >Ir a Integraciones</a
       >
-    </p>
+    </pt-empty-state>
   </div>
 } @else {
-  <div class="mb-4 flex items-center justify-end">
-    @if (error(); as e) {
-      <p
-        class="mr-3 rounded-lg bg-rose-50 px-3 py-1.5 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200">
-        {{ e }}
-      </p>
-    }
-    <button
-      type="button"
-      class="btn px-2 py-1.5"
-      title="Volver a pedir"
-      aria-label="Volver a pedir"
-      (click)="cargar()">
-      <pt-icon name="refrescar" class="h-4 w-4" />
-    </button>
-  </div>
+  @if (error(); as e) {
+    <p class="banner banner-danger mb-4">{{ e }}</p>
+  }
 
   @if (ordenados().length > 0) {
     <div class="grid gap-4 lg:grid-cols-2">
@@ -94,11 +91,16 @@
                 >
               </p>
               <div
-                class="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted">
+                class="relative mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted"
+                [title]="'aviso a partir de ' + umbral.cpu + ' %'">
                 <div
                   class="h-full rounded-full"
                   [class]="claseUso(v.cpuPct)"
                   [style.width.%]="v.cpuPct ?? 0"></div>
+                <!-- Raya del umbral de aviso -->
+                <span
+                  class="absolute inset-y-0 w-px bg-ink-subtle"
+                  [style.left.%]="umbral.cpu"></span>
               </div>
             </div>
             <div>
@@ -111,11 +113,16 @@
                 >
               </p>
               <div
-                class="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted">
+                class="relative mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted"
+                [title]="'aviso a partir de ' + umbral.mem + ' %'">
                 <div
                   class="h-full rounded-full"
                   [class]="claseUso(v.memPct)"
                   [style.width.%]="v.memPct ?? 0"></div>
+                <!-- Raya del umbral de aviso -->
+                <span
+                  class="absolute inset-y-0 w-px bg-ink-subtle"
+                  [style.left.%]="umbral.mem"></span>
               </div>
               @if (v.memTotalMb) {
                 <p class="mt-0.5 text-[11px] text-ink-subtle">
@@ -133,11 +140,16 @@
                 >
               </p>
               <div
-                class="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted">
+                class="relative mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted"
+                [title]="'aviso a partir de ' + umbral.disk + ' %'">
                 <div
                   class="h-full rounded-full"
                   [class]="claseUso(v.diskPct)"
                   [style.width.%]="v.diskPct ?? 0"></div>
+                <!-- Raya del umbral de aviso -->
+                <span
+                  class="absolute inset-y-0 w-px bg-ink-subtle"
+                  [style.left.%]="umbral.disk"></span>
               </div>
               @if (v.diskTotalGb) {
                 <p class="mt-0.5 text-[11px] text-ink-subtle">
@@ -225,8 +237,15 @@
     <div class="card">
       <pt-empty-state
         icon="monitoreo"
-        title="Prometheus no ve ningún servidor"
-        hint="Revisa que en prometheus.yml haya un job llamado node con cada VPS (node_exporter) y que Prometheus los alcance." />
+        title="Sin servidores capturados"
+        hint="Agrega cada VPS en Integraciones → Servidores. Si ya los capturaste, revisa que en prometheus.yml haya un job llamado node con cada VPS (node_exporter) y que Prometheus los alcance.">
+        <a
+          class="btn btn-primary"
+          routerLink="/integraciones"
+          [queryParams]="{ tab: 'servidores' }"
+          >Ir a Integraciones</a
+        >
+      </pt-empty-state>
     </div>
   }
 }
