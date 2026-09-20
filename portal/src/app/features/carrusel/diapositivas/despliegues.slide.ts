@@ -64,7 +64,8 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
       </div>
     }
 
-    <div class="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
+    <div
+      class="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
       <!-- Vercel: un renglon por proyecto con su ultimo estado -->
       <section class="tv-card flex min-h-0 flex-col px-5 py-4">
         <h2 class="flex shrink-0 items-baseline gap-3">

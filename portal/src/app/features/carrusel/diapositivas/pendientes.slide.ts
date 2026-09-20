@@ -52,7 +52,8 @@ interface Columna {
   imports: [DayPipe, IconComponent, TimePipe],
   host: { class: 'flex h-full flex-col' },
   template: `
-    <div class="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
+    <div
+      class="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3 lg:grid-rows-[minmax(0,1fr)] lg:gap-5">
       @for (col of columnas(); track col.id) {
         <section class="tv-card flex min-h-0 flex-col px-5 py-4">
           <h2 class="flex shrink-0 items-baseline gap-3">

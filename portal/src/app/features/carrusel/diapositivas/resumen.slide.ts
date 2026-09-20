@@ -59,7 +59,8 @@ const AVISOS = 8;
   imports: [IaResumenComponent, IconComponent, MoneyPipe, TimePipe],
   host: { class: 'flex h-full flex-col gap-5' },
   template: `
-    <div class="grid shrink-0 grid-cols-2 gap-5 xl:grid-cols-4">
+    <!-- En una tablet apaisada las cuatro cifras van en un renglon: dejan alto para lo de abajo. -->
+    <div class="grid shrink-0 grid-cols-2 gap-5 lg:grid-cols-4">
       <div class="tv-card px-6 py-5">
         <p class="tv-label">Pendientes abiertos</p>
         <p class="tv-numero mt-2" [class.text-danger]="vencidos() > 0">
@@ -108,15 +109,21 @@ const AVISOS = 8;
       </p>
     }
 
-    <div class="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3">
+    <!--
+      Las tarjetas ocupan justo el alto que queda (grid-rows minmax 0) y cada una
+      hace scroll por dentro; asi nunca se salen de la pantalla ni tapan el pie.
+    -->
+    <div
+      class="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3 lg:grid-rows-[minmax(0,1fr)]">
       @if (ia.activa()) {
-        <section class="tv-card flex min-h-0 flex-col px-6 py-5">
+        <section
+          class="tv-card flex min-h-0 flex-col overflow-y-auto px-6 py-5">
           <pt-ia-resumen [tv]="true" />
         </section>
       }
       @if (siguientes().length > 0) {
         <section
-          class="tv-card flex min-h-0 flex-col px-6 py-5"
+          class="tv-card flex min-h-0 flex-col overflow-y-auto px-6 py-5"
           [class.lg:col-span-2]="!ia.activa()">
           <h2 class="tv-label shrink-0">Lo que sigue</h2>
           <ul
@@ -148,7 +155,7 @@ const AVISOS = 8;
 
       <!-- Sin juntas se lleva el ancho que dejaron; asi no queda media pantalla vacia. -->
       <section
-        class="tv-card flex min-h-0 flex-col px-6 py-5"
+        class="tv-card flex min-h-0 flex-col overflow-y-auto px-6 py-5"
         [class]="claseAtencion()">
         <h2 class="tv-label shrink-0">Requiere atención</h2>
         @if (avisos().length > 0) {
