@@ -1,103 +1,96 @@
 <div class="mx-auto max-w-2xl">
-  <div class="flex items-end justify-between gap-3">
-    <div>
-      <h1 class="text-xl font-bold text-ink first-letter:uppercase">
-        {{ fecha }}
-      </h1>
+  <pt-page-header title="Hoy" [subtitle]="fecha">
+    <div class="flex items-center gap-3">
       <p class="text-sm text-ink-muted">
         {{ juntas().length }} {{ juntas().length === 1 ? "junta" : "juntas" }} ·
-        {{ vencidos().length }} vencidos · {{ paraHoy().length }} para hoy
+        <span
+          [class.text-danger]="vencidos().length > 0"
+          [class.font-semibold]="vencidos().length > 0">
+          {{ vencidos().length }} vencidos
+        </span>
+        · {{ paraHoy().length }} para hoy
       </p>
+      <!-- En el celular la entrada a Dictar es el boton flotante del armazon. -->
+      <a
+        routerLink="/dictado"
+        class="btn btn-primary hidden shrink-0 lg:inline-flex">
+        <pt-icon name="microfono" class="h-4 w-4" />
+        Dictar
+      </a>
     </div>
-    <a routerLink="/dictado" class="btn btn-primary shrink-0">
-      <pt-icon name="microfono" class="h-4 w-4" />
-      Dictar
-    </a>
-  </div>
+  </pt-page-header>
 
-  <div class="mt-4">
-    <pt-ia-resumen />
-  </div>
+  <pt-ia-resumen />
 
-  @if (vpsMal().length > 0) {
-    <a
-      routerLink="/vps"
-      class="mt-4 flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition hover:brightness-95 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-      <pt-icon name="monitor" class="h-4 w-4 shrink-0" />
-      <span class="min-w-0 flex-1">
-        <span class="block font-medium">
-          {{ vpsMal().length }}
-          {{ vpsMal().length === 1 ? "servidor" : "servidores" }} con atención
+  <!-- Un aviso va solo; varios se juntan en una tarjeta, cada uno con su tono. -->
+  @if (alertas().length === 1) {
+    @for (a of alertas(); track a.id) {
+      <a
+        class="banner mt-4 transition hover:brightness-95"
+        [class]="a.tono === 'danger' ? 'banner-danger' : 'banner-warn'"
+        [routerLink]="a.ruta"
+        [queryParams]="a.queryParams">
+        <pt-icon [name]="a.icono" class="h-4 w-4 shrink-0" />
+        <span class="min-w-0 flex-1">
+          <span class="block font-medium">{{ a.titulo }}</span>
+          <span class="block truncate text-xs opacity-80">{{ a.detalle }}</span>
         </span>
-        <span class="block truncate text-xs opacity-80">
-          @for (v of vpsMal(); track v.id; let last = $last) {
-            {{ v.name }}{{ v.reason ? " (" + v.reason + ")" : ""
-            }}{{ last ? "" : " · " }}
-          }
-        </span>
-      </span>
-      <span class="shrink-0 text-xs">Ver →</span>
-    </a>
-  }
-
-  @if (portalesMal().length > 0) {
-    <a
-      routerLink="/vps"
-      class="mt-4 flex items-center gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900 transition hover:brightness-95 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
-      <pt-icon name="despliegue" class="h-4 w-4 shrink-0" />
-      <span class="min-w-0 flex-1">
-        <span class="block font-medium">
-          {{ portalesMal().length }}
-          {{ portalesMal().length === 1 ? "portal" : "portales" }} de Coolify
-          sin correr bien
-        </span>
-        <span class="block truncate text-xs opacity-80">
-          @for (p of portalesMal(); track p.id; let last = $last) {
-            {{ p.name }}{{ p.server ? " (" + p.server + ")" : ""
-            }}{{ last ? "" : " · " }}
-          }
-        </span>
-      </span>
-      <span class="shrink-0 text-xs">Ver →</span>
-    </a>
-  }
-
-  @if (ejecucionesMal().length > 0) {
-    <a
-      routerLink="/ejecuciones"
-      class="mt-4 flex items-center gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900 transition hover:brightness-95 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
-      <pt-icon name="alerta" class="h-4 w-4 shrink-0" />
-      <span class="min-w-0 flex-1">
-        <span class="block font-medium">
-          {{ ejecucionesMal().length }}
-          {{ ejecucionesMal().length === 1 ? "integración" : "integraciones" }}
-          sin correr bien
-        </span>
-        <span class="block truncate text-xs opacity-80">
-          @for (e of ejecucionesMal(); track e.clave; let last = $last) {
-            {{ e.nombre }} ({{ e.estado === "error" ? "falló" : "atrasada" }}){{
-              last ? "" : " · "
-            }}
-          }
-        </span>
-      </span>
-      <span class="shrink-0 text-xs">Ver →</span>
-    </a>
-  }
-
-  <section class="card mt-4">
-    <div class="flex items-center gap-2 border-b border-line px-4 py-3">
-      <pt-icon name="agenda" class="h-4 w-4 text-brand" />
-      <h2 class="text-sm font-semibold text-ink">Juntas de hoy</h2>
-      @if (sinHomologar() > 0) {
+        <span class="shrink-0 text-xs">Ver →</span>
+      </a>
+    }
+  } @else if (alertas().length > 1) {
+    <div class="card mt-4 divide-y divide-line overflow-hidden">
+      @for (a of alertas(); track a.id) {
         <a
-          routerLink="/agenda"
-          class="ml-auto chip bg-amber-100 text-amber-800">
-          {{ sinHomologar() }} sin homologar
+          class="banner rounded-none border-0 transition hover:brightness-95"
+          [class]="a.tono === 'danger' ? 'banner-danger' : 'banner-warn'"
+          [routerLink]="a.ruta"
+          [queryParams]="a.queryParams">
+          <pt-icon [name]="a.icono" class="h-4 w-4 shrink-0" />
+          <span class="min-w-0 flex-1">
+            <span class="block font-medium">{{ a.titulo }}</span>
+            <span class="block truncate text-xs opacity-80">{{
+              a.detalle
+            }}</span>
+          </span>
+          <span class="shrink-0 text-xs">Ver →</span>
         </a>
       }
     </div>
-    @if (juntas().length > 0) {
+  }
+
+  <!-- Lo vencido va antes que las juntas: es lo que mas urge. -->
+  @if (vencidos().length > 0) {
+    <section class="mt-4">
+      <h2
+        class="mb-2 flex items-center gap-2 text-sm font-semibold text-danger">
+        <pt-icon name="alerta" class="h-4 w-4" />
+        Vencidos
+        <span class="chip bg-rose-100 text-rose-700">{{
+          vencidos().length
+        }}</span>
+      </h2>
+      <div class="space-y-2">
+        @for (t of vencidos(); track t.id) {
+          <pt-task-card [task]="t" />
+        }
+      </div>
+    </section>
+  }
+
+  @if (juntas().length > 0) {
+    <section class="card mt-4">
+      <div class="flex items-center gap-2 border-b border-line px-4 py-3">
+        <pt-icon name="agenda" class="h-4 w-4 text-brand" />
+        <h2 class="text-sm font-semibold text-ink">Juntas de hoy</h2>
+        @if (sinHomologar() > 0) {
+          <a
+            routerLink="/agenda"
+            class="ml-auto chip bg-amber-100 text-amber-800">
+            {{ sinHomologar() }} sin homologar
+          </a>
+        }
+      </div>
       <ul class="divide-y divide-line">
         @for (j of juntas(); track j.id) {
           <li class="flex items-start gap-3 px-4 py-3">
@@ -131,17 +124,28 @@
           </li>
         }
       </ul>
-    } @else {
-      <p class="px-4 py-4 text-sm text-ink-muted">
+    </section>
+  } @else {
+    <!-- Sin juntas no hace falta una tarjeta entera: una linea y ya. -->
+    <p class="mt-4 flex items-center gap-2 text-sm text-ink-muted">
+      <pt-icon name="agenda" class="h-4 w-4 shrink-0 text-ink-subtle" />
+      <span class="min-w-0 flex-1">
         Sin juntas hoy.
         @if (siguientes().length > 0) {
           La próxima: {{ siguientes()[0]!.title }} ({{
             siguientes()[0]!.start | hora
           }}).
         }
-      </p>
-    }
-  </section>
+      </span>
+      @if (sinHomologar() > 0) {
+        <a
+          routerLink="/agenda"
+          class="chip shrink-0 bg-amber-100 text-amber-800">
+          {{ sinHomologar() }} sin homologar
+        </a>
+      }
+    </p>
+  }
 
   @if (hechosAhora().length > 0) {
     <section class="mt-4">
@@ -170,24 +174,6 @@
       </h2>
       <div class="space-y-2">
         @for (t of solicitudes(); track t.id) {
-          <pt-task-card [task]="t" />
-        }
-      </div>
-    </section>
-  }
-
-  @if (vencidos().length > 0) {
-    <section class="mt-4">
-      <h2
-        class="mb-2 flex items-center gap-2 text-sm font-semibold text-danger">
-        <pt-icon name="alerta" class="h-4 w-4" />
-        Vencidos
-        <span class="chip bg-rose-100 text-rose-700">{{
-          vencidos().length
-        }}</span>
-      </h2>
-      <div class="space-y-2">
-        @for (t of vencidos(); track t.id) {
           <pt-task-card [task]="t" />
         }
       </div>
@@ -261,6 +247,7 @@
         <span class="chip bg-surface-muted text-ink-muted">{{
           proximas().length
         }}</span>
+        <!-- La leyenda de los puntos solo cabe en escritorio. -->
         <span
           class="ml-auto hidden items-center gap-3 text-[10px] uppercase tracking-wide text-ink-subtle sm:flex">
           <span class="flex items-center gap-1"
@@ -279,8 +266,9 @@
       <ul class="divide-y divide-line">
         @for (p of proximas(); track p.t.id) {
           <li class="flex items-center gap-3 px-4 py-2 text-sm">
+            <!-- En el celular no hay leyenda: el plazo en texto explica el color. -->
             <span
-              class="h-2.5 w-2.5 shrink-0 rounded-full"
+              class="hidden h-2.5 w-2.5 shrink-0 rounded-full sm:block"
               [class]="p.punto"></span>
             <span class="min-w-0 flex-1">
               <span class="block truncate text-ink">{{ p.t.title }}</span>
@@ -318,17 +306,18 @@
     </section>
   }
 
-  @if (
-    !cargando() &&
-    vencidos().length === 0 &&
-    paraHoy().length === 0 &&
-    juntas().length === 0
-  ) {
-    <p class="mt-4 text-center text-sm text-ink-muted">
+  <!-- La pagina siempre cierra con la salida a la lista completa. -->
+  <p class="mt-6 text-center text-sm text-ink-muted">
+    @if (
+      !cargando() &&
+      vencidos().length === 0 &&
+      paraHoy().length === 0 &&
+      juntas().length === 0
+    ) {
       Nada urgente hoy.
-      <a routerLink="/pendientes" class="text-brand hover:underline"
-        >Ver todos los pendientes</a
-      >.
-    </p>
-  }
+    }
+    <a routerLink="/pendientes" class="font-medium text-brand hover:underline"
+      >Ver todos los pendientes →</a
+    >
+  </p>
 </div>

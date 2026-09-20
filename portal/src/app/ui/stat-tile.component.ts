@@ -21,7 +21,9 @@ const TONE_CLASS: Record<StatTone, string> = {
     <a
       class="card flex items-start gap-2 p-3 transition hover:border-brand/40 hover:shadow-md sm:gap-3 sm:p-5"
       [routerLink]="link()">
-      <span class="hidden rounded-lg bg-surface-muted p-2 sm:block" [class]="toneClass()">
+      <span
+        class="hidden rounded-lg bg-surface-muted p-2 sm:block"
+        [class]="toneClass()">
         <pt-icon [name]="icon()" />
       </span>
       <span class="min-w-0">
@@ -30,7 +32,9 @@ const TONE_CLASS: Record<StatTone, string> = {
           [class]="toneClass()">
           {{ value() }}
         </span>
-        <span class="block text-xs font-medium text-ink sm:text-sm">{{ label() }}</span>
+        <span class="block text-xs font-medium text-ink sm:text-sm">{{
+          label()
+        }}</span>
         @if (hint()) {
           <span class="mt-0.5 block truncate text-xs text-ink-muted">{{
             hint()

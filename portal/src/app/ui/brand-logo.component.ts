@@ -32,8 +32,6 @@ export class BrandLogoComponent {
   readonly heightRem = input(2);
 
   readonly src = computed(() =>
-    this.theme.theme() === 'oscuro'
-      ? 'toro-oscuro.png'
-      : 'toro.png'
+    this.theme.theme() === 'oscuro' ? 'toro-oscuro.png' : 'toro.png'
   );
 }

@@ -1,33 +1,47 @@
-<pt-page-header
-  title="Integraciones"
-  subtitle="Todo lo que se conecta al monitor, en un solo lugar" />
+<pt-page-header title="Integraciones" [subtitle]="detalle()" />
 
 <div class="grid gap-4 lg:grid-cols-[14rem_1fr]">
+  <!-- En el celular, un select; de sm en adelante, la franja de pestañas -->
+  <label class="block sm:hidden">
+    <span class="sr-only">Pestaña</span>
+    <select
+      class="field"
+      [ngModel]="activa()"
+      (ngModelChange)="elegir($event)"
+      name="pestana">
+      @for (p of pestanas; track p.id) {
+        <option [value]="p.id">{{ p.titulo }}</option>
+      }
+    </select>
+  </label>
+
+  <!--
+    La franja se queda a la vista en pantallas anchas aunque el formulario sea
+    largo; queda bajo la barra superior del shell (4 rem).
+  -->
   <nav
-    class="flex gap-1 overflow-x-auto lg:flex-col"
+    class="hidden gap-1 overflow-x-auto border-b border-line bg-app pb-2 sm:flex lg:sticky lg:top-20 lg:z-10 lg:max-h-[calc(100vh-6rem)] lg:flex-col lg:self-start lg:overflow-y-auto lg:border-b-0 lg:pb-0"
     aria-label="Integraciones">
     @for (p of pestanas; track p.id) {
       <button
+        #tab
         type="button"
         class="shrink-0 rounded-lg px-3 py-2 text-left text-sm transition lg:shrink"
+        [attr.data-tab]="p.id"
+        [title]="p.detalle"
         [class.bg-brand]="activa() === p.id"
-        [class.text-white]="activa() === p.id"
+        [class.text-surface]="activa() === p.id"
         [class.hover:bg-surface-muted]="activa() !== p.id"
         [class.text-ink]="activa() !== p.id"
         [attr.aria-current]="activa() === p.id ? 'page' : null"
         (click)="elegir(p.id)">
+        <!-- El detalle va en el subtitulo de la pagina; aqui solo el nombre, para que las once quepan sin scroll. -->
         <span class="block font-medium">{{ p.titulo }}</span>
-        <span
-          class="hidden text-xs lg:block"
-          [class.text-white/80]="activa() === p.id"
-          [class.text-ink-muted]="activa() !== p.id">
-          {{ p.detalle }}
-        </span>
       </button>
     }
   </nav>
 
-  <div class="min-w-0 -mt-4">
+  <div class="min-w-0">
     @switch (activa()) {
       @case ("equipo") {
         <pt-equipo-config />
@@ -67,7 +81,7 @@
       }
       @case ("ingesta") {
         <pt-emisores-config
-          titulo="API de ejecuciones: la última corrida de cada integración"
+          titulo="API de ejecuciones: la última corrida de cada servicio"
           descripcion="Cada aplicación que corre (una sincronía, un barrido, un cron) manda al terminar cómo le fue a POST /ingesta/ejecuciones con su token, y en Ejecuciones se ve la última corrida de cada una."
           [tipos]="['ejecuciones']" />
         <pt-emisores-config

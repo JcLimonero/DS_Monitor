@@ -19,6 +19,7 @@ import { isOverdue } from '../../../core/util/date.util';
 import { plural } from '../../../core/util/text.util';
 import { IconComponent } from '../../../ui/icon.component';
 import { DayPipe, MoneyPipe } from '../../../ui/portal.pipes';
+import { DiapositivaConContenido } from '../carrusel.model';
 
 /** Cuantas oportunidades se alcanzan a listar por etapa. */
 const POR_ETAPA = 3;
@@ -136,8 +137,15 @@ const ACTIVIDADES = 5;
     </section>
   `
 })
-export class EmbudoSlideComponent {
+export class EmbudoSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
+
+  /** Sin oportunidades ni actividades no hay embudo que enseñar. */
+  readonly vacia = computed(
+    () =>
+      this.store.opportunities().length === 0 &&
+      this.store.activities().length === 0
+  );
 
   readonly porEtapa = POR_ETAPA;
 

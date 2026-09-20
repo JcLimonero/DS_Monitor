@@ -15,6 +15,7 @@ import { addDays } from '../../../core/util/date.util';
 import { ACCOUNT_BAR_CLASS } from '../../../ui/account-colors';
 import { IconComponent } from '../../../ui/icon.component';
 import { TimePipe } from '../../../ui/portal.pipes';
+import { DiapositivaConContenido } from '../carrusel.model';
 
 /** Cuantas juntas caben por columna sin apretar la pantalla. */
 const RENGLONES = 6;
@@ -77,7 +78,7 @@ const RENGLONES = 6;
     }
   `
 })
-export class AgendaSlideComponent {
+export class AgendaSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
 
   private readonly hoy = computed(() =>
@@ -85,6 +86,11 @@ export class AgendaSlideComponent {
   );
   private readonly manana = computed(() =>
     meetingsOn(this.store.meetings(), addDays(new Date(), 1))
+  );
+
+  /** Ni hoy ni mañana hay juntas. */
+  readonly vacia = computed(
+    () => this.hoy().length === 0 && this.manana().length === 0
   );
 
   readonly columnas = computed(() => [

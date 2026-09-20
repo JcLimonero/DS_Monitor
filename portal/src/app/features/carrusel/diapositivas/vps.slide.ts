@@ -14,6 +14,7 @@ import {
   tiempoArriba,
   VPS_HEALTH_LABEL
 } from '../../vps/vps.component';
+import { DiapositivaConContenido } from '../carrusel.model';
 
 /** Cuantas tarjetas caben en una pantalla de televisión. */
 const MAXIMO = 6;
@@ -129,10 +130,13 @@ const CLASE_ESTADO: Record<VpsHealth, string> = {
     }
   `
 })
-export class VpsSlideComponent {
+export class VpsSlideComponent implements DiapositivaConContenido {
   private readonly servicio = inject(VpsService);
 
   readonly lista = this.servicio.lista;
+  /** Ya respondio el puente y no hay servidores que enseñar. */
+  /** Vacia solo cuando ya respondio y no hay nada; cargando no cuenta. */
+  readonly vacia = computed(() => this.lista()?.length === 0);
   readonly etiqueta = VPS_HEALTH_LABEL;
   readonly ordenados = computed(() => {
     const peso: Record<VpsHealth, number> = {

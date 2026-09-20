@@ -12,6 +12,10 @@ import { IconComponent, IconName } from './icon.component';
       @if (hint()) {
         <p class="max-w-sm text-sm text-ink-muted">{{ hint() }}</p>
       }
+      <!-- Acciones (botones o ligas) que sacan del estado vacio. -->
+      <div class="mt-2 flex flex-wrap justify-center gap-2 empty:hidden">
+        <ng-content />
+      </div>
     </div>
   `
 })

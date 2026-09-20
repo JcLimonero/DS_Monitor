@@ -24,6 +24,7 @@ import { PortalChipComponent } from '../../../ui/portal-chip.component';
 import { plural } from '../../../core/util/text.util';
 import { IconComponent } from '../../../ui/icon.component';
 import { RelativePipe } from '../../../ui/portal.pipes';
+import { DiapositivaConContenido } from '../carrusel.model';
 
 const CLASE_ESTADO: Record<DeploymentState, string> = {
   listo: 'text-ok',
@@ -197,9 +198,16 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
     </div>
   `
 })
-export class DesplieguesSlideComponent {
+export class DesplieguesSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
   readonly coolify = inject(PortalesService);
+
+  /** Ni despliegues en Vercel ni portales en Coolify. */
+  readonly vacia = computed(
+    () =>
+      this.store.deployments().length === 0 &&
+      (this.coolify.lista() ?? []).length === 0
+  );
 
   /** Los portales de Coolify, lo que no corre primero. */
   readonly portales = computed(() =>

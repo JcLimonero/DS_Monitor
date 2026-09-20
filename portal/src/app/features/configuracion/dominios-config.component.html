@@ -46,7 +46,9 @@
                 type="text"
                 [name]="'dm-reg-' + $index"
                 [ngModel]="d.registrador"
-                (ngModelChange)="updateDominio($index, { registrador: $event })" />
+                (ngModelChange)="
+                  updateDominio($index, { registrador: $event })
+                " />
             </label>
             <label>
               <span class="mb-1 block text-ink-subtle">Costo</span>
@@ -80,17 +82,23 @@
               <input
                 type="checkbox"
                 [checked]="d.automatico"
-                (change)="updateDominio($index, { automatico: !d.automatico })" />
+                (change)="
+                  updateDominio($index, { automatico: !d.automatico })
+                " />
               <span>Renovación automática</span>
               <span
                 class="ml-auto font-semibold tabular-nums"
                 [class.text-rose-600]="diasPara(d.venceEn) < 0"
-                [class.text-amber-600]="diasPara(d.venceEn) >= 0 && diasPara(d.venceEn) <= 45"
+                [class.text-amber-600]="
+                  diasPara(d.venceEn) >= 0 && diasPara(d.venceEn) <= 45
+                "
                 [class.text-emerald-600]="diasPara(d.venceEn) > 45">
                 {{
                   d.venceEn
                     ? diasPara(d.venceEn) < 0
-                      ? "vencido hace " + -diasPara(d.venceEn) + (diasPara(d.venceEn) === -1 ? " día" : " días")
+                      ? "vencido hace " +
+                        -diasPara(d.venceEn) +
+                        (diasPara(d.venceEn) === -1 ? " día" : " días")
                       : diasPara(d.venceEn) + " días"
                     : ""
                 }}
@@ -99,7 +107,8 @@
           </div>
         </div>
       }
-      <div class="rounded-lg border border-dashed border-line bg-surface-muted p-3">
+      <div
+        class="rounded-lg border border-dashed border-line bg-surface-muted p-3">
         <p class="text-xs font-medium text-ink-muted">Nuevo dominio</p>
         <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
           <input

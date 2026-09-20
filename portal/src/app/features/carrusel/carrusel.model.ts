@@ -1,4 +1,14 @@
+import { Signal } from '@angular/core';
 import { IconName } from '../../ui/icon.component';
+
+/**
+ * Lo que una diapositiva le dice al carrusel: si no tiene nada que enseñar
+ * (`vacia`), el carrusel la deja menos tiempo en pantalla en vez de dejar
+ * un "sin datos" veinte segundos frente a la oficina.
+ */
+export interface DiapositivaConContenido {
+  readonly vacia: Signal<boolean>;
+}
 
 /** Una pantalla del carrusel. */
 export interface Diapositiva {
@@ -77,4 +87,7 @@ export const DIAPOSITIVAS: Diapositiva[] = [
 export const SEGUNDOS_POR_DEFECTO = 20;
 
 export const SEGUNDOS_MINIMO = 5;
+
+/** Cuanto se queda una diapositiva que no tiene nada que enseñar. */
+export const SEGUNDOS_VACIA = 5;
 export const SEGUNDOS_MAXIMO = 300;

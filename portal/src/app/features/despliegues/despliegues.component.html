@@ -1,29 +1,31 @@
 <pt-page-header title="Despliegues" [subtitle]="subtitle()">
-  <div class="flex flex-wrap items-center gap-2">
-    <select
-      class="field w-auto"
-      [ngModel]="proyecto()"
-      (ngModelChange)="proyecto.set($event)"
-      name="proyecto"
-      aria-label="Filtrar por proyecto">
-      <option value="todos">Todos los proyectos</option>
-      @for (nombre of proyectos(); track nombre) {
-        <option [value]="nombre">{{ nombre }}</option>
-      }
-    </select>
-    <label class="flex items-center gap-2 text-sm text-ink-muted">
-      <input
-        type="checkbox"
-        class="h-4 w-4 rounded border-line text-brand focus:ring-brand"
-        [ngModel]="soloProblemas()"
-        (ngModelChange)="soloProblemas.set($event)"
-        name="solo-problemas" />
-      Solo con problemas
-    </label>
-    <button type="button" class="btn" (click)="limpiarFiltros()">
-      Limpiar
-    </button>
-  </div>
+  @if (conFiltros()) {
+    <div class="flex flex-wrap items-center gap-2">
+      <select
+        class="field w-auto"
+        [ngModel]="proyecto()"
+        (ngModelChange)="proyecto.set($event)"
+        name="proyecto"
+        aria-label="Filtrar por proyecto">
+        <option value="todos">Todos los proyectos</option>
+        @for (nombre of proyectos(); track nombre) {
+          <option [value]="nombre">{{ nombre }}</option>
+        }
+      </select>
+      <label class="flex items-center gap-2 text-sm text-ink-muted">
+        <input
+          type="checkbox"
+          class="h-4 w-4 rounded border-line text-brand focus:ring-brand"
+          [ngModel]="soloProblemas()"
+          (ngModelChange)="soloProblemas.set($event)"
+          name="solo-problemas" />
+        Solo con problemas
+      </label>
+      <button type="button" class="btn" (click)="limpiarFiltros()">
+        Limpiar
+      </button>
+    </div>
+  }
 </pt-page-header>
 
 <div class="mb-4">
@@ -56,7 +58,18 @@
 @if (despliegues().length > 0) {
   <ul class="space-y-2">
     @for (despliegue of despliegues(); track despliegue.id) {
-      <li class="card px-4 py-3">
+      <!-- El renglon completo abre el mensaje de commit cuando hay mas lineas -->
+      <li
+        class="card px-4 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        [class.cursor-pointer]="tieneMas(despliegue)"
+        [attr.role]="tieneMas(despliegue) ? 'button' : null"
+        [attr.tabindex]="tieneMas(despliegue) ? 0 : null"
+        [attr.aria-expanded]="
+          tieneMas(despliegue) ? abierto() === despliegue.id : null
+        "
+        (click)="alternar(despliegue)"
+        (keydown.enter)="alternar(despliegue)"
+        (keydown.space)="$event.preventDefault(); alternar(despliegue)">
         <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
           <span class="chip shrink-0" [class]="claseEstado(despliegue)">
             {{ estadoLabel[despliegue.state] }}
@@ -71,10 +84,23 @@
                 {{ entornoLabel[despliegue.environment] }}
               </span>
             </p>
-            @if (despliegue.commitMessage; as mensaje) {
-              <p class="mt-0.5 truncate text-sm text-ink-muted">
-                {{ mensaje }}
-              </p>
+            @if (despliegue.commitMessage) {
+              @if (abierto() === despliegue.id) {
+                <p
+                  class="mt-0.5 whitespace-pre-wrap break-words text-sm text-ink-muted">
+                  {{ completo(despliegue) }}
+                </p>
+              } @else {
+                <p
+                  class="mt-0.5 line-clamp-1 break-words text-sm text-ink-muted"
+                  [title]="
+                    tieneMas(despliegue)
+                      ? 'Clic para ver el mensaje completo'
+                      : null
+                  ">
+                  {{ resumen(despliegue) }}
+                </p>
+              }
             }
             <p
               class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
@@ -90,9 +116,7 @@
               @if (despliegue.author; as autor) {
                 <span>{{ autor.name }}</span>
               }
-              <span>
-                {{ despliegue.createdAt | dia }}
-                {{ despliegue.createdAt | hora }} ·
+              <span [title]="fechaCompleta(despliegue)">
                 {{ despliegue.createdAt | relativo }}
               </span>
               @if (duracion(despliegue); as tiempo) {
@@ -101,7 +125,10 @@
             </p>
           </div>
 
-          <div class="flex shrink-0 items-center gap-1">
+          <!-- Las ligas no abren el renglon -->
+          <div
+            class="flex shrink-0 items-center gap-1"
+            (click)="$event.stopPropagation()">
             <a
               class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
               [href]="despliegue.url"
@@ -125,17 +152,49 @@
       </li>
     }
   </ul>
-} @else {
+} @else if (sinFuentes()) {
+  <!-- Ni Vercel ni Coolify: un solo estado vacio para las dos fuentes -->
   <div class="card">
     <pt-empty-state
       icon="despliegue"
-      title="Sin despliegues que mostrar"
-      hint="Quita los filtros o conecta Vercel en Integraciones → Servicios. Los portales de Coolify se ven abajo." />
+      title="Conecta Vercel o Coolify"
+      hint="Los despliegues de Vercel y los portales de Coolify se capturan en Integraciones → Servicios.">
+      <a
+        class="btn btn-primary"
+        routerLink="/integraciones"
+        [queryParams]="{ tab: 'servicios' }"
+        >Ir a Integraciones</a
+      >
+    </pt-empty-state>
   </div>
+} @else if (hayVercel()) {
+  <div class="card">
+    <pt-empty-state
+      icon="despliegue"
+      title="Sin despliegues con esos filtros"
+      hint="Quita los filtros para ver todos los despliegues.">
+      <button type="button" class="btn" (click)="limpiarFiltros()">
+        Limpiar filtros
+      </button>
+    </pt-empty-state>
+  </div>
+} @else {
+  <p class="text-sm text-ink-muted">
+    Sin despliegues de Vercel. Conéctalo en
+    <a
+      class="text-brand hover:underline"
+      routerLink="/integraciones"
+      [queryParams]="{ tab: 'servicios' }"
+      >Integraciones → Servicios</a
+    >.
+  </p>
 }
 
-<!-- Portales montados en Coolify: aplicaciones y servicios por servidor -->
-@if (disponible && !portales.sinConfigurar()) {
+<!--
+  Portales montados en Coolify: aplicaciones y servicios por servidor. Sin
+  ninguna fuente, el estado vacio de arriba ya lo cubre.
+-->
+@if (disponible && !sinFuentes() && !portales.sinConfigurar()) {
   <section class="mt-6">
     <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
       Portales en Coolify
@@ -217,30 +276,23 @@
         }
       </div>
     } @else if (portales.lista()) {
-      <div class="card">
-        <pt-empty-state
-          icon="despliegue"
-          title="Coolify no tiene portales"
-          hint="Cuando montes aplicaciones o servicios en Coolify aparecen aquí." />
-      </div>
+      <p class="text-sm text-ink-muted">
+        Coolify no tiene portales. Cuando montes aplicaciones o servicios
+        aparecen aquí.
+      </p>
     }
   </section>
-} @else if (disponible && portales.sinConfigurar()) {
+} @else if (disponible && !sinFuentes() && portales.sinConfigurar()) {
   <section class="mt-6">
     <h2 class="mb-2 text-sm font-semibold text-ink">Portales en Coolify</h2>
-    <div class="card">
-      <pt-empty-state
-        icon="despliegue"
-        title="Coolify sin conectar"
-        hint="Captura la URL de Coolify y un API token en Integraciones → Servicios." />
-      <p class="pb-4 text-center text-xs">
-        <a
-          class="text-brand hover:underline"
-          routerLink="/integraciones"
-          [queryParams]="{ tab: 'servicios' }"
-          >Ir a Integraciones →</a
-        >
-      </p>
-    </div>
+    <p class="text-sm text-ink-muted">
+      Coolify sin conectar. Captura su URL y un API token en
+      <a
+        class="text-brand hover:underline"
+        routerLink="/integraciones"
+        [queryParams]="{ tab: 'servicios' }"
+        >Integraciones → Servicios</a
+      >.
+    </p>
   </section>
 }

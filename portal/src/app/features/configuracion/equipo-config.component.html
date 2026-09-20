@@ -35,11 +35,15 @@
             [ngModel]="p.role"
             (ngModelChange)="updatePersona($index, { role: $event })" />
           <div class="flex items-center gap-3">
-            <label class="flex items-center gap-1.5 text-xs text-ink-muted" title="Cada día hábil a las 9 recibe un correo con sus pendientes y una liga para actualizarlos">
+            <label
+              class="flex items-center gap-1.5 text-xs text-ink-muted"
+              title="Cada día hábil a las 9 recibe un correo con sus pendientes y una liga para actualizarlos">
               <input
                 type="checkbox"
                 [checked]="p.pedirEstatus === true"
-                (change)="updatePersona($index, { pedirEstatus: !p.pedirEstatus })" />
+                (change)="
+                  updatePersona($index, { pedirEstatus: !p.pedirEstatus })
+                " />
               Pedir estatus
             </label>
             <button type="button" class="btn" (click)="removePersona($index)">
@@ -115,7 +119,9 @@
           class="field h-7 w-24 px-2 text-xs"
           type="time"
           step="3600"
-          [value]="(estatusProg().hora < 10 ? '0' : '') + estatusProg().hora + ':00'"
+          [value]="
+            (estatusProg().hora < 10 ? '0' : '') + estatusProg().hora + ':00'
+          "
           (change)="ponerHoraEstatus($any($event.target).value)" />
       </span>
       @if (estatusMensaje(); as m) {
@@ -133,7 +139,4 @@
   }
 </section>
 
-
 <pt-semana-config />
-
-

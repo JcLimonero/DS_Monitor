@@ -251,8 +251,8 @@
     }
     @if (estado.id === "fireflies") {
       <p class="mt-0.5 text-xs text-ink-muted">
-        Notas de juntas: cada junta transcrita se vuelve pendientes por
-        acuerdo, agrupados por junta y asignados a quien esté en el equipo.
+        Notas de juntas: cada junta transcrita se vuelve pendientes por acuerdo,
+        agrupados por junta y asignados a quien esté en el equipo.
       </p>
     }
     @if (estado.id === "telegram") {
@@ -330,7 +330,9 @@
                   "
                   [ngModel]="variablesDraft()[campo.variable]"
                   (ngModelChange)="updateVariable(campo.variable, $event)" />
-              } @else if (campo.variable === "OPENROUTER_MODEL" && modelosIa().length > 0) {
+              } @else if (
+                campo.variable === "OPENROUTER_MODEL" && modelosIa().length > 0
+              ) {
                 <select
                   class="field"
                   [name]="campo.variable"
@@ -339,7 +341,10 @@
                   <option value="">Por omisión (openai/gpt-oss-120b)</option>
                   @for (m of modelosIa(); track m.id) {
                     <option [value]="m.id">
-                      {{ m.id }} · ${{ m.entrada.toFixed(2) }} / ${{ m.salida.toFixed(2) }} por millón · {{ m.nota }}
+                      {{ m.id }} · ${{ m.entrada.toFixed(2) }} / ${{
+                        m.salida.toFixed(2)
+                      }}
+                      por millón · {{ m.nota }}
                     </option>
                   }
                 </select>

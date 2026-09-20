@@ -43,6 +43,9 @@ interface Aviso {
 /** Cuantas juntas se listan en "lo que sigue". */
 const SIGUIENTES = 4;
 
+/** Cuantos avisos caben en "requiere atencion" sin que se desborde. */
+const AVISOS = 8;
+
 /**
  * Portada del carrusel: las cuatro cifras del día, lo que sigue en la agenda y
  * lo que requiere atención.
@@ -97,17 +100,25 @@ const SIGUIENTES = 4;
       </div>
     </div>
 
+    <!-- Sin juntas por delante, "Lo que sigue" se reduce a una linea. -->
+    @if (siguientes().length === 0) {
+      <p class="flex shrink-0 items-center gap-3 tv-row text-ink-subtle">
+        <pt-icon name="agenda" class="h-6 w-6 shrink-0" />
+        Ya no quedan juntas por delante
+      </p>
+    }
+
     <div class="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3">
       @if (ia.activa()) {
         <section class="tv-card flex min-h-0 flex-col px-6 py-5">
           <pt-ia-resumen [tv]="true" />
         </section>
       }
-      <section
-        class="tv-card flex min-h-0 flex-col px-6 py-5"
-        [class.lg:col-span-2]="!ia.activa()">
-        <h2 class="tv-label shrink-0">Lo que sigue</h2>
-        @if (siguientes().length > 0) {
+      @if (siguientes().length > 0) {
+        <section
+          class="tv-card flex min-h-0 flex-col px-6 py-5"
+          [class.lg:col-span-2]="!ia.activa()">
+          <h2 class="tv-label shrink-0">Lo que sigue</h2>
           <ul
             class="mt-3 flex min-h-0 flex-1 flex-col justify-around overflow-y-auto">
             @for (junta of siguientes(); track junta.id) {
@@ -132,19 +143,18 @@ const SIGUIENTES = 4;
               </li>
             }
           </ul>
-        } @else {
-          <p class="mt-4 flex-1 text-2xl text-ink-subtle">
-            Ya no quedan juntas por delante
-          </p>
-        }
-      </section>
+        </section>
+      }
 
-      <section class="tv-card flex min-h-0 flex-col px-6 py-5">
+      <!-- Sin juntas se lleva el ancho que dejaron; asi no queda media pantalla vacia. -->
+      <section
+        class="tv-card flex min-h-0 flex-col px-6 py-5"
+        [class]="claseAtencion()">
         <h2 class="tv-label shrink-0">Requiere atención</h2>
         @if (avisos().length > 0) {
           <ul
             class="mt-3 flex min-h-0 flex-1 flex-col justify-around overflow-y-auto">
-            @for (aviso of avisos(); track aviso.id) {
+            @for (aviso of avisosVisibles(); track aviso.id) {
               <li class="flex items-start gap-3">
                 <pt-icon
                   name="alerta"
@@ -164,6 +174,11 @@ const SIGUIENTES = 4;
               </li>
             }
           </ul>
+          @if (avisosRestantes() > 0) {
+            <p class="mt-2 shrink-0 text-center text-lg text-ink-muted">
+              y {{ avisosRestantes() }} más
+            </p>
+          }
         } @else {
           <div
             class="flex flex-1 flex-col items-center justify-center gap-3 text-center">
@@ -216,8 +231,26 @@ export class ResumenSlideComponent {
   });
 
   /**
-   * Lo que hay que atender hoy, de lo mas grave a lo menos: una plataforma
-   * caída manda mas que un pendiente vencido, y ese manda mas que un empalme.
+   * Cuantas columnas ocupa "Requiere atencion": una si hay juntas; sin
+   * juntas se queda con las que sobran (dos con IA, tres sin ella).
+   */
+  readonly claseAtencion = computed(() => {
+    if (this.siguientes().length > 0) {
+      return '';
+    }
+    return this.ia.activa() ? 'lg:col-span-2' : 'lg:col-span-3';
+  });
+
+  /** Los que caben; los demas se resumen en "y N mas". */
+  readonly avisosVisibles = computed(() => this.avisos().slice(0, AVISOS));
+  readonly avisosRestantes = computed(() =>
+    Math.max(0, this.avisos().length - AVISOS)
+  );
+
+  /**
+   * Lo que hay que atender hoy, de lo mas grave a lo menos: primero todo lo
+   * grave (una plataforma caida, un vencido, produccion rota) y luego lo
+   * leve, cada bloque en el orden en que se junto.
    */
   readonly avisos = computed<Aviso[]>(() => {
     const avisos: Aviso[] = this.conProblema().map((destino) => ({
@@ -286,7 +319,8 @@ export class ResumenSlideComponent {
       });
     }
 
-    return avisos;
+    // sort es estable: dentro de graves y leves se respeta el orden de arriba.
+    return avisos.sort((a, b) => Number(b.grave) - Number(a.grave));
   });
 
   /** Por qué la licencia entró a la lista: el tope, la renovación, o ambos. */

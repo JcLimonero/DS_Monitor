@@ -15,13 +15,6 @@
         </h1>
       </div>
 
-      @if (store.failedSources().length > 0) {
-        <span
-          class="h-3 w-3 shrink-0 rounded-full bg-rose-400"
-          [title]="store.failedSources().length + ' fuente(s) sin conexión'"
-          aria-label="Hay fuentes sin conexión"></span>
-      }
-
       <div class="flex shrink-0 items-end gap-6">
         <p class="text-right">
           <span class="tv-label block">GDL · MTY</span>
@@ -42,36 +35,40 @@
     <div class="regla-marca"></div>
   </header>
 
-  <!-- En pantalla grande cada diapositiva cabe entera; en el celular se desplaza. -->
+  <!--
+    En pantalla grande cada diapositiva cabe entera; en el celular se desplaza.
+    El aire de abajo es para que los controles flotantes no tapen el ultimo
+    renglon. Las diapositivas con #diapositiva saben decir si estan vacias.
+  -->
   <main
-    class="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-8 sm:py-5 2xl:px-12 2xl:py-7">
+    class="min-h-0 flex-1 overflow-y-auto px-4 pb-16 pt-4 sm:px-8 sm:pt-5 2xl:px-12 2xl:pt-7">
     @switch (actual().id) {
       @case ("resumen") {
         <pt-slide-resumen />
       }
       @case ("pendientes") {
-        <pt-slide-pendientes />
+        <pt-slide-pendientes #diapositiva />
       }
       @case ("agenda") {
-        <pt-slide-agenda />
+        <pt-slide-agenda #diapositiva />
       }
       @case ("plataformas") {
-        <pt-slide-plataformas />
+        <pt-slide-plataformas #diapositiva />
       }
       @case ("vps") {
-        <pt-slide-vps />
+        <pt-slide-vps #diapositiva />
       }
       @case ("ejecuciones") {
-        <pt-slide-ejecuciones />
+        <pt-slide-ejecuciones #diapositiva />
       }
       @case ("despliegues") {
-        <pt-slide-despliegues />
+        <pt-slide-despliegues #diapositiva />
       }
       @case ("embudo") {
-        <pt-slide-embudo />
+        <pt-slide-embudo #diapositiva />
       }
       @case ("licencias") {
-        <pt-slide-licencias />
+        <pt-slide-licencias #diapositiva />
       }
       @case ("equipo") {
         <pt-slide-equipo />
@@ -80,6 +77,18 @@
   </main>
 
   <footer class="shrink-0 px-8 pb-5 2xl:px-12">
+    <!-- Las fuentes caidas, con nombre: un punto rojo no dice cual. -->
+    @if (store.failedSources().length > 0) {
+      <div class="mb-3 flex flex-wrap items-center gap-2">
+        @for (fuente of store.failedSources(); track fuente.sourceId) {
+          <span
+            class="chip bg-rose-100 px-3 py-1 text-sm text-rose-800 dark:bg-rose-500/15 dark:text-rose-200">
+            <pt-icon name="monitoreo" class="h-4 w-4" />
+            {{ fuente.label }} sin conexión
+          </span>
+        }
+      </div>
+    }
     <!-- Un segmento por pantalla; el de la pantalla actual se va llenando. -->
     <div class="flex items-center gap-2">
       @for (diapositiva of diapositivas; track diapositiva.id; let i = $index) {
