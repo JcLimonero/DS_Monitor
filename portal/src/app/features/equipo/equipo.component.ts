@@ -10,6 +10,7 @@ import { Person, TaskItem } from '../../core/models';
 import { PuenteAdminService } from '../../core/sources/gateway/puente-admin.service';
 import { TeamLoad, teamWorkload } from '../../core/state/portal.selectors';
 import { PortalStore } from '../../core/state/portal.store';
+import { formatDay, formatTime, isSameDay } from '../../core/util/date.util';
 import { plural } from '../../core/util/text.util';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
@@ -33,7 +34,20 @@ export class EquipoComponent {
   /** Persona cuyo detalle está abierto. Solo una a la vez. */
   readonly expanded = signal<string | undefined>(undefined);
   readonly ligaOcupada = signal<string | undefined>(undefined);
-  readonly ligaMensaje = signal<Record<string, string>>({});
+  readonly ligaMensaje = signal<
+    Record<string, { texto: string; error?: boolean }>
+  >({});
+  /**
+   * Las ligas generadas en esta sesión, con su vencimiento. El puente no
+   * expone las vigentes, así que se recuerdan las que salieron de aquí.
+   */
+  readonly ligas = signal<Record<string, { url: string; vence: string }>>({});
+
+  /** Hay una liga de esta persona que todavía no vence. */
+  ligaVigente(id: string): boolean {
+    const liga = this.ligas()[id];
+    return !!liga && Date.parse(liga.vence) > Date.now();
+  }
 
   /** Genera la liga de la persona y la deja en el portapapeles (WhatsApp, etc.). */
   copiarLiga(id: string): void {
@@ -42,14 +56,18 @@ export class EquipoComponent {
       next: (r) => {
         void navigator.clipboard?.writeText(r.url);
         this.ligaOcupada.set(undefined);
+        this.ligas.update((l) => ({ ...l, [id]: r }));
         this.ligaMensaje.update((m) => ({
           ...m,
-          [id]: 'Liga copiada; vale hasta las 3 pm.'
+          [id]: { texto: `Liga copiada; vence ${venceEn(r.vence)}.` }
         }));
       },
       error: (e: unknown) => {
         this.ligaOcupada.set(undefined);
-        this.ligaMensaje.update((m) => ({ ...m, [id]: describeHttp(e) }));
+        this.ligaMensaje.update((m) => ({
+          ...m,
+          [id]: { texto: describeHttp(e), error: true }
+        }));
       }
     });
   }
@@ -59,11 +77,19 @@ export class EquipoComponent {
     this.admin.ligaDe(id, true).subscribe({
       next: (r) => {
         this.ligaOcupada.set(undefined);
-        this.ligaMensaje.update((m) => ({ ...m, [id]: r.aviso ?? 'Enviada.' }));
+        this.ligas.update((l) => ({ ...l, [id]: r }));
+        this.ligaMensaje.update((m) => ({
+          ...m,
+          // El puente dice a quién fue; aquí se agrega hasta cuándo sirve.
+          [id]: { texto: `${r.aviso ?? 'Enviada.'} Vence ${venceEn(r.vence)}.` }
+        }));
       },
       error: (e: unknown) => {
         this.ligaOcupada.set(undefined);
-        this.ligaMensaje.update((m) => ({ ...m, [id]: describeHttp(e) }));
+        this.ligaMensaje.update((m) => ({
+          ...m,
+          [id]: { texto: describeHttp(e), error: true }
+        }));
       }
     });
   }
@@ -173,6 +199,18 @@ export class EquipoComponent {
       .map((part) => part.charAt(0).toUpperCase())
       .join('');
   }
+}
+
+/** "hoy a las 15:00" o "el mié 24 sep a las 15:00", según cuándo vence. */
+function venceEn(iso: string): string {
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) {
+    return 'hoy';
+  }
+  const hora = formatTime(iso);
+  return isSameDay(fecha, new Date())
+    ? `hoy a las ${hora}`
+    : `el ${formatDay(fecha)} a las ${hora}`;
 }
 
 function describeHttp(error: unknown): string {

@@ -19,6 +19,11 @@ import {
 import { BrandLogoComponent } from '../../ui/brand-logo.component';
 import { IconComponent } from '../../ui/icon.component';
 import { DayPipe, RelativePipe, TimePipe } from '../../ui/portal.pipes';
+import { sinPrefijosDeCorreo } from '../../core/util/text.util';
+
+/** Lo que dice la pantalla cuando la liga ya no abre (404 o 410 del puente). */
+const LIGA_VENCIDA =
+  'Esta liga venció. Pídele a Carlos una nueva o responde el correo con tu avance.';
 
 /**
  * Mis pendientes: la pantalla a la que llega cada persona del equipo desde
@@ -57,7 +62,10 @@ export class MioComponent {
   readonly verHechos = signal(false);
   readonly borradores = signal<Record<string, string>>({});
   readonly ocupado = signal<string | undefined>(undefined);
-  readonly mensajes = signal<Record<string, string>>({});
+  /** Resultado de la última acción por pendiente; `error` decide el tono. */
+  readonly mensajes = signal<
+    Record<string, { texto: string; error?: boolean }>
+  >({});
 
   readonly abiertos = computed(() =>
     [...this.pendientes()]
@@ -74,6 +82,11 @@ export class MioComponent {
 
   constructor() {
     this.cargar();
+  }
+
+  /** El asunto sin los "RE: RV: Fwd:" del correo. */
+  titulo(t: TaskItem): string {
+    return sinPrefijosDeCorreo(t.title);
   }
 
   vencido(t: TaskItem): boolean {
@@ -97,9 +110,16 @@ export class MioComponent {
           this.cargando.set(false);
         },
         error: (e: unknown) => {
-          const http = e as { error?: { error?: string }; message?: string };
+          const http = e as {
+            status?: number;
+            error?: { error?: string };
+            message?: string;
+          };
+          // Liga vencida o desconocida: el siguiente paso, no solo el error.
           this.error.set(
-            http?.error?.error ?? http?.message ?? 'No se pudo cargar.'
+            http?.status === 410 || http?.status === 404
+              ? LIGA_VENCIDA
+              : (http?.error?.error ?? http?.message ?? 'No se pudo cargar.')
           );
           this.cargando.set(false);
         }
@@ -140,8 +160,10 @@ export class MioComponent {
           this.motivo.set('');
           this.mensajes.update((m) => ({
             ...m,
-            [t.id]:
-              'Solicitud enviada. En cuanto Carlos decida te llega un correo.'
+            [t.id]: {
+              texto:
+                'Solicitud enviada. En cuanto Carlos decida te llega un correo.'
+            }
           }));
           this.cargar();
         },
@@ -150,7 +172,11 @@ export class MioComponent {
           this.ocupado.set(undefined);
           this.mensajes.update((m) => ({
             ...m,
-            [t.id]: http?.error?.error ?? http?.message ?? 'No se pudo mandar.'
+            [t.id]: {
+              texto:
+                http?.error?.error ?? http?.message ?? 'No se pudo mandar.',
+              error: true
+            }
           }));
         }
       });
@@ -195,7 +221,10 @@ export class MioComponent {
       .subscribe({
         next: () => {
           this.ocupado.set(undefined);
-          this.mensajes.update((m) => ({ ...m, [t.id]: 'Guardado.' }));
+          this.mensajes.update((m) => ({
+            ...m,
+            [t.id]: { texto: 'Guardado.' }
+          }));
           luego?.();
           this.cargar();
         },
@@ -204,7 +233,11 @@ export class MioComponent {
           this.ocupado.set(undefined);
           this.mensajes.update((m) => ({
             ...m,
-            [t.id]: http?.error?.error ?? http?.message ?? 'No se pudo guardar.'
+            [t.id]: {
+              texto:
+                http?.error?.error ?? http?.message ?? 'No se pudo guardar.',
+              error: true
+            }
           }));
         }
       });
