@@ -91,7 +91,7 @@ body {
 
   /* El primario de la marca: cyan con texto oscuro, como en el sitio. */
   .btn-primary {
-    @apply border-transparent bg-accent text-[#04202B] hover:brightness-110;
+    @apply border-transparent bg-accent text-[#04202B] hover:bg-accent hover:brightness-110;
   }
 
   /* Acciones destructivas (borrar, olvidar): se distinguen del resto. */

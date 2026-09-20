@@ -34,7 +34,9 @@
     <h2 class="flex items-center gap-2 text-sm font-semibold text-ink">
       <pt-icon name="alerta" class="h-4 w-4 text-warn" />
       Juntas sin homologar
-      <span class="chip bg-surface-muted text-ink-muted">{{ unmirrored().length }}</span>
+      <span class="chip bg-surface-muted text-ink-muted">{{
+        unmirrored().length
+      }}</span>
     </h2>
     <p class="mt-0.5 text-xs text-ink-muted">
       Están en un calendario y no en el otro. Acepta o reenvía la invitación
@@ -43,7 +45,9 @@
     <ul class="mt-3 space-y-1.5 text-sm">
       @for (u of unmirrored(); track u.meeting.id) {
         <li class="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span class="tabular-nums text-ink-muted">{{ u.meeting.start | dia }} {{ u.meeting.start | hora }}</span>
+          <span class="tabular-nums text-ink-muted"
+            >{{ u.meeting.start | dia }} {{ u.meeting.start | hora }}</span
+          >
           <span class="font-medium text-ink">{{ u.meeting.title }}</span>
           <span class="text-ink-muted">está en</span>
           @for (cuenta of accountsOf(u.meeting); track cuenta) {
@@ -51,7 +55,10 @@
           }
           <span class="text-ink-muted">y falta en</span>
           @for (cuenta of u.missingIn; track cuenta) {
-            <span class="chip bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">{{ accountLabel(cuenta) }}</span>
+            <span
+              class="chip bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"
+              >{{ accountLabel(cuenta) }}</span
+            >
           }
         </li>
       }
@@ -163,4 +170,3 @@
       hint="Cambia el rango o la cuenta para ver más." />
   </div>
 }
-
