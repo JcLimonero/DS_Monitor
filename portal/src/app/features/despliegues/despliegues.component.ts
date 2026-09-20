@@ -22,7 +22,10 @@ import {
   platformIncidents,
   runningDeployments
 } from '../../core/state/portal.selectors';
+import { PortalesService } from '../../core/portales/portales.service';
 import { PortalStore } from '../../core/state/portal.store';
+import { PortalChipComponent } from '../../ui/portal-chip.component';
+import { RouterLink } from '@angular/router';
 import { plural } from '../../core/util/text.util';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { IconComponent } from '../../ui/icon.component';
@@ -32,7 +35,8 @@ import { DayPipe, RelativePipe, TimePipe } from '../../ui/portal.pipes';
 const CLASE_ESTADO: Record<DeploymentState, string> = {
   listo:
     'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200',
-  construyendo: 'bg-sky-100 text-sky-800 dark:bg-stone-500/20 dark:text-stone-200',
+  construyendo:
+    'bg-sky-100 text-sky-800 dark:bg-stone-500/20 dark:text-stone-200',
   en_cola:
     'bg-slate-200 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300',
   error: 'bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200',
@@ -59,13 +63,18 @@ const CLASE_PLATAFORMA: Record<PlatformIndicator, string> = {
     FormsModule,
     IconComponent,
     PageHeaderComponent,
+    PortalChipComponent,
     RelativePipe,
+    RouterLink,
     TimePipe
   ],
   templateUrl: './despliegues.component.html'
 })
 export class DesplieguesComponent {
   readonly store = inject(PortalStore);
+  /** Lo montado en Coolify: se muestra debajo de los despliegues de Vercel. */
+  readonly portales = inject(PortalesService);
+  readonly disponible = this.portales.disponible;
 
   readonly estadoLabel = DEPLOYMENT_STATE_LABEL;
   readonly entornoLabel = DEPLOYMENT_ENVIRONMENT_LABEL;

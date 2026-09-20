@@ -130,7 +130,117 @@
     <pt-empty-state
       icon="despliegue"
       title="Sin despliegues que mostrar"
-      hint="Quita los filtros o conecta Vercel en Integraciones → Servicios." />
+      hint="Quita los filtros o conecta Vercel en Integraciones → Servicios. Los portales de Coolify se ven abajo." />
   </div>
 }
 
+<!-- Portales montados en Coolify: aplicaciones y servicios por servidor -->
+@if (disponible && !portales.sinConfigurar()) {
+  <section class="mt-6">
+    <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
+      Portales en Coolify
+      @if (portales.lista(); as lista) {
+        <span class="chip bg-surface-muted text-ink-muted">{{
+          lista.length
+        }}</span>
+      }
+      @if (portales.mal().length > 0) {
+        <span
+          class="chip bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200">
+          {{ portales.mal().length }} con atención
+        </span>
+      }
+    </h2>
+    @if (portales.error(); as e) {
+      <p
+        class="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200">
+        {{ e }}
+      </p>
+    }
+    @if (portales.porServidor().length > 0) {
+      <div class="grid gap-4 lg:grid-cols-2">
+        @for (g of portales.porServidor(); track g.servidor) {
+          <section class="card">
+            <div class="border-b border-line px-4 py-2.5">
+              <h3 class="text-sm font-semibold text-ink">
+                {{ g.servidor }}
+                <span class="ml-1 text-xs font-normal text-ink-muted">
+                  {{ g.portales.length }}
+                  {{ g.portales.length === 1 ? "portal" : "portales" }}
+                </span>
+              </h3>
+            </div>
+            <ul class="divide-y divide-line">
+              @for (p of g.portales; track p.id) {
+                <li class="flex items-start gap-3 px-4 py-2.5">
+                  <span class="min-w-0 flex-1">
+                    <span class="flex flex-wrap items-center gap-2">
+                      <span class="text-sm font-medium text-ink">{{
+                        p.name
+                      }}</span>
+                      <pt-portal-chip [portal]="p" />
+                      <span class="chip bg-surface-muted text-ink-subtle">
+                        {{ p.kind === "app" ? "app" : "servicio" }}
+                      </span>
+                    </span>
+                    <span class="mt-0.5 block truncate text-xs text-ink-muted">
+                      @if (p.url) {
+                        <a
+                          class="hover:underline"
+                          [href]="p.url"
+                          target="_blank"
+                          rel="noopener"
+                          >{{ p.url }}</a
+                        >
+                      }
+                      @if (p.project) {
+                        · {{ p.project
+                        }}{{ p.environment ? " / " + p.environment : "" }}
+                      }
+                      @if (p.repo) {
+                        · {{ p.repo }}{{ p.branch ? "@" + p.branch : "" }}
+                      }
+                    </span>
+                    @if (p.lastDeployAt) {
+                      <span class="block text-xs text-ink-subtle">
+                        Último despliegue {{ p.lastDeployAt | relativo
+                        }}{{
+                          p.lastDeployStatus ? " · " + p.lastDeployStatus : ""
+                        }}
+                      </span>
+                    }
+                  </span>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+      </div>
+    } @else if (portales.lista()) {
+      <div class="card">
+        <pt-empty-state
+          icon="despliegue"
+          title="Coolify no tiene portales"
+          hint="Cuando montes aplicaciones o servicios en Coolify aparecen aquí." />
+      </div>
+    }
+  </section>
+} @else if (disponible && portales.sinConfigurar()) {
+  <section class="mt-6">
+    <h2 class="mb-2 text-sm font-semibold text-ink">Portales en Coolify</h2>
+    <div class="card">
+      <pt-empty-state
+        icon="despliegue"
+        title="Coolify sin conectar"
+        hint="Captura la URL de Coolify y un API token en Integraciones → Servicios." />
+      <p class="pb-4 text-center text-xs">
+        <a
+          class="text-brand hover:underline"
+          routerLink="/integraciones"
+          [queryParams]="{ tab: 'servicios' }"
+          >Ir a Integraciones →</a
+        >
+      </p>
+    </div>
+  </section>
+}

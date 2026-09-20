@@ -8,7 +8,6 @@ export interface Diapositiva {
     | 'agenda'
     | 'plataformas'
     | 'vps'
-    | 'portales'
     | 'ejecuciones'
     | 'despliegues'
     | 'embudo'
@@ -51,12 +50,6 @@ export const DIAPOSITIVAS: Diapositiva[] = [
     titulo: 'Servidores',
     corto: 'Servidores',
     icono: 'monitor'
-  },
-  {
-    id: 'portales',
-    titulo: 'Portales en Coolify',
-    corto: 'Portales',
-    icono: 'despliegue'
   },
   {
     id: 'ejecuciones',

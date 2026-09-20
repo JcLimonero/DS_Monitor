@@ -10,7 +10,6 @@ import { VpsHealth, VpsStatus } from '../../core/models';
 import { plural } from '../../core/util/text.util';
 import { PortalesService } from '../../core/portales/portales.service';
 import { VpsService } from '../../core/vps/vps.service';
-import { PortalChipComponent } from '../../ui/portal-chip.component';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
@@ -75,7 +74,6 @@ export function tiempoArriba(segundos: number | undefined): string {
     EmptyStateComponent,
     IconComponent,
     PageHeaderComponent,
-    PortalChipComponent,
     RelativePipe,
     RouterLink,
     SerieComponent

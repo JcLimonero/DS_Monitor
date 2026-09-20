@@ -9,6 +9,7 @@ import {
   DEPLOYMENT_STATE_LABEL,
   Deployment,
   DeploymentState,
+  HostedApp,
   PLATFORM_INDICATOR_LABEL,
   PlatformStatus
 } from '../../../core/models';
@@ -17,7 +18,9 @@ import {
   platformIncidents,
   runningDeployments
 } from '../../../core/state/portal.selectors';
+import { PortalesService } from '../../../core/portales/portales.service';
 import { PortalStore } from '../../../core/state/portal.store';
+import { PortalChipComponent } from '../../../ui/portal-chip.component';
 import { plural } from '../../../core/util/text.util';
 import { IconComponent } from '../../../ui/icon.component';
 import { RelativePipe } from '../../../ui/portal.pipes';
@@ -46,7 +49,7 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
 @Component({
   selector: 'pt-slide-despliegues',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, RelativePipe],
+  imports: [IconComponent, RelativePipe, PortalChipComponent],
   host: { class: 'flex h-full flex-col gap-4' },
   template: `
     @if (incidentes().length > 0) {
@@ -63,52 +66,97 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
       </div>
     }
 
-    @if (despliegues().length > 0) {
-      <ul
-        class="flex min-h-0 flex-1 flex-col justify-center gap-3 overflow-y-auto">
-        @for (despliegue of despliegues(); track despliegue.id) {
-          <li
-            class="tv-card flex shrink-0 items-center gap-5 px-6 py-4"
-            [class]="borde(despliegue)">
-            <span class="w-44 shrink-0">
-              <span
-                class="block text-xl font-bold 2xl:text-2xl"
-                [class]="claseEstado(despliegue)">
-                {{ estado(despliegue) }}
+    <div
+      class="grid min-h-0 flex-1 gap-4"
+      [class.lg:grid-cols-2]="portales().length > 0">
+      @if (despliegues().length > 0) {
+        <ul class="flex min-h-0 flex-col justify-center gap-3 overflow-y-auto">
+          @for (despliegue of despliegues(); track despliegue.id) {
+            <li
+              class="tv-card flex shrink-0 items-center gap-5 px-6 py-4"
+              [class]="borde(despliegue)">
+              <span class="w-44 shrink-0">
+                <span
+                  class="block text-xl font-bold 2xl:text-2xl"
+                  [class]="claseEstado(despliegue)">
+                  {{ estado(despliegue) }}
+                </span>
+                <span class="block text-base text-ink-muted">{{
+                  entorno(despliegue)
+                }}</span>
               </span>
-              <span class="block text-base text-ink-muted">{{
-                entorno(despliegue)
-              }}</span>
-            </span>
 
-            <span class="min-w-0 flex-1">
-              <span class="block truncate tv-title">{{
-                despliegue.project
-              }}</span>
-              <span
-                class="mt-0.5 block truncate text-lg text-ink-muted 2xl:text-xl">
-                {{ despliegue.commitMessage }}
+              <span class="min-w-0 flex-1">
+                <span class="block truncate tv-title">{{
+                  despliegue.project
+                }}</span>
+                <span
+                  class="mt-0.5 block truncate text-lg text-ink-muted 2xl:text-xl">
+                  {{ despliegue.commitMessage }}
+                </span>
               </span>
-            </span>
 
-            <span class="shrink-0 text-right">
-              <span class="flex items-center justify-end gap-2 tv-row text-ink">
-                <pt-icon name="rama" class="h-5 w-5 text-ink-subtle" />
-                {{ despliegue.branch }}
+              <span class="shrink-0 text-right">
+                <span
+                  class="flex items-center justify-end gap-2 tv-row text-ink">
+                  <pt-icon name="rama" class="h-5 w-5 text-ink-subtle" />
+                  {{ despliegue.branch }}
+                </span>
+                <span class="block text-base text-ink-muted">
+                  {{ despliegue.author?.name }} ·
+                  {{ despliegue.createdAt | relativo }}
+                </span>
               </span>
-              <span class="block text-base text-ink-muted">
-                {{ despliegue.author?.name }} ·
-                {{ despliegue.createdAt | relativo }}
-              </span>
+            </li>
+          }
+        </ul>
+      } @else {
+        <div class="flex items-center justify-center">
+          <p class="text-3xl text-ink-subtle">Sin despliegues recientes</p>
+        </div>
+      }
+
+      @if (portales().length > 0) {
+        <section class="tv-card flex min-h-0 flex-col px-5 py-4">
+          <h2 class="flex shrink-0 items-baseline gap-3">
+            <span class="tv-label">Portales en Coolify</span>
+            <span
+              class="text-lg font-bold"
+              [class]="portalesMal() > 0 ? 'text-danger' : 'text-ink-muted'">
+              {{
+                portalesMal() > 0
+                  ? portalesMal() + ' con atención'
+                  : portales().length + ' corriendo'
+              }}
             </span>
-          </li>
-        }
-      </ul>
-    } @else {
-      <div class="flex flex-1 items-center justify-center">
-        <p class="text-3xl text-ink-subtle">Sin despliegues recientes</p>
-      </div>
-    }
+          </h2>
+          <ul class="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+            @for (p of portales(); track p.id) {
+              <li
+                class="flex shrink-0 items-center gap-3 rounded-lg border px-3 py-2"
+                [class]="claseFila(p)">
+                <span
+                  class="h-2.5 w-2.5 shrink-0 rounded-full"
+                  [class]="punto(p)"></span>
+                <span class="min-w-0 flex-1">
+                  <span
+                    class="block truncate text-lg font-bold leading-tight text-ink 2xl:text-xl">
+                    {{ p.name }}
+                  </span>
+                  <span class="block truncate text-base text-ink-muted">
+                    {{ p.server ? p.server + ' · ' : ''
+                    }}{{
+                      p.url || (p.kind === 'app' ? 'aplicación' : 'servicio')
+                    }}
+                  </span>
+                </span>
+                <pt-portal-chip class="shrink-0" [portal]="p" />
+              </li>
+            }
+          </ul>
+        </section>
+      }
+    </div>
 
     <div
       class="flex shrink-0 flex-wrap items-center gap-x-8 gap-y-2 rounded-2xl border border-line bg-surface px-6 py-3 tv-row">
@@ -128,6 +176,36 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
 })
 export class DesplieguesSlideComponent {
   private readonly store = inject(PortalStore);
+  private readonly coolify = inject(PortalesService);
+
+  /** Los portales de Coolify, lo que no corre primero. */
+  readonly portales = computed(() =>
+    [...(this.coolify.lista() ?? [])].sort(
+      (a, b) => pesoPortal(a) - pesoPortal(b) || a.name.localeCompare(b.name)
+    )
+  );
+  readonly portalesMal = computed(() => this.coolify.mal().length);
+
+  punto(p: HostedApp): string {
+    if (p.status === 'running' && p.healthy !== false) {
+      return 'bg-ok';
+    }
+    return p.status === 'unknown'
+      ? 'bg-ink-subtle'
+      : p.status === 'running'
+        ? 'bg-warn'
+        : 'bg-danger';
+  }
+
+  claseFila(p: HostedApp): string {
+    if (p.status === 'stopped' || p.status === 'error') {
+      return 'border-rose-400 bg-rose-50 dark:border-rose-500/50 dark:bg-rose-500/10';
+    }
+    if (p.status === 'running' && p.healthy === false) {
+      return 'border-amber-400 bg-amber-50 dark:border-amber-500/50 dark:bg-amber-500/10';
+    }
+    return 'border-line';
+  }
 
   /**
    * Un renglon por proyecto con su ultimo despliegue: lo que importa en la
@@ -209,4 +287,17 @@ export class DesplieguesSlideComponent {
   etiquetaPlataforma(estado: PlatformStatus): string {
     return PLATFORM_INDICATOR_LABEL[estado.indicator];
   }
+}
+
+function pesoPortal(p: HostedApp): number {
+  if (p.status === 'error') {
+    return 0;
+  }
+  if (p.status === 'stopped') {
+    return 1;
+  }
+  if (p.status === 'running' && p.healthy === false) {
+    return 2;
+  }
+  return p.status === 'unknown' ? 3 : 4;
 }
