@@ -25,9 +25,6 @@ import { plural } from '../../../core/util/text.util';
 import { IconComponent } from '../../../ui/icon.component';
 import { RelativePipe } from '../../../ui/portal.pipes';
 
-/** Cuantos despliegues caben sin apretar los renglones. */
-const RENGLONES = 6;
-
 const CLASE_ESTADO: Record<DeploymentState, string> = {
   listo: 'text-ok',
   construyendo: 'text-info',
@@ -66,83 +63,93 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
       </div>
     }
 
-    <div
-      class="grid min-h-0 flex-1 gap-4"
-      [class.lg:grid-cols-2]="portales().length > 0">
-      @if (despliegues().length > 0) {
-        <ul class="flex min-h-0 flex-col justify-center gap-3 overflow-y-auto">
-          @for (despliegue of despliegues(); track despliegue.id) {
-            <li
-              class="tv-card flex shrink-0 items-center gap-5 px-6 py-4"
-              [class]="borde(despliegue)">
-              <span class="w-44 shrink-0">
-                <span
-                  class="block text-xl font-bold 2xl:text-2xl"
-                  [class]="claseEstado(despliegue)">
-                  {{ estado(despliegue) }}
+    <div class="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
+      <!-- Vercel: un renglon por proyecto con su ultimo estado -->
+      <section class="tv-card flex min-h-0 flex-col px-5 py-4">
+        <h2 class="flex shrink-0 items-baseline gap-3">
+          <span class="tv-label">Vercel</span>
+          <span
+            class="text-lg font-bold"
+            [class]="fallidos().length > 0 ? 'text-danger' : 'text-ink-muted'">
+            {{
+              fallidos().length > 0
+                ? fallidos().length + ' con error'
+                : despliegues().length + ' proyectos'
+            }}
+          </span>
+        </h2>
+        @if (despliegues().length > 0) {
+          <ul class="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+            @for (despliegue of despliegues(); track despliegue.id) {
+              <li
+                class="flex shrink-0 items-center gap-4 rounded-lg border px-4 py-3"
+                [class]="borde(despliegue)">
+                <span class="w-32 shrink-0">
+                  <span
+                    class="block text-lg font-bold 2xl:text-xl"
+                    [class]="claseEstado(despliegue)">
+                    {{ estado(despliegue) }}
+                  </span>
+                  <span class="block text-sm text-ink-muted">{{
+                    entorno(despliegue)
+                  }}</span>
                 </span>
-                <span class="block text-base text-ink-muted">{{
-                  entorno(despliegue)
-                }}</span>
-              </span>
-
-              <span class="min-w-0 flex-1">
-                <span class="block truncate tv-title">{{
-                  despliegue.project
-                }}</span>
-                <span
-                  class="mt-0.5 block truncate text-lg text-ink-muted 2xl:text-xl">
-                  {{ despliegue.commitMessage }}
+                <span class="min-w-0 flex-1">
+                  <span
+                    class="block truncate text-lg font-bold leading-tight text-ink 2xl:text-xl"
+                    >{{ despliegue.project }}</span
+                  >
+                  <span class="block truncate text-base text-ink-muted">
+                    {{ mensaje(despliegue) }}
+                  </span>
                 </span>
-              </span>
-
-              <span class="shrink-0 text-right">
-                <span
-                  class="flex items-center justify-end gap-2 tv-row text-ink">
-                  <pt-icon name="rama" class="h-5 w-5 text-ink-subtle" />
-                  {{ despliegue.branch }}
-                </span>
-                <span class="block text-base text-ink-muted">
-                  {{ despliegue.author?.name }} ·
+                <span class="shrink-0 text-right text-sm text-ink-muted">
+                  <span
+                    class="flex items-center justify-end gap-1 text-base text-ink">
+                    <pt-icon name="rama" class="h-4 w-4 text-ink-subtle" />
+                    {{ despliegue.branch }}
+                  </span>
                   {{ despliegue.createdAt | relativo }}
                 </span>
-              </span>
-            </li>
-          }
-        </ul>
-      } @else {
-        <div class="flex items-center justify-center">
-          <p class="text-3xl text-ink-subtle">Sin despliegues recientes</p>
-        </div>
-      }
+              </li>
+            }
+          </ul>
+        } @else {
+          <p
+            class="flex flex-1 items-center justify-center text-xl text-ink-subtle">
+            Sin despliegues en Vercel
+          </p>
+        }
+      </section>
 
-      @if (portales().length > 0) {
-        <section class="tv-card flex min-h-0 flex-col px-5 py-4">
-          <h2 class="flex shrink-0 items-baseline gap-3">
-            <span class="tv-label">Portales en Coolify</span>
-            <span
-              class="text-lg font-bold"
-              [class]="portalesMal() > 0 ? 'text-danger' : 'text-ink-muted'">
-              {{
-                portalesMal() > 0
-                  ? portalesMal() + ' con atención'
-                  : portales().length + ' corriendo'
-              }}
-            </span>
-          </h2>
+      <!-- Coolify: cada portal con su estado actual -->
+      <section class="tv-card flex min-h-0 flex-col px-5 py-4">
+        <h2 class="flex shrink-0 items-baseline gap-3">
+          <span class="tv-label">Coolify</span>
+          <span
+            class="text-lg font-bold"
+            [class]="portalesMal() > 0 ? 'text-danger' : 'text-ink-muted'">
+            {{
+              portalesMal() > 0
+                ? portalesMal() + ' con atención'
+                : portales().length + ' portales'
+            }}
+          </span>
+        </h2>
+        @if (portales().length > 0) {
           <ul class="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
             @for (p of portales(); track p.id) {
               <li
-                class="flex shrink-0 items-center gap-3 rounded-lg border px-3 py-2"
+                class="flex shrink-0 items-center gap-4 rounded-lg border px-4 py-3"
                 [class]="claseFila(p)">
                 <span
                   class="h-2.5 w-2.5 shrink-0 rounded-full"
                   [class]="punto(p)"></span>
                 <span class="min-w-0 flex-1">
                   <span
-                    class="block truncate text-lg font-bold leading-tight text-ink 2xl:text-xl">
-                    {{ p.name }}
-                  </span>
+                    class="block truncate text-lg font-bold leading-tight text-ink 2xl:text-xl"
+                    >{{ p.name }}</span
+                  >
                   <span class="block truncate text-base text-ink-muted">
                     {{ p.server ? p.server + ' · ' : ''
                     }}{{
@@ -150,12 +157,28 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
                     }}
                   </span>
                 </span>
-                <pt-portal-chip class="shrink-0" [portal]="p" />
+                <span class="shrink-0 text-right">
+                  <pt-portal-chip [portal]="p" />
+                  @if (p.lastDeployAt) {
+                    <span class="mt-1 block text-sm text-ink-muted">{{
+                      p.lastDeployAt | relativo
+                    }}</span>
+                  }
+                </span>
               </li>
             }
           </ul>
-        </section>
-      }
+        } @else {
+          <p
+            class="flex flex-1 items-center justify-center text-xl text-ink-subtle">
+            {{
+              coolify.sinConfigurar()
+                ? 'Coolify sin conectar'
+                : 'Sin portales en Coolify'
+            }}
+          </p>
+        }
+      </section>
     </div>
 
     <div
@@ -176,7 +199,7 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
 })
 export class DesplieguesSlideComponent {
   private readonly store = inject(PortalStore);
-  private readonly coolify = inject(PortalesService);
+  readonly coolify = inject(PortalesService);
 
   /** Los portales de Coolify, lo que no corre primero. */
   readonly portales = computed(() =>
@@ -239,12 +262,18 @@ export class DesplieguesSlideComponent {
         : d.state === 'construyendo' || d.state === 'en_cola'
           ? 1
           : 2;
-    return [...porProyecto.values()]
-      .sort(
-        (a, b) => peso(a) - peso(b) || b.createdAt.localeCompare(a.createdAt)
-      )
-      .slice(0, RENGLONES);
+    // Lo que esta mal arriba; el resto por abecedario (la columna hace scroll).
+    return [...porProyecto.values()].sort(
+      (a, b) =>
+        peso(a) - peso(b) ||
+        a.project.localeCompare(b.project, 'es', { sensitivity: 'base' })
+    );
   });
+
+  /** Solo la primera linea del mensaje del commit, sin los trailers. */
+  mensaje(d: Deployment): string {
+    return (d.commitMessage ?? '').split(/\n|Co-Authored-By/i)[0]?.trim() ?? '';
+  }
 
   readonly fallidos = computed(() =>
     failedDeployments(this.store.deployments())
