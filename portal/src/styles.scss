@@ -185,4 +185,26 @@ body {
   html.kiosco {
     font-size: 12px;
   }
+
+  /*
+   * Con un dialogo de edicion abierto (una hoja a pantalla completa que tapa
+   * el carrusel) se vuelve al tamaño normal: los selectores y botones tienen
+   * que poderse tocar con el dedo. La clase la pone la diapositiva al abrir
+   * (no `:has`, que los iPad viejos no entienden).
+   */
+  html.kiosco.con-dialogo {
+    font-size: 16px;
+  }
+}
+
+/*
+ * El dialogo del carrusel se opera con el dedo (iPad, celular, la pantalla de
+ * la oficina): ningun selector ni boton por debajo de 2.5rem, aunque la
+ * tarjeta los achique a partir de lg como en la lista de escritorio.
+ */
+.dialogo-carrusel select,
+.dialogo-carrusel .btn,
+.dialogo-carrusel button[aria-expanded] {
+  min-height: 2.5rem;
+  min-width: 2.5rem;
 }

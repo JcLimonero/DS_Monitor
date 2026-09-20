@@ -102,6 +102,10 @@ export class CarruselComponent {
   private readonly enPantalla =
     viewChild<DiapositivaConContenido>('diapositiva');
   readonly vacia = computed(() => this.enPantalla()?.vacia() ?? false);
+  /** Alguien edita algo en un dialogo de la diapositiva: no se avanza. */
+  readonly enDialogo = computed(
+    () => this.enPantalla()?.enDialogo?.() ?? false
+  );
   /** Segundos que dura la diapositiva actual: menos si no tiene contenido. */
   readonly duracion = computed(() =>
     this.vacia() ? Math.min(SEGUNDOS_VACIA, this.segundos()) : this.segundos()
@@ -162,7 +166,7 @@ export class CarruselComponent {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         this.ahora.set(new Date());
-        if (this.pausado()) {
+        if (this.pausado() || this.enDialogo()) {
           return;
         }
         const siguiente = this.transcurrido() + TIC_MS;
@@ -219,6 +223,11 @@ export class CarruselComponent {
 
   alTeclear(event: KeyboardEvent): void {
     this.despertarControles();
+    // Con un dialogo abierto las teclas son suyas: la barra espaciadora va
+    // al comentario, no a la pausa.
+    if (this.enDialogo()) {
+      return;
+    }
     switch (event.key) {
       case ' ':
         event.preventDefault();
@@ -248,7 +257,9 @@ export class CarruselComponent {
       }
       const r = await fetch('/index.html', { cache: 'no-store' });
       const publicado = /main-[A-Z0-9]+\.js/i.exec(await r.text())?.[0];
-      if (publicado && publicado !== actual) {
+      // Con un dialogo abierto (alguien escribiendo) no se recarga: se
+      // intenta en la siguiente revision.
+      if (publicado && publicado !== actual && !this.enDialogo()) {
         location.reload();
       }
     } catch {

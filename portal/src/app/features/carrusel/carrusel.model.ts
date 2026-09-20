@@ -4,10 +4,13 @@ import { IconName } from '../../ui/icon.component';
 /**
  * Lo que una diapositiva le dice al carrusel: si no tiene nada que enseñar
  * (`vacia`), el carrusel la deja menos tiempo en pantalla en vez de dejar
- * un "sin datos" veinte segundos frente a la oficina.
+ * un "sin datos" veinte segundos frente a la oficina. Si alguien tiene un
+ * dialogo abierto encima (`enDialogo`), el carrusel se queda quieto hasta
+ * que lo cierre, sin tocar la pausa que maneja el usuario.
  */
 export interface DiapositivaConContenido {
   readonly vacia: Signal<boolean>;
+  readonly enDialogo?: Signal<boolean>;
 }
 
 /** Una pantalla del carrusel. */
