@@ -33,7 +33,8 @@ export type IconName =
   | 'licencia'
   | 'despliegue'
   | 'rama'
-  | 'microfono';
+  | 'microfono'
+  | 'puntos';
 
 @Component({
   selector: 'pt-icon',

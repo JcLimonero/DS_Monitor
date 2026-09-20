@@ -13,13 +13,12 @@ import {
 } from '../../../core/models';
 import {
   RENEWAL_WARN_DAYS,
-  licensesNeedingAttention,
-  spendCurrency,
-  totalSpend
+  licensesNeedingAttention
 } from '../../../core/state/portal.selectors';
 import { PortalStore } from '../../../core/state/portal.store';
 import { plural } from '../../../core/util/text.util';
 import { IconComponent } from '../../../ui/icon.component';
+import { DiapositivaConContenido } from '../carrusel.model';
 
 const CANTIDAD = new Intl.NumberFormat('es-MX', {
   notation: 'compact',
@@ -105,8 +104,10 @@ const RENGLONES = 24;
     </div>
   `
 })
-export class LicenciasSlideComponent {
+export class LicenciasSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
+
+  readonly vacia = computed(() => this.store.licenses().length === 0);
 
   /** Lo que necesita atención se ve primero. */
   readonly licencias = computed(() => {
@@ -125,11 +126,26 @@ export class LicenciasSlideComponent {
     licensesNeedingAttention(this.store.licenses())
   );
 
+  /**
+   * El gasto sumado por moneda: "$12,400 MXN · $310 USD". Sumar monedas
+   * distintas daria un numero sin sentido, asi que cada una va aparte.
+   */
   readonly gasto = computed(() => {
-    const moneda = spendCurrency(this.store.licenses());
-    return moneda
-      ? `${MONTO.format(totalSpend(this.store.licenses()))} ${moneda}`
-      : 'varias monedas';
+    const porMoneda = new Map<string, number>();
+    for (const licencia of this.store.licenses()) {
+      if (licencia.cost === undefined) {
+        continue;
+      }
+      const moneda = licencia.currency ?? 'MXN';
+      porMoneda.set(moneda, (porMoneda.get(moneda) ?? 0) + licencia.cost);
+    }
+    if (porMoneda.size === 0) {
+      return '—';
+    }
+    return [...porMoneda.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([moneda, monto]) => `$${MONTO.format(monto)} ${moneda}`)
+      .join(' · ');
   });
 
   readonly textoAvisos = computed(() =>

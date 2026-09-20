@@ -21,9 +21,10 @@ import {
 import { plural } from '../../../core/util/text.util';
 import { IconComponent } from '../../../ui/icon.component';
 import { DayPipe, TimePipe } from '../../../ui/portal.pipes';
+import { DiapositivaConContenido } from '../carrusel.model';
 
-/** Tope por columna; con scroll en la columna, alcanza para todo el dia. */
-const RENGLONES = 60;
+/** Tope por columna: a tamaño de television no caben mas sin scroll. */
+const RENGLONES = 12;
 
 const CLASE_PRIORIDAD: Record<TaskPriority, string> = {
   urgente: 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200',
@@ -76,8 +77,7 @@ interface Columna {
                     class="mt-2 h-2.5 w-2.5 shrink-0 rounded-full"
                     [class]="punto(tarea)"></span>
                   <span class="min-w-0 flex-1">
-                    <span
-                      class="block text-lg font-bold leading-tight text-ink 2xl:text-xl">
+                    <span class="block tv-row font-bold leading-tight text-ink">
                       {{ tarea.title }}
                     </span>
                     <span
@@ -145,9 +145,14 @@ interface Columna {
     </div>
   `
 })
-export class PendientesSlideComponent {
+export class PendientesSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
   private readonly router = inject(Router);
+
+  /** Ninguna de las tres columnas tiene algo. */
+  readonly vacia = computed(() =>
+    this.columnas().every((col) => col.tareas.length === 0)
+  );
 
   /** Al tocar un pendiente en la pantalla se abre su detalle para editarlo. */
   abrir(tarea: TaskItem): void {

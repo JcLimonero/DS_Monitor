@@ -4,7 +4,8 @@ import {
   DestroyRef,
   computed,
   inject,
-  signal
+  signal,
+  viewChild
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -16,9 +17,11 @@ import { BrandLogoComponent } from '../../ui/brand-logo.component';
 import { IconComponent, IconName } from '../../ui/icon.component';
 import {
   DIAPOSITIVAS,
+  DiapositivaConContenido,
   SEGUNDOS_MAXIMO,
   SEGUNDOS_MINIMO,
-  SEGUNDOS_POR_DEFECTO
+  SEGUNDOS_POR_DEFECTO,
+  SEGUNDOS_VACIA
 } from './carrusel.model';
 import { PantallaEncendida } from './pantalla-encendida';
 import { AgendaSlideComponent } from './diapositivas/agenda.slide';
@@ -36,7 +39,7 @@ import { ResumenSlideComponent } from './diapositivas/resumen.slide';
 const TIC_MS = 100;
 
 /** Cuanto tardan en esconderse los controles despues del ultimo movimiento. */
-const CONTROLES_MS = 3000;
+const CONTROLES_MS = 5000;
 
 /**
  * Carrusel para el monitor de la oficina.
@@ -91,8 +94,20 @@ export class CarruselComponent {
   readonly ahora = signal(new Date());
 
   readonly actual = computed(() => this.diapositivas[this.indice()]);
+
+  /**
+   * La diapositiva que esta en pantalla (solo una vive a la vez por el
+   * @switch). Las que saben decir si estan vacias acortan su turno.
+   */
+  private readonly enPantalla =
+    viewChild<DiapositivaConContenido>('diapositiva');
+  readonly vacia = computed(() => this.enPantalla()?.vacia() ?? false);
+  /** Segundos que dura la diapositiva actual: menos si no tiene contenido. */
+  readonly duracion = computed(() =>
+    this.vacia() ? Math.min(SEGUNDOS_VACIA, this.segundos()) : this.segundos()
+  );
   readonly avance = computed(() =>
-    Math.min(100, (this.transcurrido() / (this.segundos() * 1000)) * 100)
+    Math.min(100, (this.transcurrido() / (this.duracion() * 1000)) * 100)
   );
   readonly controlesVisibles = computed(
     () =>
@@ -151,7 +166,7 @@ export class CarruselComponent {
           return;
         }
         const siguiente = this.transcurrido() + TIC_MS;
-        if (siguiente >= this.segundos() * 1000) {
+        if (siguiente >= this.duracion() * 1000) {
           this.avanzar(1);
         } else {
           this.transcurrido.set(siguiente);

@@ -30,7 +30,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   // Lo de todos los días.
-  { path: '/hoy', label: 'Hoy', icon: 'reloj' },
+  { path: '/hoy', label: 'Hoy', icon: 'sol' },
   { path: '/pendientes', label: 'Pendientes', icon: 'tareas' },
   { path: '/agenda', label: 'Agenda', icon: 'agenda' },
   { path: '/equipo', label: 'Equipo', icon: 'equipo' },
@@ -38,7 +38,7 @@ const NAV: NavItem[] = [
   { path: '/panel', label: 'Panel', icon: 'panel', separador: true },
   { path: '/monitoreo', label: 'Monitoreo', icon: 'monitoreo' },
   { path: '/vps', label: 'Servidores', icon: 'monitor' },
-  { path: '/ejecuciones', label: 'Ejecuciones', icon: 'reloj' },
+  { path: '/ejecuciones', label: 'Ejecuciones', icon: 'reproducir' },
   { path: '/despliegues', label: 'Despliegues', icon: 'despliegue' },
   { path: '/repos', label: 'Repositorios', icon: 'rama' },
   { path: '/crm', label: 'CRM', icon: 'crm' },
@@ -66,7 +66,8 @@ const NAV: NavItem[] = [
     RouterLinkActive,
     RouterOutlet
   ],
-  templateUrl: './shell.component.html'
+  templateUrl: './shell.component.html',
+  host: { '(document:keydown.escape)': 'cerrarMenus()' }
 })
 export class ShellComponent {
   private readonly theme = inject(ThemeService);
@@ -77,6 +78,8 @@ export class ShellComponent {
   private readonly router = inject(Router);
   readonly nav = NAV;
   readonly avisosAbiertos = signal(false);
+  /** Menu de tema y salir en pantallas chicas; en escritorio van sueltos. */
+  readonly menuUsuarioAbierto = signal(false);
 
   constructor() {
     // Una sola vez: si el puente tiene IA, para que las pantallas enseñen o
@@ -118,6 +121,12 @@ export class ShellComponent {
 
   toggleTheme(): void {
     this.theme.toggle();
+  }
+
+  /** Escape cierra lo que este desplegado en la cabecera. */
+  cerrarMenus(): void {
+    this.avisosAbiertos.set(false);
+    this.menuUsuarioAbierto.set(false);
   }
 
   salir(): void {

@@ -7,10 +7,14 @@
       (click)="menuOpen.set(false)"></div>
   }
 
+  <!--
+    En escritorio la barra se queda pegada arriba mientras la pagina se
+    desplaza; el nav de adentro es el que hace scroll si no cabe.
+  -->
   <aside
-    class="fixed inset-y-0 left-0 z-30 flex w-64 shrink-0 flex-col border-r border-line bg-surface transition-transform lg:static lg:translate-x-0"
+    class="fixed inset-y-0 left-0 z-30 flex w-64 shrink-0 flex-col border-r border-line bg-surface transition-transform lg:sticky lg:bottom-auto lg:top-0 lg:h-dvh lg:translate-x-0"
     [class.-translate-x-full]="!menuOpen()">
-    <div class="flex h-16 items-center gap-3 px-5">
+    <div class="flex h-16 shrink-0 items-center gap-3 px-5">
       <a
         class="flex min-w-0 items-center gap-3"
         routerLink="/hoy"
@@ -33,9 +37,9 @@
         <pt-icon name="cerrar" class="h-5 w-5" />
       </button>
     </div>
-    <div class="regla-marca"></div>
+    <div class="regla-marca shrink-0"></div>
 
-    <nav class="flex-1 space-y-1 overflow-y-auto p-3">
+    <nav class="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
       @for (item of nav; track item.path) {
         <a
           class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold text-ink-muted transition hover:bg-surface-muted hover:text-ink"
@@ -62,8 +66,7 @@
     </nav>
 
     @if (store.hasDemoSources()) {
-      <p
-        class="m-3 rounded-lg bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
+      <p class="banner banner-warn m-3 shrink-0 text-xs">
         Hay fuentes en modo demostración: los datos son inventados. Revisa
         Ajustes para conectarlas.
       </p>
@@ -82,7 +85,7 @@
           <pt-icon name="menu" />
         </button>
 
-        <div class="ml-auto flex items-center gap-3">
+        <div class="ml-auto flex items-center gap-2 sm:gap-3">
           <pt-ventana-ia-boton />
           <div class="relative">
             <button
@@ -156,13 +159,17 @@
               </div>
             }
           </div>
+          <!-- Fuentes caidas: distinto icono que los avisos, que van al lado. -->
           @if (store.failedSources().length > 0) {
             <a
               class="chip bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200"
-              routerLink="/integraciones">
-              <pt-icon name="alerta" class="h-3.5 w-3.5" />
+              routerLink="/integraciones"
+              [attr.aria-label]="
+                store.failedSources().length + ' fuente(s) sin conexión'
+              ">
+              <pt-icon name="monitoreo" class="h-3.5 w-3.5" />
               {{ store.failedSources().length }}
-              <span class="hidden sm:inline">fuente(s) con error</span>
+              <span class="hidden sm:inline">fuente(s) sin conexión</span>
             </a>
           }
           @if (store.lastRefresh(); as last) {
@@ -181,9 +188,11 @@
               class="h-4 w-4"
               [class.animate-spin]="store.loading()" />
           </button>
+
+          <!-- En escritorio, tema y salir a la vista. -->
           <button
             type="button"
-            class="btn px-2 py-1.5"
+            class="btn hidden px-2 py-1.5 lg:inline-flex"
             [attr.aria-label]="themeLabel()"
             (click)="toggleTheme()">
             <pt-icon [name]="themeIcon()" class="h-4 w-4" />
@@ -191,29 +200,72 @@
           @if (sesion.token()) {
             <button
               type="button"
-              class="btn px-2 py-1.5 text-xs"
+              class="btn hidden px-2 py-1.5 text-xs lg:inline-flex"
               title="Cerrar la sesión en este navegador"
               (click)="salir()">
               Salir
             </button>
           }
+
+          <!-- En pantallas chicas los dos van en un menu, para que quepan. -->
+          <div class="relative lg:hidden">
+            <button
+              type="button"
+              class="btn px-2 py-1.5"
+              aria-label="Más opciones"
+              aria-haspopup="menu"
+              [attr.aria-expanded]="menuUsuarioAbierto()"
+              (click)="menuUsuarioAbierto.set(!menuUsuarioAbierto())">
+              <pt-icon name="puntos" class="h-4 w-4" />
+            </button>
+            @if (menuUsuarioAbierto()) {
+              <div
+                class="fixed inset-0 z-30"
+                (click)="menuUsuarioAbierto.set(false)"></div>
+              <div
+                role="menu"
+                class="absolute right-0 z-40 mt-2 w-48 rounded-lg border border-line bg-surface p-1 shadow-lg">
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm text-ink transition hover:bg-surface-muted"
+                  (click)="toggleTheme(); menuUsuarioAbierto.set(false)">
+                  <pt-icon
+                    [name]="themeIcon()"
+                    class="h-4 w-4 text-ink-muted" />
+                  {{ themeLabel() }}
+                </button>
+                @if (sesion.token()) {
+                  <button
+                    type="button"
+                    role="menuitem"
+                    class="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm text-ink transition hover:bg-surface-muted"
+                    (click)="salir()">
+                    <pt-icon name="cerrar" class="h-4 w-4 text-ink-muted" />
+                    Salir
+                  </button>
+                }
+              </div>
+            }
+          </div>
         </div>
       </div>
     </header>
 
+    <!-- Pegado a la cabecera: sin esquinas ni borde a los lados. -->
     @if (store.puenteCaido()) {
-      <p
-        class="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-        <pt-icon name="refrescar" class="h-4 w-4 animate-spin" />
+      <p class="banner banner-warn rounded-none border-x-0 border-t-0 py-2">
+        <pt-icon name="refrescar" class="h-4 w-4 shrink-0 animate-spin" />
         El servidor se está reiniciando (pasa con cada publicación, dura un
         minuto). Nada se pierde: se recarga solo en cuanto vuelva.
       </p>
     }
-    <main class="flex-1 p-4 pb-24 sm:p-6 sm:pb-6">
+    <!-- Abajo queda aire para que el boton flotante no tape el ultimo control. -->
+    <main class="flex-1 p-4 pb-20 sm:p-6 sm:pb-20 lg:pb-6">
       <router-outlet />
     </main>
 
-    <!-- En el celular, el micrófono siempre a la mano -->
+    <!-- En el celular, el micrófono siempre a la mano: es la unica entrada a Dictar. -->
     <a
       routerLink="/dictado"
       routerLinkActive="hidden"

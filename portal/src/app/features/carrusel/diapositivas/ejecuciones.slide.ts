@@ -8,8 +8,34 @@ import { EjecucionesService } from '../../../core/ejecuciones/ejecuciones.servic
 import { Ejecucion } from '../../../core/sources/gateway/puente-admin.service';
 import { IconComponent } from '../../../ui/icon.component';
 import { RelativePipe } from '../../../ui/portal.pipes';
+import { DiapositivaConContenido } from '../carrusel.model';
 
 type Estado = Ejecucion['estado'];
+
+/**
+ * Un producto en la pantalla: la misma integracion puede llegar de varios
+ * emisores (el cron y la API de PilloFon, por ejemplo) y aqui se ve una vez,
+ * con el peor estado del grupo y la corrida mas reciente.
+ */
+interface Grupo {
+  clave: string;
+  nombre: string;
+  emisores: string;
+  estado: Estado;
+  erroresSeguidos: number;
+  mensaje?: string;
+  terminoEn: string;
+  duracionMs?: number;
+  cadaMinutos?: number;
+}
+
+/** Que tan mal esta cada estado; manda el mayor dentro del grupo. */
+const PESO: Record<Estado, number> = {
+  ok: 0,
+  aviso: 1,
+  atrasada: 2,
+  error: 3
+};
 
 /** Cuantas tarjetas caben sin scroll en una pantalla de televisión. */
 const MAXIMO = 12;
@@ -65,7 +91,7 @@ const CLASE_ESTADO: Record<Estado, string> = {
                 {{ e.nombre }}
               </p>
               <p class="truncate text-base text-ink-muted">
-                {{ e.emisor }}
+                {{ e.emisores }}
                 @if (frecuencia(e)) {
                   · {{ frecuencia(e) }}
                 }
@@ -120,14 +146,17 @@ const CLASE_ESTADO: Record<Estado, string> = {
     }
   `
 })
-export class EjecucionesSlideComponent {
+export class EjecucionesSlideComponent implements DiapositivaConContenido {
   private readonly servicio = inject(EjecucionesService);
 
   readonly lista = this.servicio.lista;
-  /** El puente ya las manda con lo malo primero; aqui solo se recortan. */
-  readonly visibles = computed(() => (this.lista() ?? []).slice(0, MAXIMO));
+  /** Ya respondio el puente y no hay servicios que enseñar. */
+  readonly vacia = computed(() => (this.lista() ?? []).length === 0);
+  /** Una tarjeta por integracion, lo malo primero. */
+  readonly grupos = computed(() => agrupar(this.lista() ?? []));
+  readonly visibles = computed(() => this.grupos().slice(0, MAXIMO));
   readonly restantes = computed(() =>
-    Math.max(0, (this.lista() ?? []).length - MAXIMO)
+    Math.max(0, this.grupos().length - MAXIMO)
   );
   /** Vienen ordenadas con lo malo primero: si la ultima visible esta bien, el resto tambien. */
   readonly restoBien = computed(
@@ -138,19 +167,19 @@ export class EjecucionesSlideComponent {
     this.servicio.cargar();
   }
 
-  etiqueta(e: Ejecucion): string {
+  etiqueta(e: Grupo): string {
     return ETIQUETA[e.estado];
   }
 
-  claseTarjeta(e: Ejecucion): string {
+  claseTarjeta(e: Grupo): string {
     return CLASE_TARJETA[e.estado];
   }
 
-  claseEstado(e: Ejecucion): string {
+  claseEstado(e: Grupo): string {
     return CLASE_ESTADO[e.estado];
   }
 
-  duracion(e: Ejecucion): string {
+  duracion(e: Grupo): string {
     const ms = e.duracionMs;
     if (ms === undefined) {
       return '';
@@ -164,7 +193,7 @@ export class EjecucionesSlideComponent {
     return `${Math.round(ms / 60_000)} min`;
   }
 
-  frecuencia(e: Ejecucion): string {
+  frecuencia(e: Grupo): string {
     const m = e.cadaMinutos;
     if (!m) {
       return '';
@@ -177,4 +206,46 @@ export class EjecucionesSlideComponent {
     }
     return `cada ${m} min`;
   }
+}
+
+/**
+ * Junta las corridas de la misma integracion. El grupo toma el estado mas
+ * grave, el mensaje y la duracion de la corrida que lo tiene, y la fecha de
+ * la mas reciente. Se ordena con lo malo primero, como manda el puente.
+ */
+function agrupar(lista: readonly Ejecucion[]): Grupo[] {
+  const grupos = new Map<string, Grupo>();
+  for (const e of lista) {
+    const previo = grupos.get(e.integracion);
+    if (!previo) {
+      grupos.set(e.integracion, {
+        clave: e.integracion,
+        nombre: e.nombre,
+        emisores: e.emisor,
+        estado: e.estado,
+        erroresSeguidos: e.erroresSeguidos,
+        mensaje: e.mensaje,
+        terminoEn: e.terminoEn,
+        duracionMs: e.duracionMs,
+        cadaMinutos: e.cadaMinutos
+      });
+      continue;
+    }
+    if (!previo.emisores.split(' · ').includes(e.emisor)) {
+      previo.emisores = `${previo.emisores} · ${e.emisor}`;
+    }
+    if (PESO[e.estado] > PESO[previo.estado]) {
+      previo.estado = e.estado;
+      previo.erroresSeguidos = e.erroresSeguidos;
+      previo.mensaje = e.mensaje;
+      previo.duracionMs = e.duracionMs;
+    }
+    if (e.terminoEn > previo.terminoEn) {
+      previo.terminoEn = e.terminoEn;
+    }
+  }
+  return [...grupos.values()].sort(
+    (a, b) =>
+      PESO[b.estado] - PESO[a.estado] || a.nombre.localeCompare(b.nombre)
+  );
 }

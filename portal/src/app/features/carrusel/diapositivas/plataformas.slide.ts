@@ -13,6 +13,7 @@ import {
 import { PortalStore } from '../../../core/state/portal.store';
 import { IconComponent } from '../../../ui/icon.component';
 import { SparklineComponent } from '../../../ui/sparkline.component';
+import { DiapositivaConContenido } from '../carrusel.model';
 
 /**
  * Colores de estado a tamaño de pantalla.
@@ -92,12 +93,24 @@ const CLASE_ESTADO: Record<MonitorStatus, string> = {
             </span>
           </p>
         </article>
+      } @empty {
+        <!-- Sin destinos vigilados no hay nada que pintar: se dice en grande. -->
+        <div
+          class="col-span-full flex h-full flex-col items-center justify-center gap-3 text-center">
+          <pt-icon name="ok" class="h-16 w-16 text-ok" />
+          <p class="tv-title">Sin plataformas vigiladas</p>
+          <p class="tv-row text-ink-muted">
+            Los sitios se dan de alta en Integraciones › Sitios
+          </p>
+        </div>
       }
     </div>
   `
 })
-export class PlataformasSlideComponent {
+export class PlataformasSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
+
+  readonly vacia = computed(() => this.store.targets().length === 0);
 
   readonly destinos = computed(() =>
     [...this.store.targets()].sort(
