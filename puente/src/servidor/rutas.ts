@@ -48,6 +48,7 @@ import type {
   Meeting,
   MonitorTarget,
   Person,
+  TaskComment,
   TaskItem,
   TaskStatus,
   VpsStatus
@@ -63,15 +64,32 @@ import type { Fuentes } from '../ia/tablero.js';
 import {
   anotar,
   conEvento,
+  conSeguidor,
+  conSugerencia,
   describirCambios,
   limpiarCambios,
+  mismaPersona,
+  sinSeguidor,
+  sinSugerencia,
   type Anotacion,
   type Anotaciones,
   type CambiosPendiente
 } from '../pendientes/anotaciones.js';
 import { registrar, type Registro } from '../pendientes/registro.js';
 import { homologarPendientes, idsDelGrupo } from '../pendientes/homologar.js';
-import { conRemitente } from '../pendientes/remitente.js';
+import { conRemitente, correoDelRemitente } from '../pendientes/remitente.js';
+import {
+  abiertosParaModelo,
+  agregarNovedad,
+  candidatosDeRelacion,
+  marcarVisto,
+  relacionarPorAsunto
+} from '../pendientes/relacionar.js';
+import {
+  esResponsable,
+  pendientesDePersona
+} from '../pendientes/seguidores.js';
+import { sugerirResponsable } from '../ia/pendientes.js';
 import { enviarPorEmailJs } from '../acceso/acceso.js';
 import type {
   ClienteIngesta,
@@ -152,11 +170,13 @@ import { consumoOpenRouter } from '../proveedores/openrouter.js';
 import {
   esCorreoDeTotalOne,
   leerCorreo,
+  type CandidatoIa,
   type DatosCorreo
 } from '../proveedores/correo.js';
 import {
   clasificarCorreos,
   empresaDeCuenta,
+  idDeClasificacion,
   pendienteDeClasificacion,
   type Clasificacion
 } from '../proveedores/ia.js';
@@ -183,6 +203,7 @@ import {
   aplicarAprendido,
   aprender,
   pistasParaModelo,
+  responsableAprendido,
   type Aprendizajes
 } from '../pendientes/aprendido.js';
 import type { ClavesVapid } from '../push/vapid.js';
@@ -1300,6 +1321,52 @@ export function construirRutas(
     };
   };
 
+  /**
+   * Los pendientes de correo de una cuenta que pueden recibir un correo
+   * nuevo (ver relacionar.ts), con sus anotaciones encima para saber cuales
+   * siguen abiertos.
+   */
+  const candidatosDeCuenta = (cuentaId: string): TaskItem[] =>
+    candidatosDeRelacion(
+      datos.registroCorreo.leer()[cuentaId] ?? [],
+      datos.anotaciones.leer()
+    );
+
+  /**
+   * Los correos que resultaron ser respuesta o seguimiento de un pendiente
+   * se anotan en el: resumen como comentario, movimiento en la trazabilidad
+   * y la novedad que se ve en el portal hasta que alguien lo abre.
+   */
+  const anotarRelacionados = async (
+    relacionados: Clasificacion[],
+    porClave: Map<string, CandidatoIa>
+  ): Promise<void> => {
+    if (relacionados.length === 0) {
+      return;
+    }
+    const todas = datos.anotaciones.leer();
+    const nuevas: Anotaciones = { ...todas };
+    for (const r of relacionados) {
+      const correo = porClave.get(r.id);
+      const id = r.relacionadoCon;
+      if (!correo || !id) {
+        continue;
+      }
+      const resumen =
+        r.resumen ||
+        correo.texto.replace(/\s+/g, ' ').trim().slice(0, 240) ||
+        correo.encabezado.asunto;
+      nuevas[id] = agregarNovedad(nuevas[id], {
+        clave: r.id,
+        resumen,
+        remitente: correo.encabezado.remitente,
+        asunto: correo.encabezado.asunto,
+        at: r.analizadoEn
+      });
+    }
+    await datos.anotaciones.escribir(nuevas);
+  };
+
   const clasificar = async (
     cuenta: ConfiguracionCorreo,
     lectura: DatosCorreo
@@ -1321,23 +1388,66 @@ export function construirRutas(
       motivo: 'Aviso de Total One',
       analizadoEn: ahora.toISOString()
     }));
+    // Lo que ya esta registrado en esta cuenta: por asunto se reconoce la
+    // respuesta sin modelo; el modelo recibe los abiertos para lo demas.
+    // Un correo no se relaciona consigo mismo (el pendiente que el mismo
+    // genero, si el registro venia de antes que la IA lo viera).
+    const candidatos = candidatosDeCuenta(cuenta.id);
+    const propio = (clave: string) =>
+      idDeClasificacion({ id: clave }, cuenta.accountId);
+    const porAsunto = new Map(
+      paraIa
+        .map(
+          (c) =>
+            [
+              c.clave,
+              relacionarPorAsunto(
+                c.encabezado.asunto,
+                candidatos.filter((t) => t.id !== propio(c.clave))
+              )?.id
+            ] as const
+        )
+        .filter((par): par is readonly [string, string] => !!par[1])
+    );
     try {
       if (paraIa.length > 0) {
-        resultados = resultados.concat(
-          await clasificarCorreos(
-            ia,
-            paraIa,
-            ahora,
-            pistasParaModelo(datos.aprendido.leer())
+        const delModelo = await clasificarCorreos(
+          ia,
+          paraIa,
+          ahora,
+          pistasParaModelo(datos.aprendido.leer()),
+          abiertosParaModelo(candidatos, datos.anotaciones.leer(), (t) =>
+            correoDelRemitente(t.description)
           )
+        );
+        resultados = resultados.concat(
+          delModelo.map((r) => {
+            const porHilo = porAsunto.get(r.id);
+            if (porHilo) {
+              return { ...r, esPendiente: false, relacionadoCon: porHilo };
+            }
+            return r.relacionadoCon === propio(r.id)
+              ? { ...r, esPendiente: true, relacionadoCon: undefined }
+              : r;
+          })
         );
       }
     } catch (error) {
-      // La IA es un extra: si falla, el buzon se sigue leyendo sin ella.
+      // La IA es un extra: si falla, el buzon se sigue leyendo sin ella. Lo
+      // que se reconocio por asunto si se anota, con un extracto en vez del
+      // resumen.
       console.warn(
         `[puente] la IA no pudo clasificar el correo de "${cuenta.id}": ${(error as Error).message}`
       );
-      return [];
+      resultados = resultados.concat(
+        [...porAsunto].map(([clave, relacionadoCon]) => ({
+          id: clave,
+          esPendiente: false,
+          relacionadoCon,
+          motivo: 'Respuesta en el mismo hilo',
+          analizadoEn: ahora.toISOString()
+        }))
+      );
     }
     const limite = ahora.getTime() - (ia.dias + 30) * 86_400_000;
     const vistos = Object.fromEntries(
@@ -1350,8 +1460,12 @@ export function construirRutas(
     }
     await datos.iaCorreo.escribir(vistos);
     const porClave = new Map(lectura.paraIa.map((c) => [c.clave, c]));
+    await anotarRelacionados(
+      resultados.filter((r) => r.relacionadoCon),
+      porClave
+    );
     return resultados
-      .filter((r) => r.esPendiente)
+      .filter((r) => r.esPendiente && !r.relacionadoCon)
       .map((r) =>
         pendienteDeClasificacion(
           r,
@@ -1359,6 +1473,128 @@ export function construirRutas(
           cuenta.accountId
         )
       );
+  };
+
+  /** Cuantos pendientes nuevos por lectura se le preguntan a la IA quien los atiende. */
+  const MAXIMO_SUGERENCIAS_POR_LECTURA = 5;
+
+  /**
+   * A los pendientes de correo recien registrados (sin anotacion previa) se
+   * les busca responsable: primero por la regla aprendida del remitente, que
+   * asigna directo; si no hay, la IA propone. Solo se asigna sin preguntar
+   * cuando la propuesta viene con confianza alta; si no, queda como
+   * sugerencia en la tarjeta para que alguien la acepte o la descarte. Con
+   * el equipo vacio no se hace nada.
+   */
+  const autoasignar = async (
+    cuenta: ConfiguracionCorreo,
+    nuevos: TaskItem[]
+  ): Promise<void> => {
+    if (nuevos.length === 0) {
+      return;
+    }
+    const equipo = await equipoCompleto();
+    if (equipo.length === 0) {
+      return;
+    }
+    const enEquipo = (p: Person) => equipo.find((q) => mismaPersona(q, p));
+    const aprendido = datos.aprendido.leer();
+    let consultas = 0;
+    for (const tarea of nuevos) {
+      const anotaciones = datos.anotaciones.leer();
+      if (anotaciones[tarea.id] || tarea.assignee) {
+        continue;
+      }
+      const porRegla = responsableAprendido(tarea, aprendido);
+      const persona = porRegla && enEquipo(porRegla);
+      if (persona) {
+        await asignarPendiente(
+          tarea.id,
+          persona.email ?? persona.id,
+          tarea,
+          undefined,
+          `regla aprendida (${correoDelRemitente(tarea.description) ?? 'remitente'})`
+        );
+        continue;
+      }
+      const ia = iaPara('asistente');
+      if (!ia || consultas >= MAXIMO_SUGERENCIAS_POR_LECTURA) {
+        continue;
+      }
+      consultas++;
+      const ahora = new Date().toISOString();
+      try {
+        const registrados = anotar(
+          Object.values(datos.registroCorreo.leer()).flat(),
+          anotaciones
+        );
+        const parecidos = registrados.filter(
+          (t) =>
+            t.id !== tarea.id &&
+            t.assignee &&
+            (t.accountId === tarea.accountId ||
+              (tarea.company && t.company === tarea.company))
+        );
+        const sugerencia = await sugerirResponsable(
+          ia,
+          tarea,
+          equipo.map((p) => ({
+            id: p.id,
+            name: p.name,
+            role: p.role,
+            email: p.email
+          })),
+          parecidos.slice(0, 12),
+          pistasParaModelo(aprendido)
+        );
+        const propuesto = equipo.find((p) => p.id === sugerencia.responsable);
+        const actuales = datos.anotaciones.leer();
+        const nota = actuales[tarea.id] ?? {
+          comentarios: [],
+          actualizadoEn: ''
+        };
+        if (!propuesto) {
+          // Sin propuesta no cambia nada visible: se deja la marca para no
+          // volver a preguntar, sin mover la fecha del pendiente.
+          await datos.anotaciones.escribir({
+            ...actuales,
+            [tarea.id]: { ...nota, autoAsignacionIntentada: true }
+          });
+          continue;
+        }
+        if (sugerencia.confianza === 'alta') {
+          await datos.anotaciones.escribir({
+            ...actuales,
+            [tarea.id]: { ...nota, autoAsignacionIntentada: true }
+          });
+          await asignarPendiente(
+            tarea.id,
+            propuesto.email ?? propuesto.id,
+            tarea,
+            undefined,
+            `automáticamente: ${sugerencia.motivo}`
+          );
+        } else {
+          await datos.anotaciones.escribir({
+            ...actuales,
+            [tarea.id]: conSugerencia(
+              nota,
+              {
+                id: propuesto.id,
+                name: propuesto.name,
+                email: propuesto.email
+              },
+              sugerencia.motivo,
+              ahora
+            )
+          });
+        }
+      } catch (error) {
+        console.warn(
+          `[puente] no se pudo proponer responsable para "${tarea.title}" (${cuenta.id}): ${(error as Error).message}`
+        );
+      }
+    }
   };
 
   const leido = (cuenta: ConfiguracionCorreo) =>
@@ -1386,12 +1622,29 @@ export function construirRutas(
       const sinTotalOne = (lista: TaskItem[]) =>
         lista.filter((t) => !esCorreoDeTotalOne(t.title, t.description ?? ''));
       const registro = datos.registroCorreo.leer();
+      const previos = new Set((registro[cuenta.id] ?? []).map((t) => t.id));
       const actual = registrar(
         sinTotalOne(registro[cuenta.id] ?? []),
         sinTotalOne(detectados),
         hechos()
       );
       await datos.registroCorreo.escribir({ ...registro, [cuenta.id]: actual });
+      // Los recien registrados buscan responsable. Es un extra: si falla,
+      // la lectura sigue.
+      await autoasignar(
+        cuenta,
+        aplicarAprendido(
+          conRemitente(
+            actual.filter((t) => !previos.has(t.id)),
+            await equipoCompleto()
+          ),
+          datos.aprendido.leer()
+        )
+      ).catch((error: unknown) =>
+        console.warn(
+          `[puente] autoasignación en "${cuenta.id}": ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
       return { ...lectura, pendientes: actual };
     });
 
@@ -1939,18 +2192,8 @@ export function construirRutas(
     return `${cfg().urlPortal}/mio/${token}`;
   };
 
-  /**
-   * Asigna un pendiente a alguien del equipo y le avisa por correo. Devuelve
-   * el aviso (que se mando, o por que no) para enseñarlo en el portal.
-   */
-  const asignarPendiente = async (
-    id: string,
-    quien: string,
-    tarea: Partial<TaskItem>,
-    sesion: Sesion | undefined
-  ): Promise<string | undefined> => {
-    const todas = datos.anotaciones.leer();
-    const nota = todas[id] ?? { comentarios: [], actualizadoEn: '' };
+  /** Alguien del equipo, por id o por correo (sin importar mayusculas). */
+  const personaDelEquipo = async (quien: string): Promise<Person> => {
     const buscado = quien.trim().toLowerCase();
     const persona = (await equipoCompleto()).find(
       (p) =>
@@ -1959,20 +2202,30 @@ export function construirRutas(
     if (!persona) {
       throw new ErrorPuente(`No hay nadie en el equipo con "${quien}".`, 400);
     }
-    nota.asignado = persona;
-    nota.actualizadoEn = new Date().toISOString();
-    await datos.anotaciones.escribir({
-      ...todas,
-      [id]: conEvento(nota, {
-        by: sesion?.correo ?? 'administración',
-        kind: 'asignacion',
-        text: `Asignado a ${persona.name}`
-      })
-    });
+    return persona;
+  };
+
+  /**
+   * Le avisa a alguien que un pendiente quedo a su nombre (o que lo agregaron
+   * para darle seguimiento): push y correo con su liga personal. Devuelve el
+   * aviso (que se mando, o por que no) para enseñarlo en el portal.
+   */
+  const avisarConLiga = async (
+    persona: Person,
+    id: string,
+    tarea: Partial<TaskItem>,
+    sesion: Sesion | undefined,
+    modo: 'responsable' | 'seguimiento',
+    comentarios: TaskComment[] = []
+  ): Promise<string | undefined> => {
+    const verbo =
+      modo === 'seguimiento'
+        ? 'Te agregaron para dar seguimiento'
+        : 'Te asignaron';
     if (persona.email) {
       void push.avisar(
         {
-          titulo: `Te asignaron: ${tarea.title ?? id}`,
+          titulo: `${verbo}: ${tarea.title ?? id}`,
           cuerpo: [
             tarea.priority ? `Prioridad ${tarea.priority}` : undefined,
             tarea.dueDate
@@ -1989,15 +2242,20 @@ export function construirRutas(
       );
     }
     const config = cfg();
+    const hecho = modo === 'seguimiento' ? 'Agregado' : 'Asignado';
     if (!persona.email) {
-      return 'Asignado; esa persona no tiene correo en el equipo, no se le avisó.';
+      return `${hecho}; esa persona no tiene correo en el equipo, no se le avisó.`;
     }
     if (!config.acceso) {
-      return 'Asignado; para avisar por correo configura el acceso (EmailJS) en Equipo.';
+      return `${hecho}; para avisar por correo configura el acceso (EmailJS) en Equipo.`;
     }
     const t = tarea;
+    const encabezado =
+      modo === 'seguimiento'
+        ? `<p>Te agregaron para dar seguimiento a un pendiente en <strong>DS Monitor</strong>${sesion ? ` (${sesion.correo})` : ''}:</p>`
+        : `<p>Te asignaron un pendiente en <strong>DS Monitor</strong>${sesion ? ` (${sesion.correo})` : ''}:</p>`;
     const html =
-      `<p>Te asignaron un pendiente en <strong>DS Monitor</strong>${sesion ? ` (${sesion.correo})` : ''}:</p>` +
+      encabezado +
       `<p style="font-size:20px"><strong>${escapar(t.title ?? id)}</strong></p>` +
       (t.description ? `<p>${escapar(t.description)}</p>` : '') +
       `<p>Prioridad: ${escapar(t.priority ?? 'media')}` +
@@ -2005,21 +2263,117 @@ export function construirRutas(
         ? ` · Vence: ${new Date(t.dueDate).toLocaleDateString('es-MX', { dateStyle: 'long', timeZone: 'America/Mexico_City' })}`
         : '') +
       (t.project ? ` · Proyecto: ${escapar(t.project)}` : '') +
+      (modo === 'seguimiento' && t.assignee
+        ? ` · Responsable: ${escapar(t.assignee.name)}`
+        : '') +
       `</p>` +
-      (nota.comentarios.length > 0
-        ? `<p>Comentarios:</p><ul>${nota.comentarios.map((c) => `<li>${escapar(c.text)}</li>`).join('')}</ul>`
+      (comentarios.length > 0
+        ? `<p>Comentarios:</p><ul>${comentarios.map((c) => `<li>${escapar(c.text)}</li>`).join('')}</ul>`
         : '') +
       `<p><a href="${await ligaDe(persona, id)}" style="display:inline-block;padding:10px 16px;background:#04202B;color:#fff;text-decoration:none;border-radius:6px">Ver el pendiente, cambiar su estado o comentar</a></p>` +
       `<p style="color:#666;font-size:12px">La liga es personal y solo abre este pendiente; no hace falta usuario ni código. Sirve hasta el final del día de hoy: no hay que terminar la tarea hoy, pero sí conviene dejar una línea de en qué va. Después te llega otra liga con la solicitud de estatus.</p>`;
     try {
       await enviarPorEmailJs(config.acceso, persona.email, '', false, {
-        titulo: `Pendiente asignado: ${t.title ?? id}`,
+        titulo:
+          modo === 'seguimiento'
+            ? `Seguimiento: ${t.title ?? id}`
+            : `Pendiente asignado: ${t.title ?? id}`,
         html
       });
       return `Se avisó por correo a ${persona.email}.`;
     } catch (error) {
-      return `Asignado, pero no se pudo mandar el correo: ${error instanceof Error ? error.message : String(error)}`;
+      return `${hecho}, pero no se pudo mandar el correo: ${error instanceof Error ? error.message : String(error)}`;
     }
+  };
+
+  /**
+   * Asigna un pendiente a alguien del equipo y le avisa por correo. Devuelve
+   * el aviso (que se mando, o por que no) para enseñarlo en el portal. Con
+   * `motivo` la asignacion fue automatica (regla aprendida o IA) y asi queda
+   * en la trazabilidad.
+   */
+  const asignarPendiente = async (
+    id: string,
+    quien: string,
+    tarea: Partial<TaskItem>,
+    sesion: Sesion | undefined,
+    motivo?: string
+  ): Promise<string | undefined> => {
+    const todas = datos.anotaciones.leer();
+    const ahora = new Date().toISOString();
+    const persona = await personaDelEquipo(quien);
+    // Quien queda de responsable deja de ser seguidor, y la sugerencia de
+    // la IA ya no aplica: alguien decidio.
+    let nota = sinSugerencia(
+      todas[id] ?? { comentarios: [], actualizadoEn: '' },
+      ahora
+    );
+    const seguidores = (nota.seguidores ?? []).filter(
+      (p) => !mismaPersona(p, persona)
+    );
+    nota = {
+      ...nota,
+      asignado: persona,
+      seguidores: seguidores.length > 0 ? seguidores : undefined,
+      actualizadoEn: ahora
+    };
+    await datos.anotaciones.escribir({
+      ...todas,
+      [id]: conEvento(nota, {
+        at: ahora,
+        by: motivo ? 'automático' : (sesion?.correo ?? 'administración'),
+        kind: 'asignacion',
+        text: motivo
+          ? `Asignado a ${persona.name} · ${motivo}`
+          : `Asignado a ${persona.name}`
+      })
+    });
+    return avisarConLiga(
+      persona,
+      id,
+      tarea,
+      sesion,
+      'responsable',
+      nota.comentarios
+    );
+  };
+
+  /** Agrega a alguien para dar seguimiento y le avisa como al responsable. */
+  const agregarSeguidor = async (
+    id: string,
+    quien: string,
+    tarea: Partial<TaskItem>,
+    sesion: Sesion | undefined
+  ): Promise<string | undefined> => {
+    const todas = datos.anotaciones.leer();
+    const ahora = new Date().toISOString();
+    const persona = await personaDelEquipo(quien);
+    const nota = todas[id] ?? { comentarios: [], actualizadoEn: '' };
+    const responsable = nota.asignado ?? tarea.assignee;
+    if (responsable && mismaPersona(responsable, persona)) {
+      throw new ErrorPuente(
+        `${persona.name} ya es el responsable de este pendiente.`,
+        400
+      );
+    }
+    const nueva = conSeguidor(
+      nota,
+      persona,
+      ahora,
+      sesion?.correo ?? 'administración'
+    );
+    if (nueva === nota) {
+      return `${persona.name} ya da seguimiento a este pendiente.`;
+    }
+    await datos.anotaciones.escribir({ ...todas, [id]: nueva });
+    return avisarConLiga(
+      persona,
+      id,
+      { ...tarea, assignee: responsable },
+      sesion,
+      'seguimiento',
+      nota.comentarios
+    );
   };
 
   router.post('/pendientes/anotar', async (contexto) => {
@@ -2033,6 +2387,11 @@ export function construirRutas(
       eliminar?: boolean;
       cambios?: CambiosPendiente;
       asignarA?: string;
+      /** Alguien mas que da seguimiento (id o correo del equipo). */
+      agregarSeguidor?: string;
+      quitarSeguidor?: string;
+      /** Borra la propuesta de responsable de la IA. */
+      descartarSugerencia?: boolean;
       tarea?: Partial<TaskItem>;
     };
     const id = (cuerpo.id ?? '').trim();
@@ -2044,6 +2403,9 @@ export function construirRutas(
     let nota: Anotacion = todas[id] ?? { comentarios: [], actualizadoEn: '' };
     const ahora = new Date().toISOString();
     const quienEscribe = sesion?.correo ?? 'administración';
+    if (cuerpo.descartarSugerencia === true) {
+      nota = sinSugerencia(nota, ahora, quienEscribe, true);
+    }
     if (typeof cuerpo.comentario === 'string' && cuerpo.comentario.trim()) {
       nota.comentarios = [
         ...nota.comentarios,
@@ -2159,6 +2521,11 @@ export function construirRutas(
     }
     await datos.anotaciones.escribir(conGrupo);
     let aviso: string | undefined;
+    // El pendiente de correo que se toca, para aprender del remitente.
+    const deCorreo = () =>
+      Object.values(datos.registroCorreo.leer())
+        .flat()
+        .find((t) => t.id === id);
     if (cuerpo.asignarA !== undefined) {
       const quien = (cuerpo.asignarA ?? '').trim();
       if (!quien) {
@@ -2179,12 +2546,64 @@ export function construirRutas(
             }
           )
         });
+        // Se lo quitaron a mano: la regla aprendida para ese remitente se
+        // olvida, para no volver a ponerselo en el siguiente correo.
+        const original = deCorreo();
+        if (original) {
+          await datos.aprendido.escribir(
+            aprender(datos.aprendido.leer(), original, {}, new Date(), null)
+          );
+        }
       } else {
         aviso = await asignarPendiente(id, quien, cuerpo.tarea ?? {}, sesion);
+        // A quien se le asigna lo de este remitente se aprende: el proximo
+        // correo suyo se asigna solo.
+        const original = deCorreo();
+        const persona = datos.anotaciones.leer()[id]?.asignado;
+        if (original && persona) {
+          await datos.aprendido.escribir(
+            aprender(datos.aprendido.leer(), original, {}, new Date(), persona)
+          );
+        }
       }
+    }
+    if (typeof cuerpo.agregarSeguidor === 'string' && cuerpo.agregarSeguidor) {
+      aviso = await agregarSeguidor(
+        id,
+        cuerpo.agregarSeguidor,
+        cuerpo.tarea ?? {},
+        sesion
+      );
+    }
+    if (typeof cuerpo.quitarSeguidor === 'string' && cuerpo.quitarSeguidor) {
+      const persona = await personaDelEquipo(cuerpo.quitarSeguidor);
+      const actual = datos.anotaciones.leer();
+      const previa = actual[id] ?? { comentarios: [], actualizadoEn: '' };
+      await datos.anotaciones.escribir({
+        ...actual,
+        [id]: sinSeguidor(previa, persona, ahora, quienEscribe)
+      });
     }
     cache.olvidar();
     return { ok: true, anotacion: datos.anotaciones.leer()[id], aviso };
+  });
+
+  // Alguien abrio el pendiente en el portal: la novedad por correo ya se vio.
+  router.post('/pendientes/visto', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { id } = (contexto.cuerpo ?? {}) as { id?: string };
+    const clave = (id ?? '').trim();
+    if (!clave) {
+      throw new ErrorPuente('Falta el identificador del pendiente.', 400);
+    }
+    const todas = datos.anotaciones.leer();
+    const vista = marcarVisto(todas[clave]);
+    // Las anotaciones se ponen encima al servir, asi que no hay cache que
+    // tirar (tirarlo obligaria a releer los buzones por abrir una tarjeta).
+    if (vista !== todas[clave] && vista) {
+      await datos.anotaciones.escribir({ ...todas, [clave]: vista });
+    }
+    return { ok: true };
   });
 
   // --- Inteligencia artificial: fuentes del tablero y rutas /ia ---
@@ -2707,18 +3126,12 @@ export function construirRutas(
     return liga.tarea ? { ...persona, soloTarea: liga.tarea } : persona;
   };
 
+  /** Lo que tiene a su nombre y lo que sigue (ver seguidores.ts). */
   const pendientesDe = async (
     persona: Person & { soloTarea?: string }
-  ): Promise<TaskItem[]> => {
-    const correo = persona.email?.toLowerCase();
-    return (await fuentes.pendientes()).filter(
-      (t) =>
-        t.assignee &&
-        (t.assignee.id === persona.id ||
-          (correo && t.assignee.email?.toLowerCase() === correo)) &&
-        (!persona.soloTarea || t.id === persona.soloTarea)
-    );
-  };
+  ): Promise<TaskItem[]> =>
+    pendientesDePersona(await fuentes.pendientes(), persona, persona.soloTarea)
+      .pendientes;
 
   // La liga de alguien, a pedido: para copiarla (WhatsApp) o mandarla por
   // correo. Vence a las tres de la tarde como todas.
@@ -2759,11 +3172,18 @@ export function construirRutas(
 
   router.get('/mio/:token/tasks', async ({ segmentos }) => {
     const persona = await personaDeLiga(segmentos[1] as string);
+    const { pendientes, seguimiento } = pendientesDePersona(
+      await fuentes.pendientes(),
+      persona,
+      persona.soloTarea
+    );
     return {
       persona: { id: persona.id, name: persona.name, role: persona.role },
       /** "tarea": la liga del correo de asignacion; "todos": la de estatus. */
       alcance: persona.soloTarea ? 'tarea' : 'todos',
-      pendientes: await pendientesDe(persona)
+      pendientes,
+      /** Los que ve por dar seguimiento, no por ser el responsable. */
+      seguimiento
     };
   });
 
@@ -2864,9 +3284,10 @@ export function construirRutas(
     const persona = await personaDeLiga(contexto.segmentos[1] as string);
     const cuerpo = (contexto.cuerpo ?? {}) as { id?: string; motivo?: string };
     const id = (cuerpo.id ?? '').trim();
+    // Pedir que se reasigne es del responsable; quien solo da seguimiento no.
     const mias = await pendientesDe(persona);
     const tarea = mias.find((t) => t.id === id);
-    if (!tarea) {
+    if (!tarea || !esResponsable(tarea, persona)) {
       throw new ErrorPuente('Ese pendiente no está a tu nombre.', 403);
     }
     const motivo =

@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { TaskItem } from '../nucleo/contrato.js';
-import { aplicarAprendido, aprender, pistasParaModelo } from './aprendido.js';
+import {
+  aplicarAprendido,
+  aprender,
+  pistasParaModelo,
+  responsableAprendido
+} from './aprendido.js';
 
 const correo: TaskItem = {
   id: 'x',
@@ -39,5 +44,38 @@ describe('aprender de las correcciones', () => {
     assert.equal(b['help@paddle.com']?.veces, 2);
     assert.equal(b['help@paddle.com']?.company, 'A');
     assert.equal(b['help@paddle.com']?.priority, 'alta');
+  });
+
+  it('aprende a quién se le asigna lo de un remitente y lo olvida al quitarlo', () => {
+    const ana = { id: 'ana', name: 'Ana', email: 'ana@nexus.com', role: 'x' };
+    const a = aprender({}, correo, {}, new Date(), ana);
+    // Solo lo que identifica a la persona, sin el rol ni lo demas.
+    assert.deepEqual(a['help@paddle.com']?.assignee, {
+      id: 'ana',
+      name: 'Ana',
+      email: 'ana@nexus.com'
+    });
+    assert.deepEqual(responsableAprendido({ ...correo, id: 'y' }, a), {
+      id: 'ana',
+      name: 'Ana',
+      email: 'ana@nexus.com'
+    });
+    assert.equal(
+      responsableAprendido({ ...correo, origin: 'ops' }, a),
+      undefined
+    );
+    assert.deepEqual(pistasParaModelo(a), ['help@paddle.com: lo atiende Ana']);
+    // Una correccion posterior sin asignado conserva el responsable.
+    const b = aprender(a, correo, { priority: 'alta' });
+    assert.equal(b['help@paddle.com']?.assignee?.id, 'ana');
+    // Quitarselo a mano lo olvida (y sin nada mas aprendido, la entrada sale).
+    const c = aprender(a, correo, {}, new Date(), null);
+    assert.equal(c['help@paddle.com'], undefined);
+    assert.equal(
+      aprender(b, correo, {}, new Date(), null)['help@paddle.com']?.assignee,
+      undefined
+    );
+    // Sin cambio y sin asignado no se guarda nada.
+    assert.deepEqual(aprender({}, correo, {}), {});
   });
 });

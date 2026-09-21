@@ -117,6 +117,15 @@ const ESPERA_BORRAR_MS = 5000;
             @if (task().company; as company) {
               <span class="chip" [class]="companyClass()">{{ company }}</span>
             }
+            @if (task().unread; as u) {
+              <!-- Llegó un correo del hilo; se quita al abrir la tarjeta. -->
+              <span
+                class="chip bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200"
+                [title]="u.text">
+                <pt-icon name="bandeja" class="h-3.5 w-3.5" />
+                Novedad por correo
+              </span>
+            }
             @if (done()) {
               <span
                 class="chip bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
@@ -240,6 +249,38 @@ const ESPERA_BORRAR_MS = 5000;
                 {{ task().assignee?.name ?? 'Sin asignar · asignar' }}
               </button>
             }
+            @if (seguidores().length > 0) {
+              <span
+                class="text-ink-subtle"
+                [title]="'También: ' + nombresSeguidores()">
+                +{{ seguidores().length }}
+              </span>
+            }
+            @if (!task().assignee && task().suggestedAssignee; as sg) {
+              <!-- La IA propone; un clic asigna (y avisa), la × descarta. -->
+              <span
+                class="inline-flex items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-xs text-ink"
+                [title]="sg.reason">
+                <span class="text-brand">✦</span>
+                Sugerido: <strong>{{ sg.person.name }}</strong>
+                <button
+                  type="button"
+                  class="ml-0.5 rounded px-1.5 font-medium text-brand transition hover:bg-brand/10 hover:underline"
+                  [disabled]="saving()"
+                  (click)="asignarSugerido()">
+                  Asignar
+                </button>
+                <button
+                  type="button"
+                  class="rounded px-1 text-base leading-none text-ink-subtle transition hover:text-ink"
+                  aria-label="Descartar sugerencia"
+                  title="Descartar sugerencia"
+                  [disabled]="saving()"
+                  (click)="descartarSugerencia()">
+                  ×
+                </button>
+              </span>
+            }
             <span class="chip" [class]="priorityClass()">{{
               priorityLabel()
             }}</span>
@@ -339,6 +380,44 @@ const ESPERA_BORRAR_MS = 5000;
                       Rechazar
                     </button>
                   </div>
+                </div>
+              }
+              @if (
+                ia.disponible && ia.equipo().length > 0 && !task().personal
+              ) {
+                <!-- Además del responsable, quiénes le dan seguimiento. -->
+                <div
+                  class="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+                  <span>También da seguimiento:</span>
+                  @for (p of seguidores(); track p.id) {
+                    <span class="chip bg-surface-muted text-ink">
+                      {{ p.name }}
+                      <button
+                        type="button"
+                        class="ml-0.5 rounded px-1 text-base leading-none text-ink-subtle transition hover:text-danger"
+                        [attr.aria-label]="'Quitar a ' + p.name"
+                        [disabled]="saving()"
+                        (click)="quitarSeguidor(p)">
+                        ×
+                      </button>
+                    </span>
+                  } @empty {
+                    <span class="text-ink-subtle">nadie más</span>
+                  }
+                  @if (candidatosSeguimiento().length > 0) {
+                    <select
+                      class="h-10 max-w-40 rounded border border-line bg-surface px-1 text-xs text-ink lg:h-8"
+                      [disabled]="saving()"
+                      [ngModel]="''"
+                      (ngModelChange)="agregarSeguidor($event)"
+                      name="seg-{{ task().id }}"
+                      aria-label="Agregar a alguien que dé seguimiento">
+                      <option value="">Agregar…</option>
+                      @for (p of candidatosSeguimiento(); track p.id) {
+                        <option [value]="p.email ?? p.id">{{ p.name }}</option>
+                      }
+                    </select>
+                  }
                 </div>
               }
               @if (historial().length > 0) {
@@ -806,6 +885,28 @@ export class TaskCardComponent {
     () => !this.done() && isOverdue(this.task().dueDate)
   );
   readonly comments = computed(() => this.task().comments ?? []);
+  readonly seguidores = computed(() => this.task().followers ?? []);
+  readonly nombresSeguidores = computed(() =>
+    this.seguidores()
+      .map((p) => p.name)
+      .join(', ')
+  );
+  /** Del equipo, quién puede agregarse: ni el responsable ni los que ya siguen. */
+  readonly candidatosSeguimiento = computed(() => {
+    const fuera = [this.task().assignee, ...this.seguidores()].filter(
+      (p): p is NonNullable<typeof p> => !!p
+    );
+    return this.ia
+      .equipo()
+      .filter(
+        (q) =>
+          !fuera.some(
+            (p) =>
+              p.id === q.id ||
+              (!!p.email && p.email.toLowerCase() === q.email?.toLowerCase())
+          )
+      );
+  });
   readonly historial = computed(() =>
     [...(this.task().history ?? [])].sort((a, b) => b.at.localeCompare(a.at))
   );
@@ -877,8 +978,32 @@ export class TaskCardComponent {
   private readonly avisos = inject(AvisosService);
   private readonly host = inject(ElementRef<HTMLElement>);
 
+  /** Ya se le dijo al puente que esta novedad se vio; no repetir. */
+  private vistoEnviado = false;
+
   constructor() {
     this.ia.cargarEquipo();
+    // Abrir la tarjeta es ver la novedad: se avisa al puente y el chip se
+    // quita al instante, sin esperar el siguiente refresco.
+    effect(() => {
+      const novedad = this.task().unread;
+      if (
+        !this.open() ||
+        !novedad ||
+        this.vistoEnviado ||
+        !this.ia.disponible
+      ) {
+        return;
+      }
+      this.vistoEnviado = true;
+      const id = this.task().id;
+      this.admin.marcarVisto(id).subscribe({
+        next: () => this.store.actualizarTarea(id, { unread: undefined }),
+        error: () => {
+          this.vistoEnviado = false;
+        }
+      });
+    });
     // Si este es el pendiente que un aviso pidio abrir, se abre y se enseña.
     effect(() => {
       if (this.avisos.abrir() === this.task().id) {
@@ -1002,6 +1127,37 @@ export class TaskCardComponent {
 
   reasignar(quien: string): void {
     this.guardar({ asignarA: quien, tarea: this.task() });
+  }
+
+  /** Acepta al que propuso la IA: se asigna por el flujo normal (y avisa). */
+  asignarSugerido(): void {
+    const sg = this.task().suggestedAssignee;
+    if (!sg) {
+      return;
+    }
+    this.guardar({
+      asignarA: sg.person.email ?? sg.person.id,
+      tarea: this.task()
+    });
+  }
+
+  descartarSugerencia(): void {
+    this.guardar({ descartarSugerencia: true }, () =>
+      this.store.actualizarTarea(this.task().id, {
+        suggestedAssignee: undefined
+      })
+    );
+  }
+
+  agregarSeguidor(quien: string): void {
+    if (!quien) {
+      return;
+    }
+    this.guardar({ agregarSeguidor: quien, tarea: this.task() });
+  }
+
+  quitarSeguidor(persona: { id: string; email?: string }): void {
+    this.guardar({ quitarSeguidor: persona.email ?? persona.id });
   }
 
   sugerir(): void {

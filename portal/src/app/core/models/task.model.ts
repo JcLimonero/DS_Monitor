@@ -44,6 +44,19 @@ export interface ReassignRequest {
   at: string;
 }
 
+/** Llegó algo nuevo al pendiente (un correo relacionado) y nadie lo ha visto. */
+export interface TaskUnread {
+  at: string;
+  /** Resumen corto de lo que llegó. */
+  text: string;
+}
+
+/** La IA propone responsable; alguien decide si se asigna. */
+export interface SuggestedAssignee {
+  person: Person;
+  reason: string;
+}
+
 export interface TaskItem {
   id: string;
   title: string;
@@ -73,6 +86,12 @@ export interface TaskItem {
   reassignRequest?: ReassignRequest;
   /** A quien le toca. Sin responsable el pendiente sale como "sin asignar". */
   assignee?: Person;
+  /** Quiénes también le dan seguimiento, además del responsable. */
+  followers?: Person[];
+  /** Responsable que propone la IA, todavía sin asignar. */
+  suggestedAssignee?: SuggestedAssignee;
+  /** Novedad por correo que nadie ha abierto todavía. */
+  unread?: TaskUnread;
   accountId: string;
   origin: TaskOrigin;
   /** Proyecto, tablero o equipo al que pertenece. */

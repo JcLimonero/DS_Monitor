@@ -265,17 +265,24 @@ export class IaService {
   }
 
   /** A pedido: a quién asignar un pendiente sin dueño y de qué empresa es. */
-  sugerir(
-    id: string
-  ): Observable<{ responsable?: string; empresa?: string; motivo: string }> {
+  sugerir(id: string): Observable<{
+    responsable?: string;
+    empresa?: string;
+    motivo: string;
+    confianza?: 'alta' | 'media' | 'baja';
+  }> {
     return this.http.post<{
       responsable?: string;
       empresa?: string;
       motivo: string;
+      confianza?: 'alta' | 'media' | 'baja';
     }>(this.url('/ia/sugerir'), { id }, { headers: this.headers() });
   }
 
-  /** Comentar, marcar hecho o asignar cualquier pendiente. */
+  /**
+   * Comentar, marcar hecho, asignar, agregar o quitar a quien da seguimiento
+   * o descartar la sugerencia de responsable de cualquier pendiente.
+   */
   anotar(
     id: string,
     cambio: {
@@ -285,6 +292,10 @@ export class IaService {
       eliminar?: boolean;
       cambios?: CambiosPendiente;
       asignarA?: string;
+      /** Id o correo de alguien del equipo. */
+      agregarSeguidor?: string;
+      quitarSeguidor?: string;
+      descartarSugerencia?: boolean;
       tarea?: Partial<TaskItem>;
     }
   ): Observable<{ ok: boolean; aviso?: string }> {

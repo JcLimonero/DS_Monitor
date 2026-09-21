@@ -102,6 +102,18 @@
                   <span class="chip bg-surface-muted text-ink-muted">{{
                     priorityLabel[t.priority]
                   }}</span>
+                  @if (soloSigue(t)) {
+                    <!-- Lo ve por dar seguimiento; el responsable es otro. -->
+                    <span
+                      class="chip bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200"
+                      [title]="
+                        t.assignee
+                          ? 'Responsable: ' + t.assignee.name
+                          : 'Sin responsable'
+                      ">
+                      seguimiento
+                    </span>
+                  }
                   @if (t.company) {
                     <span class="chip bg-surface-muted text-ink-muted">{{
                       t.company
@@ -208,7 +220,8 @@
                 @if (
                   !t.reassignRequest &&
                   pidiendo() !== t.id &&
-                  t.status !== "hecho"
+                  t.status !== "hecho" &&
+                  !soloSigue(t)
                 ) {
                   <button
                     type="button"

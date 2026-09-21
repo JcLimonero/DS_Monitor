@@ -1,5 +1,6 @@
 import type { ConfiguracionIa } from '../config/entorno.js';
 import type { TaskItem, TaskPriority } from '../nucleo/contrato.js';
+import { correoDelRemitente } from '../pendientes/remitente.js';
 import {
   CONTEXTO_EMPRESAS,
   EMPRESAS,
@@ -99,18 +100,25 @@ function masAlta(a: TaskPriority, b?: TaskPriority): TaskPriority {
   return ORDEN.indexOf(b) > ORDEN.indexOf(a) ? b : a;
 }
 
+/** Que tan segura viene la propuesta; solo con "alta" se asigna sin preguntar. */
+export type ConfianzaSugerencia = 'alta' | 'media' | 'baja';
+
 /** Lo que la IA propone para un pendiente sin dueño: quién y de qué empresa. */
 export interface SugerenciaPendiente {
   responsable?: string;
   empresa?: string;
   motivo: string;
+  confianza: ConfianzaSugerencia;
 }
 
 /**
- * Sugiere responsable y empresa para un pendiente, a pedido (el botón en la
- * tarjeta). Se apoya en el equipo, en lo que otros pendientes parecidos ya
- * tienen asignado y en lo aprendido de correcciones anteriores por
- * remitente. No asigna nada: la persona decide.
+ * Sugiere responsable y empresa para un pendiente: a pedido (el botón en la
+ * tarjeta) o al registrar uno nuevo del correo. Se apoya en el equipo, en lo
+ * que otros pendientes parecidos ya tienen asignado y en lo aprendido de
+ * correcciones anteriores por remitente. Dice ademas que tan segura es la
+ * propuesta: alta solo si hay una base concreta (regla aprendida, un parecido
+ * del mismo remitente o proyecto ya con esa persona, o el correo la nombra).
+ * Quien llama decide si asigna o solo sugiere.
  */
 export async function sugerirResponsable(
   config: ConfiguracionIa,
@@ -121,7 +129,7 @@ export async function sugerirResponsable(
 ): Promise<SugerenciaPendiente> {
   const texto = await preguntar(config, {
     uso: 'asistente',
-    sistema: `${CONTEXTO_EMPRESAS}\nTe doy un pendiente sin responsable, el equipo (nombre y rol), pendientes parecidos que ya tienen responsable y empresa, y pistas aprendidas por remitente. Propón quién del equipo debería atenderlo y a qué empresa pertenece. Responde SOLO JSON: {"responsable":"id de la persona o null","empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null","motivo":"una frase corta de por qué"}. Si no hay base para proponer, responsable null y dilo en el motivo.`,
+    sistema: `${CONTEXTO_EMPRESAS}\nTe doy un pendiente sin responsable, el equipo (nombre y rol), pendientes parecidos que ya tienen responsable y empresa, y pistas aprendidas por remitente. Propón quién del equipo debería atenderlo y a qué empresa pertenece. Responde SOLO JSON: {"responsable":"id de la persona o null","empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null","motivo":"una frase corta de por qué","confianza":"alta|media|baja"}. La confianza es "alta" SOLO si hay una regla aprendida para ese remitente, si un pendiente parecido del mismo remitente o proyecto ya está con esa persona, o si el correo nombra explícitamente a esa persona; "media" si lo deduces por el rol o la empresa; "baja" si es una corazonada. Si no hay base para proponer, responsable null, confianza baja y dilo en el motivo.`,
     usuario: JSON.stringify({
       pendiente: {
         titulo: tarea.title,
@@ -130,6 +138,7 @@ export async function sugerirResponsable(
         empresaActual: tarea.company,
         origen: tarea.origin,
         remitente: tarea.senderKind,
+        correoRemitente: correoDelRemitente(tarea.description),
         etiquetas: tarea.tags
       },
       equipo,
@@ -137,6 +146,7 @@ export async function sugerirResponsable(
         titulo: t.title,
         empresa: t.company,
         proyecto: t.project,
+        correoRemitente: correoDelRemitente(t.description),
         responsable: t.assignee?.id
       })),
       pistas: pistas.slice(0, 25)
@@ -146,11 +156,16 @@ export async function sugerirResponsable(
   });
   const salida = comoJson<Partial<SugerenciaPendiente>>(texto);
   const responsable = texto1(salida.responsable);
+  const valido = equipo.some((p) => p.id === responsable);
   return {
-    responsable: equipo.some((p) => p.id === responsable)
-      ? responsable
-      : undefined,
+    responsable: valido ? responsable : undefined,
     empresa: EMPRESAS.find((e) => e === salida.empresa),
-    motivo: texto1(salida.motivo) ?? 'Sin base suficiente para proponer.'
+    motivo: texto1(salida.motivo) ?? 'Sin base suficiente para proponer.',
+    confianza:
+      (valido &&
+        (['alta', 'media', 'baja'] as const).find(
+          (c) => c === texto1(salida.confianza)
+        )) ||
+      'baja'
   };
 }
