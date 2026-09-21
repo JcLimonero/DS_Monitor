@@ -59,11 +59,23 @@ export interface ReassignRequest {
   at: string;
 }
 
-/** Llego algo nuevo al pendiente (un correo relacionado) y nadie lo ha visto. */
+/**
+ * Llego algo nuevo al pendiente y nadie lo ha visto: un correo relacionado
+ * o la respuesta de alguien del equipo desde su liga.
+ */
 export interface TaskUnread {
   at: string;
   /** Resumen corto de lo que llego. */
   text: string;
+  /** De donde viene; sin valor, correo (lo de antes). */
+  kind?: 'correo' | 'respuesta';
+}
+
+/** Se le pidio una actualizacion a los responsables y no han contestado. */
+export interface UpdateRequest {
+  at: string;
+  /** Correos a los que se les pidio. */
+  to: string[];
 }
 
 /** La IA propone responsable; alguien decide si se asigna. */
@@ -105,6 +117,8 @@ export interface TaskItem {
   unread?: TaskUnread;
   /** El responsable pidio que se lo reasignen; pendiente de decidir. */
   reassignRequest?: ReassignRequest;
+  /** Se pidio actualizacion a los responsables; se borra cuando contestan. */
+  updateRequested?: UpdateRequest;
   accountId: string;
   origin: TaskOrigin;
   project?: string;

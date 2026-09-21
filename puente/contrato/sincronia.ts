@@ -20,6 +20,8 @@ type _TaskItem = Igual<Portal.TaskItem, Puente.TaskItem>;
 type _Empresa = Igual<Portal.Empresa, Puente.Empresa>;
 type _TaskComment = Igual<Portal.TaskComment, Puente.TaskComment>;
 type _TaskEvent = Igual<Portal.TaskEvent, Puente.TaskEvent>;
+type _TaskUnread = Igual<Portal.TaskUnread, Puente.TaskUnread>;
+type _UpdateRequest = Igual<Portal.UpdateRequest, Puente.UpdateRequest>;
 type _Meeting = Igual<Portal.Meeting, Puente.Meeting>;
 type _MonitorTarget = Igual<Portal.MonitorTarget, Puente.MonitorTarget>;
 type _MonitorCheck = Igual<Portal.MonitorCheck, Puente.MonitorCheck>;
@@ -46,6 +48,8 @@ const comprobado: [
   _Empresa,
   _TaskComment,
   _TaskEvent,
+  _TaskUnread,
+  _UpdateRequest,
   _Meeting,
   _MonitorTarget,
   _MonitorCheck,
@@ -59,6 +63,8 @@ const comprobado: [
   _RepoPullRequest,
   _RepoCommit
 ] = [
+  true,
+  true,
   true,
   true,
   true,

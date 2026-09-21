@@ -113,6 +113,14 @@ import {
   yaAvisado,
   type RegistroAvisos
 } from '../pendientes/avisos-asignacion.js';
+import {
+  conRespuesta,
+  conSolicitud,
+  destinatariosSolicitud,
+  motivoSinDestinatario,
+  solicitudReciente,
+  textoEventoSolicitud
+} from '../pendientes/solicitud-actualizacion.js';
 import { enviarPorEmailJs } from '../acceso/acceso.js';
 import type {
   ClienteIngesta,
@@ -789,16 +797,18 @@ export function construirRutas(
   // --- Acceso: quien puede ver el portal ---
   //
   // Con EmailJS y una lista de correos configurados, todo lo que no sea
-  // salud, el propio acceso, el regreso de OAuth o la ingesta (que trae sus
-  // tokens) exige una sesion. Sin eso configurado, el puente queda abierto,
-  // que es lo comodo en desarrollo.
+  // salud, el propio acceso, el regreso de OAuth, la ingesta (que trae sus
+  // tokens) o la liga personal del equipo (/mio, que se identifica con su
+  // propio token y solo abre lo de esa persona) exige una sesion. Sin eso
+  // configurado, el puente queda abierto, que es lo comodo en desarrollo.
 
   const LIBRES = new Set([
     'salud',
     'acceso',
     'ingesta',
     'recibido',
-    'telegram'
+    'telegram',
+    'mio'
   ]);
   router.proteger((segmentos, contexto) => {
     const config = cfg();
@@ -3198,6 +3208,194 @@ export function construirRutas(
     return { ok: true, tarea: tareaConNotas(), aviso };
   });
 
+  /**
+   * El correo con el que se pide una actualizacion de un pendiente: a quien
+   * le toca (con copia a quienes dan seguimiento), con la nota de quien
+   * pide, en que va el pendiente, los ultimos comentarios y la liga
+   * personal de cada quien (la del destinatario como boton). Con copias el
+   * encabezado es neutro, como el de responsables.
+   */
+  const correoSolicitudActualizacion = async (
+    para: Person,
+    cc: Person[],
+    id: string,
+    tarea: Partial<TaskItem>,
+    sesion: Sesion | undefined,
+    comentarios: TaskComment[],
+    nota: string | undefined
+  ): Promise<string> => {
+    const t = tarea;
+    const quien = sesion ? escapar(sesion.correo) : 'DS Monitor';
+    const encabezado =
+      cc.length > 0
+        ? `<p><strong>${quien}</strong> pide una actualización de un pendiente en <strong>DS Monitor</strong>; va al responsable y con copia a quienes dan seguimiento.</p>`
+        : `<p><strong>${quien}</strong> te pide una actualización de un pendiente en <strong>DS Monitor</strong>:</p>`;
+    // Una liga a la vez: cada una lee y reescribe el mismo archivo.
+    const copias: { persona: Person; liga: string }[] = [];
+    for (const persona of cc) {
+      copias.push({ persona, liga: await ligaDe(persona, id) });
+    }
+    const recientes = comentarios.slice(-3);
+    return (
+      encabezado +
+      `<p style="font-size:20px"><strong>Te piden una actualización de: ${escapar(t.title ?? id)}</strong></p>` +
+      (nota
+        ? `<p style="border-left:3px solid #04202B;padding-left:10px">${escapar(nota)}</p>`
+        : '') +
+      `<p>Estado: ${escapar(TASK_STATUS_LABEL[t.status ?? 'pendiente'])}` +
+      ` · Prioridad: ${escapar(t.priority ?? 'media')}` +
+      (t.dueDate
+        ? ` · Vence: ${new Date(t.dueDate).toLocaleDateString('es-MX', { dateStyle: 'long', timeZone: 'America/Mexico_City' })}`
+        : '') +
+      (t.assignee ? ` · Responsable: ${escapar(t.assignee.name)}` : '') +
+      `</p>` +
+      (recientes.length > 0
+        ? `<p>Comentarios recientes:</p><ul>${recientes.map((c) => `<li>${escapar(c.text)}${c.by ? ` <span style="color:#666">— ${escapar(c.by)}</span>` : ''}</li>`).join('')}</ul>`
+        : '') +
+      `<p><a href="${await ligaDe(para, id)}" style="display:inline-block;padding:10px 16px;background:#04202B;color:#fff;text-decoration:none;border-radius:6px">Responder: en qué va, comentar o cambiar el estado</a></p>` +
+      (copias.length > 0
+        ? `<p>Con copia a quienes dan seguimiento; cada quien con su liga:</p><ul>${copias
+            .map(
+              ({ persona, liga }) =>
+                `<li>${escapar(persona.name)} · <a href="${liga}">tu liga</a></li>`
+            )
+            .join('')}</ul>`
+        : '') +
+      `<p style="color:#666;font-size:12px">Cada liga es personal y solo abre este pendiente; no hace falta usuario ni código. Sirve hasta el final del día de hoy: basta con dejar una línea de en qué va. Después llega otra liga con la solicitud de estatus.</p>`
+    );
+  };
+
+  /**
+   * Pedir una actualizacion de un pendiente ajeno: un solo correo al
+   * responsable con copia a quienes dan seguimiento (con la liga personal
+   * de cada quien), y el pendiente queda marcado con la solicitud hasta que
+   * alguno conteste desde su liga. No se repite antes de dos horas.
+   */
+  router.post('/pendientes/solicitar-actualizacion', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const cuerpo = (contexto.cuerpo ?? {}) as {
+      id?: string;
+      tarea?: Partial<TaskItem>;
+      /** Lo que quien pide quiere decirle al responsable. */
+      nota?: string;
+    };
+    const id = (cuerpo.id ?? '').trim();
+    if (!id) {
+      throw new ErrorPuente('Falta el identificador del pendiente.', 400);
+    }
+    const sesion = acceso.sesionDe(tokenDe(contexto));
+    const quienPide = sesion?.correo ?? 'administración';
+    const tarea = cuerpo.tarea ?? {};
+    const nota =
+      typeof cuerpo.nota === 'string' && cuerpo.nota.trim()
+        ? cuerpo.nota.trim().slice(0, 500)
+        : undefined;
+    const todas = datos.anotaciones.leer();
+    const nota0: Anotacion = todas[id] ?? {
+      comentarios: [],
+      actualizadoEn: ''
+    };
+    const hace = solicitudReciente(nota0, new Date());
+    if (hace !== undefined) {
+      throw new ErrorPuente(
+        `Ya se pidió hace ${hace} min; espera a que contesten (o dos horas).`,
+        409
+      );
+    }
+    const destinatarios = destinatariosSolicitud({
+      principal: nota0.asignado ?? tarea.assignee,
+      seguidores: nota0.seguidores ?? tarea.followers ?? [],
+      propios: [...(sesion ? [sesion.correo] : []), ...correosDelDueno()]
+    });
+    if (destinatarios.motivo || !destinatarios.para?.email) {
+      throw new ErrorPuente(
+        motivoSinDestinatario(destinatarios.motivo ?? 'nadie'),
+        400
+      );
+    }
+    const para = destinatarios.para as Person & { email: string };
+    const cc = destinatarios.cc;
+    const ahora = new Date().toISOString();
+    await datos.anotaciones.escribir({
+      ...todas,
+      [id]: conSolicitud(nota0, { para, cc, por: quienPide, ahora })
+    });
+    cache.olvidar();
+    // Con las anotaciones encima: lo que mando el portal puede venir viejo
+    // (el estado que el responsable acaba de cambiar desde su liga).
+    const tareaConNotas = () =>
+      anotar([{ ...tarea, id } as TaskItem], datos.anotaciones.leer())[0];
+    const actual = tareaConNotas() ?? tarea;
+    const titulo = actual.title ?? id;
+    for (const persona of [para, ...cc]) {
+      if (persona.email) {
+        void push.avisar(
+          {
+            titulo: `Te piden una actualización: ${titulo}`,
+            cuerpo: nota ?? (sesion ? `de ${sesion.correo}` : ''),
+            url: '/pendientes',
+            etiqueta: `actualizacion:${id}`
+          },
+          persona.email
+        );
+      }
+    }
+    const copiaTexto =
+      cc.length > 0 ? ` con copia a ${cc.map((p) => p.email).join(', ')}` : '';
+    const config = cfg();
+    if (!config.acceso) {
+      console.log(
+        `[puente] actualización de "${titulo}": sin EmailJS; se habría pedido a ${para.email}${copiaTexto}.`
+      );
+      return {
+        ok: true,
+        tarea: tareaConNotas(),
+        aviso:
+          'Quedó registrada; para pedirla por correo configura el acceso (EmailJS) en Equipo.'
+      };
+    }
+    let aviso: string;
+    try {
+      const html = await correoSolicitudActualizacion(
+        para,
+        cc,
+        id,
+        actual,
+        sesion,
+        nota0.comentarios,
+        nota
+      );
+      await enviarPorEmailJs(config.acceso, para.email, '', false, {
+        titulo: `Te piden una actualización: ${titulo}`,
+        html,
+        cc: cc.map((p) => p.email).filter((c): c is string => !!c)
+      });
+      console.log(
+        `[puente] actualización de "${titulo}": ${textoEventoSolicitud(para, cc)} (${para.email}${copiaTexto}).`
+      );
+      aviso = `Se pidió a ${para.email}${copiaTexto}.`;
+    } catch (error) {
+      // Sin correo no se pidio nada: se quita la marca (asi el chip no
+      // miente y se puede reintentar de inmediato) y queda el motivo.
+      const detalle = error instanceof Error ? error.message : String(error);
+      const actuales = datos.anotaciones.leer();
+      const { solicitudActualizacion: _fallida, ...resto } =
+        actuales[id] ?? nota0;
+      await datos.anotaciones.escribir({
+        ...actuales,
+        [id]: conEvento(resto, {
+          at: new Date().toISOString(),
+          by: quienPide,
+          kind: 'solicitud',
+          text: `No se pudo mandar la solicitud de actualización: ${detalle}`
+        })
+      });
+      cache.olvidar();
+      aviso = `No se pudo mandar el correo: ${detalle}`;
+    }
+    return { ok: true, tarea: tareaConNotas(), aviso };
+  });
+
   // Alguien abrio el pendiente en el portal: la novedad por correo ya se vio.
   router.post('/pendientes/visto', async (contexto) => {
     exigirAdmin(contexto, cfg(), acceso);
@@ -3382,6 +3580,7 @@ export function construirRutas(
     ligaDe,
     push,
     iaPara,
+    correosDelDueno: () => [...correosDelDueno()],
     calendarios: () =>
       buzones_(cfg(), almacenCorreo)
         .filter((c) => metodoDe(c, cfg()) === 'graph')
@@ -3896,6 +4095,21 @@ export function construirRutas(
       });
     }
     nota.actualizadoEn = ahora;
+    // Alguien del equipo contesto desde su liga: el dueño lo revisa como
+    // novedad en la tarjeta (y si se lo habian pedido, queda contestado).
+    // Si el que anota es el dueño, ya lo vio.
+    if (!esDelDueno(persona)) {
+      nota = conRespuesta(nota, {
+        persona,
+        comentario:
+          typeof cuerpo.comentario === 'string' ? cuerpo.comentario : undefined,
+        estado:
+          typeof cuerpo.hecho === 'boolean'
+            ? (cuerpo.estado ?? (cuerpo.hecho ? 'hecho' : 'pendiente'))
+            : undefined,
+        ahora
+      });
+    }
     await datos.anotaciones.escribir({ ...todas, [id]: nota });
     cache.olvidar();
     // Quien asigna se entera: aviso en el monitor y push.

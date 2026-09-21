@@ -42,6 +42,8 @@ export class IaService {
   readonly equipo = signal<Person[]>([]);
   /** Buzones donde se pueden crear juntas. */
   readonly calendarios = signal<{ id: string; usuario: string }[]>([]);
+  /** Correos del dueño del monitor (acceso y buzones), en minúsculas. */
+  readonly correosDelDueno = signal<string[]>([]);
   readonly fireflies = signal(false);
 
   get disponible(): boolean {
@@ -56,6 +58,9 @@ export class IaService {
       tap((e) => {
         this.activa.set(e.activa);
         this.calendarios.set(e.calendarios ?? []);
+        this.correosDelDueno.set(
+          (e.correosDelDueno ?? []).map((c) => c.trim().toLowerCase())
+        );
         this.fireflies.set(!!e.fireflies);
       })
     );
@@ -326,6 +331,25 @@ export class IaService {
     return this.http.post<{ ok: boolean; tarea?: TaskItem; aviso?: string }>(
       this.url('/pendientes/responsables'),
       { id, principal, seguidores, tarea },
+      { headers: this.headers() }
+    );
+  }
+
+  /**
+   * Pedirle una actualización a los responsables de un pendiente ajeno: el
+   * puente manda un solo correo (responsable de destinatario, seguimiento
+   * con copia) con la liga personal de cada quien y marca el pendiente como
+   * "actualización pedida" hasta que alguien conteste. No se repite antes
+   * de dos horas (409).
+   */
+  solicitarActualizacion(
+    id: string,
+    nota: string | undefined,
+    tarea?: Partial<TaskItem>
+  ): Observable<{ ok: boolean; tarea?: TaskItem; aviso?: string }> {
+    return this.http.post<{ ok: boolean; tarea?: TaskItem; aviso?: string }>(
+      this.url('/pendientes/solicitar-actualizacion'),
+      { id, nota, tarea },
       { headers: this.headers() }
     );
   }
