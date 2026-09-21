@@ -33,6 +33,8 @@ import { LocalTaskStore } from '../core/sources/local/local-task.store';
 import { PortalStore } from '../core/state/portal.store';
 import { isOverdue } from '../core/util/date.util';
 import { sinPrefijosDeCorreo } from '../core/util/text.util';
+import { DetalleEditorComponent } from './detalle-editor.component';
+import { FotosPendienteComponent } from './fotos-pendiente.component';
 import {
   CLASE_PLAZO,
   PUNTO_PLAZO,
@@ -90,7 +92,9 @@ const ESPERA_BORRAR_MS = 5000;
     RouterLink,
     DayPipe,
     TimePipe,
-    RelativePipe
+    RelativePipe,
+    DetalleEditorComponent,
+    FotosPendienteComponent
   ],
   template: `
     <article
@@ -200,6 +204,7 @@ const ESPERA_BORRAR_MS = 5000;
               {{ task().description }}
             </p>
           }
+          <pt-fotos-pendiente [urls]="task().imagenes" [compact]="!open()" />
 
           <!-- Orden fijo: fecha, estado, responsable, prioridad, cuenta · origen. -->
           <div
@@ -751,19 +756,16 @@ const ESPERA_BORRAR_MS = 5000;
                       [ngModel]="e.title"
                       (ngModelChange)="patchEdit({ title: $event })" />
                   </label>
-                  <label class="sm:col-span-2">
-                    <span class="mb-1 block text-xs font-medium text-ink-muted"
-                      >Descripción</span
-                    >
-                    <textarea
-                      class="field min-h-24"
-                      name="e-desc-{{ task().id }}"
-                      placeholder="El detalle: lo que se capturó de referencia se puede completar aquí"
-                      [ngModel]="e.description"
-                      (ngModelChange)="
-                        patchEdit({ description: $event })
-                      "></textarea>
-                  </label>
+                  <pt-detalle-editor
+                    class="sm:col-span-2"
+                    [name]="'e-desc-' + task().id"
+                    etiqueta="Descripción"
+                    placeholder="El detalle: lo que se capturó de referencia se puede completar aquí"
+                    [disabled]="saving()"
+                    [texto]="e.description"
+                    (textoChange)="patchEdit({ description: $event })"
+                    [imagenes]="e.imagenes"
+                    (imagenesChange)="patchEdit({ imagenes: $event })" />
                   @if (!task().personal) {
                     <label>
                       <span
@@ -1055,6 +1057,7 @@ export class TaskCardComponent {
     | {
         title: string;
         description: string;
+        imagenes: string[];
         priority: string;
         /** "YYYY-MM-DD" del input de fecha. */
         dueLocal: string;
@@ -1618,6 +1621,7 @@ export class TaskCardComponent {
     this.editing.set({
       title: t.title,
       description: t.description ?? '',
+      imagenes: t.imagenes ?? [],
       priority: t.priority,
       dueLocal: t.dueDate ? aLocal(t.dueDate).slice(0, 10) : '',
       dueTime: t.dueDate && t.dueHasTime ? aLocal(t.dueDate).slice(11, 16) : '',
@@ -1643,6 +1647,7 @@ export class TaskCardComponent {
         cambios: {
           title: e.title,
           description: e.description,
+          imagenes: e.imagenes,
           priority: this.task().personal
             ? e.dueLocal
               ? 'urgente'

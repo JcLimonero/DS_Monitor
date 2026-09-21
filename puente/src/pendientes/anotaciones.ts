@@ -7,6 +7,7 @@ import type {
   TaskStatus,
   TaskUnread
 } from '../nucleo/contrato.js';
+import { limpiarDescripcion, limpiarImagenes } from './detalle.js';
 
 /**
  * Lo que se le agrega a un pendiente desde el portal, venga de donde venga:
@@ -67,6 +68,7 @@ export type CambiosPendiente = Partial<
     TaskItem,
     | 'title'
     | 'description'
+    | 'imagenes'
     | 'priority'
     | 'dueDate'
     | 'dueHasTime'
@@ -139,7 +141,10 @@ export function limpiarCambios(
     salida.title = cambios.title.trim().slice(0, 160);
   }
   if (typeof cambios.description === 'string') {
-    salida.description = cambios.description.trim() || undefined;
+    salida.description = limpiarDescripcion(cambios.description);
+  }
+  if ('imagenes' in cambios) {
+    salida.imagenes = limpiarImagenes(cambios.imagenes);
   }
   if (
     cambios.priority &&
@@ -305,6 +310,7 @@ export function conEvento(
 const ETIQUETA_CAMPO: Record<keyof CambiosPendiente, string> = {
   title: 'Título',
   description: 'Descripción',
+  imagenes: 'Fotos',
   priority: 'Prioridad',
   dueDate: 'Fecha',
   dueHasTime: 'Hora',
@@ -337,6 +343,14 @@ export function describirCambios(
       partes.push(nuevo ? 'Descripción editada' : 'Descripción borrada');
       continue;
     }
+    if (clave === 'imagenes') {
+      partes.push(
+        Array.isArray(nuevo) && nuevo.length > 0
+          ? 'Fotos editadas'
+          : 'Fotos quitadas'
+      );
+      continue;
+    }
     const conHora =
       clave === 'dueDate' &&
       (cambios.dueHasTime === true || anterior?.dueHasTime === true);
@@ -355,6 +369,9 @@ function igual(clave: keyof CambiosPendiente, a: unknown, b: unknown): boolean {
         ? new Date(v).toISOString()
         : '';
     return fecha(a) === fecha(b);
+  }
+  if (clave === 'imagenes') {
+    return JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
   }
   return (a ?? '') === (b ?? '');
 }

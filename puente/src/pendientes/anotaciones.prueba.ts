@@ -55,4 +55,22 @@ describe('describirCambios', () => {
       'Título: Nuevo · Empresa: (vacío)'
     );
   });
+
+  it('las fotos se anotan sin volcar el data URL', () => {
+    assert.equal(
+      describirCambios({ imagenes: ['data:image/jpeg;base64,xx'] }),
+      'Fotos editadas'
+    );
+    assert.equal(
+      describirCambios({ imagenes: [] }, { imagenes: ['x'] }),
+      'Fotos quitadas'
+    );
+    assert.equal(
+      describirCambios(
+        { imagenes: ['data:image/jpeg;base64,xx'] },
+        { imagenes: ['data:image/jpeg;base64,xx'] }
+      ),
+      ''
+    );
+  });
 });

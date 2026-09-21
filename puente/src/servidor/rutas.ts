@@ -107,6 +107,7 @@ import {
   textoAviso,
   textoEventoResponsables
 } from '../pendientes/responsables.js';
+import { limpiarPendienteLocal } from '../pendientes/detalle.js';
 import {
   claveDeAviso,
   registrarAviso,
@@ -1125,46 +1126,17 @@ export function construirRutas(
       throw new ErrorPuente('"pendientes" debe ser una lista.', 400);
     }
     const ahora = new Date().toISOString();
-    const limpios: TaskItem[] = pendientes.map((cruda, i) => {
-      const t = (cruda ?? {}) as Record<string, unknown>;
-      const title = typeof t['title'] === 'string' ? t['title'].trim() : '';
-      if (!title) {
-        throw new ErrorPuente(`pendientes[${i}].title es obligatorio.`, 400);
-      }
-      const texto = (v: unknown) =>
-        typeof v === 'string' && v.trim() ? v.trim() : undefined;
-      return {
-        id: texto(t['id']) ?? `local-${i}-${Date.now()}`,
-        title,
-        description: texto(t['description']),
-        status:
-          (['pendiente', 'en_progreso', 'bloqueado', 'hecho'] as const).find(
-            (e) => e === t['status']
-          ) ?? 'pendiente',
-        // Lo personal siempre es alta, y urgente si tiene fecha.
-        priority:
-          t['personal'] === true
-            ? texto(t['dueDate'])
-              ? 'urgente'
-              : 'alta'
-            : ((['baja', 'media', 'alta', 'urgente'] as const).find(
-                (p) => p === t['priority']
-              ) ?? 'media'),
-        dueDate: texto(t['dueDate']),
-        dueHasTime: t['dueHasTime'] === true ? true : undefined,
-        accountId: 'mios',
-        origin: 'local',
-        project: texto(t['project']),
-        company: texto(t['company']),
-        personal: t['personal'] === true ? true : undefined,
-        tags: Array.isArray(t['tags'])
-          ? (t['tags'] as unknown[]).filter(
-              (x): x is string => typeof x === 'string'
-            )
-          : [],
-        updatedAt: texto(t['updatedAt']) ?? ahora
-      };
-    });
+    let limpios: TaskItem[];
+    try {
+      limpios = pendientes.map((cruda, i) =>
+        limpiarPendienteLocal(cruda, i, ahora)
+      );
+    } catch (error) {
+      throw new ErrorPuente(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
+    }
     return datos.personales.escribir(limpios);
   });
 

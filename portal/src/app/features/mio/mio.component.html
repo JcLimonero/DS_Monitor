@@ -129,6 +129,7 @@
                     {{ t.description }}
                   </p>
                 }
+                <pt-fotos-pendiente [urls]="t.imagenes" />
                 @if (t.comments?.length) {
                   <ul class="mt-2 space-y-1">
                     @for (c of t.comments; track c.at) {

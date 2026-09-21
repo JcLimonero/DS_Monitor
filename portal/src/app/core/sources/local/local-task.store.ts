@@ -14,6 +14,11 @@ export interface NewLocalTask {
   project?: string;
   company?: string;
   description?: string;
+  /** Fotos del detalle (data URLs). */
+  imagenes?: string[];
+  /** Responsable al crear; sin puente vive solo en memoria. */
+  assignee?: TaskItem['assignee'];
+  followers?: TaskItem['followers'];
   /** Personal (no del negocio): solo se ve en Personales. */
   personal?: boolean;
 }
@@ -83,6 +88,9 @@ export class LocalTaskStore implements TaskSource {
       company: input.company?.trim() || undefined,
       personal: input.personal ? true : undefined,
       description: input.description?.trim() || undefined,
+      imagenes: input.imagenes?.length ? input.imagenes : undefined,
+      assignee: input.assignee,
+      followers: input.followers?.length ? input.followers : undefined,
       tags: [],
       updatedAt: now
     };
@@ -125,6 +133,12 @@ export class LocalTaskStore implements TaskSource {
       })
       .subscribe({
         next: (guardados) => {
+          // Si ya se pidió recargar del servidor (anotaciones de responsable),
+          // esa lectura manda: no pisar con lo que devolvió este guardado.
+          if (!this.cargado) {
+            this.error.set(undefined);
+            return;
+          }
           this.tasksSignal.set(guardados);
           this.error.set(undefined);
         },

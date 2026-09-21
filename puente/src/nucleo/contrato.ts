@@ -88,6 +88,11 @@ export interface TaskItem {
   id: string;
   title: string;
   description?: string;
+  /**
+   * Fotos del detalle (data URLs de imagen). Van con el pendiente propio y
+   * se muestran en la tarjeta y en /mio.
+   */
+  imagenes?: string[];
   /** Comentarios capturados en el portal, el más reciente al final. */
   comments?: TaskComment[];
   /** Trazabilidad: comentarios, cambios de estado, asignaciones y ediciones. */
