@@ -207,6 +207,21 @@ describe('empresaDeCuenta', () => {
     );
   });
 
+  it('las pistas del id sobreviven a un renombrado (buscan por id de semilla)', () => {
+    const lista = EMPRESAS_INICIALES.map((e) =>
+      e.id === 'dealer-solutions' ? { ...e, nombre: 'Dealer', cuentas: [] } : e
+    );
+    assert.equal(empresaDeCuenta('correo-dealer', lista), 'Dealer');
+  });
+
+  it('una empresa inactiva no etiqueta, ni por cuentas ni por pistas', () => {
+    const lista = EMPRESAS_INICIALES.map((e) =>
+      e.id === 'dealer-solutions' ? { ...e, activa: false } : e
+    );
+    assert.equal(empresaDeCuenta('correo-dealer', lista), undefined);
+    assert.equal(empresaDeCuenta('correo-itech', lista), 'Itech Dev');
+  });
+
   it('un buzon reasignado se va con la empresa nueva aunque el id diga otra cosa', () => {
     const lista = [
       ...EMPRESAS_INICIALES.map((e) => ({ ...e, cuentas: [] })),
@@ -240,6 +255,30 @@ describe('empresaPorPalabra', () => {
   it('reconoce una empresa nueva por su nombre completo', () => {
     const lista = [...EMPRESAS_INICIALES, empresa('Total One', { orden: 9 })];
     assert.equal(empresaPorPalabra('el CRM de total one', lista), 'Total One');
+  });
+
+  it('una primera palabra generica no etiqueta sola; el nombre completo si', () => {
+    const lista = [
+      ...EMPRESAS_INICIALES,
+      empresa('Total One', { orden: 9 }),
+      empresa('Grupo Vanguardia', { orden: 10 })
+    ];
+    assert.equal(
+      empresaPorPalabra('revisar el total de la factura', lista),
+      undefined
+    );
+    assert.equal(
+      empresaPorPalabra('junta con el grupo de ventas', lista),
+      undefined
+    );
+    assert.equal(
+      empresaPorPalabra('demo de Total One el lunes', lista),
+      'Total One'
+    );
+    assert.equal(
+      empresaPorPalabra('alta en grupo vanguardia', lista),
+      'Grupo Vanguardia'
+    );
   });
 });
 

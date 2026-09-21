@@ -14,6 +14,10 @@
           ahí. Cambiar el nombre reetiqueta lo ya guardado; una empresa con
           pendientes abiertos no se puede quitar, solo desactivar.
         </p>
+        <p class="mt-1 text-xs text-ink-subtle">
+          Si la lista queda vacía se vuelven a sembrar las cuatro empresas del
+          grupo.
+        </p>
       </div>
       <button type="button" class="btn" (click)="agregar()">
         <pt-icon name="mas" class="h-4 w-4" />
@@ -28,7 +32,7 @@
         </p>
       }
       <div class="mt-4 space-y-3">
-        @for (r of lista; track $index) {
+        @for (r of lista; track $index; let i = $index) {
           <div
             class="rounded-lg border border-line p-3"
             [class.opacity-60]="!r.activa">
@@ -42,8 +46,8 @@
                   type="text"
                   placeholder="Total One"
                   [ngModel]="r.nombre"
-                  (ngModelChange)="cambiar($index, { nombre: $event })"
-                  name="nombre-{{ $index }}" />
+                  (ngModelChange)="cambiar(i, { nombre: $event })"
+                  name="nombre-{{ i }}" />
               </label>
               <label class="min-w-0">
                 <span class="mb-1 block text-xs font-medium text-ink-muted"
@@ -54,8 +58,8 @@
                   type="text"
                   placeholder="CRM para agencias automotrices"
                   [ngModel]="r.descripcion"
-                  (ngModelChange)="cambiar($index, { descripcion: $event })"
-                  name="descripcion-{{ $index }}" />
+                  (ngModelChange)="cambiar(i, { descripcion: $event })"
+                  name="descripcion-{{ i }}" />
               </label>
               <label class="min-w-0">
                 <span class="mb-1 block text-xs font-medium text-ink-muted"
@@ -65,8 +69,8 @@
                   <select
                     class="field"
                     [ngModel]="r.color"
-                    (ngModelChange)="cambiar($index, { color: $event })"
-                    name="color-{{ $index }}">
+                    (ngModelChange)="cambiar(i, { color: $event })"
+                    name="color-{{ i }}">
                     <option value="">Automático</option>
                     @for (color of colores; track color) {
                       <option [value]="color">{{ color }}</option>
@@ -93,9 +97,9 @@
                       class="h-4 w-4 rounded border-line accent-brand"
                       [checked]="tieneBuzon(r, b.id)"
                       (change)="
-                        marcarBuzon($index, b.id, $any($event.target).checked)
+                        marcarBuzon(i, b.id, $any($event.target).checked)
                       "
-                      name="buzon-{{ $index }}-{{ b.id }}" />
+                      name="buzon-{{ i }}-{{ b.id }}" />
                     {{ b.label }}
                   </label>
                 } @empty {
@@ -113,10 +117,8 @@
                   type="checkbox"
                   class="h-4 w-4 rounded border-line accent-brand"
                   [checked]="r.activa"
-                  (change)="
-                    cambiar($index, { activa: $any($event.target).checked })
-                  "
-                  name="activa-{{ $index }}" />
+                  (change)="cambiar(i, { activa: $any($event.target).checked })"
+                  name="activa-{{ i }}" />
                 Activa
               </label>
               <span class="grow"></span>
@@ -125,8 +127,8 @@
                 class="btn px-3"
                 title="Subir"
                 aria-label="Subir"
-                [disabled]="$index === 0"
-                (click)="mover($index, -1)">
+                [disabled]="i === 0"
+                (click)="mover(i, -1)">
                 <pt-icon name="anterior" class="h-4 w-4 rotate-90" />
               </button>
               <button
@@ -134,15 +136,15 @@
                 class="btn px-3"
                 title="Bajar"
                 aria-label="Bajar"
-                [disabled]="$index === lista.length - 1"
-                (click)="mover($index, 1)">
+                [disabled]="i === lista.length - 1"
+                (click)="mover(i, 1)">
                 <pt-icon name="siguiente" class="h-4 w-4 rotate-90" />
               </button>
               <button
                 type="button"
                 class="btn btn-danger"
                 title="Quitar"
-                (click)="quitar($index)">
+                (click)="quitar(i)">
                 <pt-icon name="basura" class="h-4 w-4" />
                 Quitar
               </button>

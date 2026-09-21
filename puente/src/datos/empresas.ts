@@ -151,42 +151,72 @@ export function empresaValida(
   return empresas.find((e) => claveNombre(e.nombre) === clave)?.nombre;
 }
 
+/** Las pistas de siempre en el id del buzon, por id de la empresa sembrada. */
+const PISTAS_POR_ID: [string[], string][] = [
+  [['itech'], 'itech-dev'],
+  [['dealer'], 'dealer-solutions'],
+  [['nexus', 'outlook'], 'nexusqtech'],
+  [['operativ'], 'operativai']
+];
+
 /**
- * La empresa a la que pertenece un buzon: la que lo tenga en `cuentas`. Si
- * ninguna lo reclama se cae a las pistas de siempre en el identificador
- * (itech, dealer, nexus/outlook, operativ), para no perder lo que ya
- * funcionaba con los buzones viejos.
+ * La empresa a la que pertenece un buzon: la activa que lo tenga en
+ * `cuentas`. Si ninguna lo reclama se cae a las pistas de siempre en el
+ * identificador (itech, dealer, nexus/outlook, operativ), buscando la
+ * empresa por su id de semilla para que sobreviva a un renombrado. Una
+ * empresa inactiva no etiqueta nada.
  */
 export function empresaDeCuenta(
   accountId: string,
   empresas: Empresa[] = catalogoEmpresas()
 ): string | undefined {
   const id = accountId.trim().toLowerCase();
-  const propia = ordenar(empresas).find((e) =>
+  const activas = ordenar(empresas).filter((e) => e.activa);
+  const propia = activas.find((e) =>
     e.cuentas.some((c) => c.toLowerCase() === id)
   );
   if (propia) {
     return propia.nombre;
   }
-  const porPista = (pistas: string[], nombre: string) =>
-    pistas.some((p) => id.includes(p))
-      ? empresaValida(
-          nombre,
-          empresas.filter((e) => e.activa)
-        )
-      : undefined;
-  return (
-    porPista(['itech'], 'Itech Dev') ??
-    porPista(['dealer'], 'Dealer Solutions') ??
-    porPista(['nexus', 'outlook'], 'NexusQTech') ??
-    porPista(['operativ'], 'OperativAI')
-  );
+  for (const [pistas, idEmpresa] of PISTAS_POR_ID) {
+    if (pistas.some((p) => id.includes(p))) {
+      const semilla = activas.find((e) => e.id === idEmpresa);
+      if (semilla) {
+        return semilla.nombre;
+      }
+    }
+  }
+  return undefined;
 }
 
 /**
+ * Palabras que no identifican a nadie: si el nombre de una empresa empieza
+ * con una de estas ("Total One", "Grupo X"), solo cuenta el nombre completo.
+ */
+const PALABRAS_GENERICAS = new Set([
+  'total',
+  'grupo',
+  'nuevo',
+  'nueva',
+  'sistema',
+  'soluciones',
+  'servicios',
+  'global',
+  'general',
+  'digital',
+  'tecnologia',
+  'software',
+  'empresa',
+  'negocio',
+  'ventas',
+  'mexico'
+]);
+
+/**
  * Sin modelo, la empresa que menciona un texto dictado o el titulo de una
- * junta: el nombre completo, o su primera palabra ("Itech", "Dealer") y, en
- * los nombres pegados (NexusQTech, OperativAI), el primer trozo como prefijo.
+ * junta: el nombre completo siempre; la primera palabra suelta ("Itech",
+ * "Dealer") solo si tiene 5 letras o mas y no es generica; y en los nombres
+ * pegados (NexusQTech, OperativAI), el primer trozo como prefijo.
  */
 export function empresaPorPalabra(
   texto: string,
@@ -207,7 +237,7 @@ function patronesDe(nombre: string): RegExp[] {
   const palabras = plano.split(/\s+/).filter(Boolean);
   const primera = palabras[0] ?? '';
   if (palabras.length > 1) {
-    if (primera.length >= 5) {
+    if (primera.length >= 5 && !PALABRAS_GENERICAS.has(primera)) {
       patrones.push(new RegExp(`\\b${escapar(primera)}\\b`));
     }
   } else {
