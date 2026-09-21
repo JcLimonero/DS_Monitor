@@ -46,6 +46,10 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
         <path d="M16.5 5.6a3.2 3.2 0 0 1 0 5.8" />
         <path d="M18 14.5a6 6 0 0 1 3 5.5" />
       </symbol>
+      <symbol id="i-usuario" viewBox="0 0 24 24">
+        <circle cx="12" cy="8" r="3.6" />
+        <path d="M5 20a7 7 0 0 1 14 0" />
+      </symbol>
       <symbol id="i-ajustes" viewBox="0 0 24 24">
         <path d="M4 6h10" />
         <path d="M18 6h2" />

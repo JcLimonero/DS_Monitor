@@ -1010,6 +1010,11 @@ export function registrarRutasIa(
         ((tarea.project && t.project === tarea.project) ||
           (tarea.company && t.company === tarea.company))
     );
+    const buzonDe = d
+      .cfg()
+      .correos.find(
+        (c) => c.id === tarea.accountId || c.accountId === tarea.accountId
+      );
     return sugerirResponsable(
       config,
       tarea,
@@ -1020,7 +1025,8 @@ export function registrarRutasIa(
         email: p.email
       })),
       parecidos,
-      pistasParaModelo(d.datos.aprendido.leer())
+      pistasParaModelo(d.datos.aprendido.leer()),
+      buzonDe ? { correo: buzonDe.usuario } : undefined
     );
   });
 
