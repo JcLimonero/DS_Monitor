@@ -13,7 +13,9 @@ import { IaService, describirError } from '../core/ia/ia.service';
 import { PuenteAdminService } from '../core/sources/gateway/puente-admin.service';
 import { AvisosService } from '../core/avisos/avisos.service';
 import { ElementRef, effect } from '@angular/core';
-import { Borrador, EMPRESAS } from '../core/ia/ia.models';
+import { Borrador } from '../core/ia/ia.models';
+import { EmpresasService } from '../core/empresas/empresas.service';
+import { ACCOUNT_CHIP_CLASS } from './account-colors';
 import {
   SENDER_KIND_LABEL,
   TASK_PRIORITY_LABEL,
@@ -50,18 +52,6 @@ const STATUS_CLASS: Record<TaskStatus, string> = {
   en_progreso: 'text-info',
   bloqueado: 'text-danger',
   hecho: 'text-ok'
-};
-
-/** Color del chip de empresa, para distinguirlas de un vistazo. */
-const COMPANY_CLASS: Record<string, string> = {
-  'Itech Dev':
-    'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
-  'Dealer Solutions':
-    'bg-cyan-100 text-cyan-800 dark:bg-cyan-500/15 dark:text-cyan-300',
-  NexusQTech:
-    'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
-  OperativAI:
-    'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300'
 };
 
 /** El origen en minúsculas, para el chip "cuenta · origen". */
@@ -638,7 +628,7 @@ const ESPERA_BORRAR_MS = 5000;
                       [ngModel]="e.company"
                       (ngModelChange)="patchEdit({ company: $event })">
                       <option value="">Sin empresa</option>
-                      @for (emp of empresas; track emp) {
+                      @for (emp of empresasParaElegir(); track emp) {
                         <option [value]="emp">{{ emp }}</option>
                       }
                     </select>
@@ -854,7 +844,17 @@ export class TaskCardComponent {
   readonly reasignarA = signal('');
   readonly notaDecision = signal('');
   readonly borrador = signal<Borrador | undefined>(undefined);
-  readonly empresas = EMPRESAS;
+  private readonly catalogo = inject(EmpresasService);
+  /**
+   * Las empresas activas del catálogo y, si el pendiente trae una que ya no
+   * está (inactiva o renombrada afuera), también esa, para no perderla al
+   * editar.
+   */
+  readonly empresasParaElegir = computed(() => {
+    const lista = this.catalogo.nombres();
+    const actual = this.task().company;
+    return actual && !lista.includes(actual) ? [...lista, actual] : lista;
+  });
   readonly senderLabel = SENDER_KIND_LABEL;
   /** Copia editable del pendiente mientras el formulario está abierto. */
   readonly editing = signal<
@@ -937,11 +937,13 @@ export class TaskCardComponent {
     () => TASK_PRIORITY_LABEL[this.task().priority]
   );
   readonly priorityClass = computed(() => PRIORITY_CLASS[this.task().priority]);
-  readonly companyClass = computed(
-    () =>
-      COMPANY_CLASS[this.task().company ?? ''] ??
-      'bg-surface-muted text-ink-muted'
-  );
+  /** Color del chip de empresa: el del catálogo o uno derivado del nombre. */
+  readonly companyClass = computed(() => {
+    const company = this.task().company;
+    return company
+      ? ACCOUNT_CHIP_CLASS[this.catalogo.colorDe(company)]
+      : 'bg-surface-muted text-ink-muted';
+  });
   readonly statusLabel = computed(() => TASK_STATUS_LABEL[this.task().status]);
 
   /**

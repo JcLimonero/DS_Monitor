@@ -1,13 +1,8 @@
 import type { ConfiguracionIa } from '../config/entorno.js';
 import type { Meeting, Person, TaskItem } from '../nucleo/contrato.js';
 import type { Anotaciones } from '../pendientes/anotaciones.js';
-import {
-  CONTEXTO_EMPRESAS,
-  comoJson,
-  enHorario,
-  preguntar,
-  texto1
-} from './modelo.js';
+import { contextoEmpresas } from '../datos/empresas.js';
+import { comoJson, enHorario, preguntar, texto1 } from './modelo.js';
 import { abiertos, juntasEntre, vencidos, type Tablero } from './tablero.js';
 
 /**
@@ -76,7 +71,7 @@ export async function redactarAperturas(
   }
   const texto = await preguntar(config, {
     uso: 'semana',
-    sistema: `${CONTEXTO_EMPRESAS}\nEscribes el correo del lunes para cada persona del equipo. Te doy, por persona, sus pendientes, lo vencido y sus juntas de la semana. Para cada una escribe UN párrafo de apertura (2 o 3 frases, máx. 320 caracteres) que la salude por su nombre de pila, le diga en qué conviene concentrarse primero y por qué, y mencione lo vencido sin regañar. Responde SOLO JSON: {"personas":[{"id":"...","apertura":"..."}]}`,
+    sistema: `${contextoEmpresas()}\nEscribes el correo del lunes para cada persona del equipo. Te doy, por persona, sus pendientes, lo vencido y sus juntas de la semana. Para cada una escribe UN párrafo de apertura (2 o 3 frases, máx. 320 caracteres) que la salude por su nombre de pila, le diga en qué conviene concentrarse primero y por qué, y mencione lo vencido sin regañar. Responde SOLO JSON: {"personas":[{"id":"...","apertura":"..."}]}`,
     usuario: JSON.stringify(
       semanas.map((s) => ({
         id: s.persona.id,

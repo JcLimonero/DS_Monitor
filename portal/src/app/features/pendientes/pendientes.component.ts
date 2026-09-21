@@ -20,7 +20,7 @@ import {
   TaskPriority,
   TaskStatus
 } from '../../core/models';
-import { EMPRESAS } from '../../core/ia/ia.models';
+import { EmpresasService } from '../../core/empresas/empresas.service';
 import { IaService, describirError } from '../../core/ia/ia.service';
 import {
   EstadoBarrido,
@@ -160,7 +160,7 @@ export class PendientesComponent {
           (t) => t.status !== 'hecho' && t.senderKind === 'por_identificar'
         ).length
   );
-  readonly empresas = EMPRESAS;
+  readonly empresas = inject(EmpresasService).nombres;
   /**
    * Los hechos no se muestran por omision; el interruptor se recuerda en este
    * navegador. Lo que se marco hecho en esta sesion y el pendiente que se

@@ -1,4 +1,5 @@
 import { IaService } from '../core/ia/ia.service';
+import { EmpresasService } from '../core/empresas/empresas.service';
 import {
   VentanaIaBotonComponent,
   VentanaIaComponent
@@ -87,6 +88,13 @@ export class ShellComponent {
     inject(IaService)
       .estado()
       .subscribe({ error: () => undefined });
+    // El catálogo de empresas, para los selectores y filtros de todas las
+    // pantallas. Se vuelve a pedir al entrar al shell por si la primera vez
+    // (antes de la sesión) el puente no contestó.
+    const empresas = inject(EmpresasService);
+    if (empresas.error()) {
+      empresas.cargar();
+    }
   }
 
   /** Menu lateral en pantallas chicas. En escritorio siempre esta visible. */

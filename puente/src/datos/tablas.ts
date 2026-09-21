@@ -1,7 +1,7 @@
 import type { Sesion } from '../acceso/acceso.js';
 import type { ClienteIngesta } from '../config/entorno.js';
 import type { Ejecucion, Ejecuciones } from '../ingesta/ejecuciones.js';
-import type { Person, TaskItem } from '../nucleo/contrato.js';
+import type { Empresa, Person, TaskItem } from '../nucleo/contrato.js';
 import type { Anotacion, Anotaciones } from '../pendientes/anotaciones.js';
 import type { Registro } from '../pendientes/registro.js';
 import type { Dominio } from './dominios.js';
@@ -577,4 +577,41 @@ export const TABLA_SERVIDORES: DefinicionTabla<ServidorVps[]> = {
     sub: {}
   }),
   deFilas: (filas) => filas.map((f) => objeto<ServidorVps>(f['datos']))
+};
+
+// --- Empresas del grupo -------------------------------------------------
+
+export const TABLA_EMPRESAS: DefinicionTabla<Empresa[]> = {
+  clave: 'empresas',
+  tabla: 'empresas',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS empresas (
+      id text PRIMARY KEY,
+      orden integer NOT NULL DEFAULT 0,
+      nombre text NOT NULL,
+      descripcion text,
+      color text,
+      cuentas jsonb NOT NULL DEFAULT '[]',
+      activa boolean NOT NULL DEFAULT true,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+  `,
+  id: 'id',
+  orden: 'orden',
+  aFilas: (lista) => ({
+    principal: lista.map((e, i) => ({
+      id: e.id,
+      orden: i,
+      nombre: e.nombre,
+      descripcion: e.descripcion ?? null,
+      color: e.color ?? null,
+      cuentas: e.cuentas,
+      activa: e.activa,
+      actualizado_en: e.actualizadoEn,
+      datos: { ...e, orden: i }
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<Empresa>(f['datos']))
 };

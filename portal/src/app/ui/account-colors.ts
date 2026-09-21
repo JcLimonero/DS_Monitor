@@ -22,7 +22,8 @@ export const ACCOUNT_CHIP_CLASS: Record<AccountColor, string> = {
   orange:
     'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
   fuchsia:
-    'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-500/15 dark:text-fuchsia-300'
+    'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-500/15 dark:text-fuchsia-300',
+  cyan: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-500/15 dark:text-cyan-300'
 };
 
 export const ACCOUNT_BAR_CLASS: Record<AccountColor, string> = {
@@ -35,5 +36,6 @@ export const ACCOUNT_BAR_CLASS: Record<AccountColor, string> = {
   indigo: 'bg-indigo-400',
   teal: 'bg-teal-400',
   orange: 'bg-orange-400',
-  fuchsia: 'bg-fuchsia-400'
+  fuchsia: 'bg-fuchsia-400',
+  cyan: 'bg-cyan-400'
 };

@@ -1,12 +1,11 @@
 import type { ConfiguracionIa } from '../config/entorno.js';
 import {
-  CONTEXTO_EMPRESAS,
-  EMPRESAS,
-  comoJson,
-  fechaDe,
-  preguntar,
-  texto1
-} from '../ia/modelo.js';
+  contextoEmpresas,
+  empresaDeCuenta,
+  empresaValida,
+  opcionesEmpresa
+} from '../datos/empresas.js';
+import { comoJson, fechaDe, preguntar, texto1 } from '../ia/modelo.js';
 import type { TaskItem, TaskPriority } from '../nucleo/contrato.js';
 import type { PendienteAbierto } from '../pendientes/relacionar.js';
 import type { CandidatoIa } from './correo.js';
@@ -25,8 +24,6 @@ import { descripcionDeCorreo } from './correo.js';
  * (ver `pendientes/relacionar.ts`). Cada correo se analiza una sola vez: el
  * resultado se guarda por identificador y solo se mandan los nuevos.
  */
-
-export { EMPRESAS };
 
 export interface SugerenciaCrm {
   tipo: 'oportunidad' | 'queja';
@@ -55,7 +52,7 @@ export interface Clasificacion {
   analizadoEn: string;
 }
 
-const PROMPT = `${CONTEXTO_EMPRESAS}
+const prompt = () => `${contextoEmpresas()}
 
 Te doy correos recibidos (remitente, destinatarios, asunto, fecha y un extracto). Para cada uno decide si genera un PENDIENTE para quien recibe el correo: algo que hay que hacer, responder, pagar, revisar, aprobar o entregar. NO son pendientes: publicidad, boletines, notificaciones automáticas informativas, confirmaciones de algo ya hecho, conversaciones que no piden nada.
 
@@ -64,7 +61,7 @@ Te doy también los pendientes que ya están abiertos (id, título y remitente).
 Además, si el correo lo escribe un cliente o prospecto (no un proveedor ni un colega) y pide una cotización, información de un producto, una demostración, o se queja de un servicio, propón un registro para el CRM.
 
 Responde SOLO con JSON válido, sin texto alrededor, con esta forma:
-{"correos":[{"id":"...","esPendiente":true,"titulo":"verbo + objeto, máx. 80 caracteres","resumen":"1 o 2 frases: qué piden, quién y contexto","prioridad":"baja|media|alta|urgente","venceEn":"YYYY-MM-DD o null","empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null","motivo":"por qué es pendiente","relacionadoCon":null,"crm":null}]}
+{"correos":[{"id":"...","esPendiente":true,"titulo":"verbo + objeto, máx. 80 caracteres","resumen":"1 o 2 frases: qué piden, quién y contexto","prioridad":"baja|media|alta|urgente","venceEn":"YYYY-MM-DD o null","empresa":"${opcionesEmpresa()}","motivo":"por qué es pendiente","relacionadoCon":null,"crm":null}]}
 
 "crm" es null casi siempre; cuando aplica: {"tipo":"oportunidad|queja","nombre":"máx. 60 caracteres","contacto":"quién escribe","correo":"su dirección","resumen":"1 frase"}.
 Para los que NO son pendientes ni se relacionan con uno basta {"id":"...","esPendiente":false,"relacionadoCon":null,"crm":null}; para los relacionados: {"id":"...","esPendiente":false,"relacionadoCon":"id del pendiente","resumen":"1 o 2 frases de qué dice el correo","crm":null}. Deduce la empresa por el dominio del remitente o destinatario, el proyecto o los productos mencionados; si no está claro, null. La prioridad es urgente si hay dinero o servicio en riesgo o vence en menos de 2 días; alta si piden respuesta esta semana; media por omisión; baja si es opcional.`;
@@ -93,7 +90,7 @@ export async function clasificarCorreos(
   }));
   const texto = await preguntar(config, {
     uso: 'correo',
-    sistema: PROMPT,
+    sistema: prompt(),
     usuario:
       `Hoy es ${ahora.toISOString().slice(0, 10)}.` +
       (pistas.length
@@ -128,7 +125,7 @@ export async function clasificarCorreos(
         (p) => p === r?.prioridad
       ),
       venceEn: fechaDe(r?.venceEn),
-      empresa: EMPRESAS.find((e) => e === r?.empresa),
+      empresa: empresaValida(r?.empresa),
       motivo: texto1(r?.motivo),
       crm: sugerenciaCrm(r?.crm, c),
       analizadoEn: ahora.toISOString()
@@ -214,23 +211,5 @@ export function huella(texto: string): string {
   return h.toString(36);
 }
 
-/**
- * La empresa a la que pertenece un buzon, por su identificador. Sirve para
- * los pendientes que salen de reglas (la IA ya trae la suya).
- */
-export function empresaDeCuenta(accountId: string): string | undefined {
-  const id = accountId.toLowerCase();
-  if (id.includes('itech')) {
-    return 'Itech Dev';
-  }
-  if (id.includes('dealer')) {
-    return 'Dealer Solutions';
-  }
-  if (id.includes('nexus') || id.includes('outlook')) {
-    return 'NexusQTech';
-  }
-  if (id.includes('operativ')) {
-    return 'OperativAI';
-  }
-  return undefined;
-}
+/** Sigue viviendo en datos/empresas.ts; se reexporta por quienes ya lo usaban. */
+export { empresaDeCuenta };

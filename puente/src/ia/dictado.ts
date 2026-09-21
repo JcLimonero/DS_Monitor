@@ -2,13 +2,12 @@ import type { ConfiguracionIa } from '../config/entorno.js';
 import type { Person, TaskPriority } from '../nucleo/contrato.js';
 import { personaDe } from './acuerdos.js';
 import {
-  CONTEXTO_EMPRESAS,
-  EMPRESAS,
-  comoJson,
-  fechaDe,
-  preguntar,
-  texto1
-} from './modelo.js';
+  contextoEmpresas,
+  empresaPorPalabra,
+  empresaValida,
+  opcionesEmpresa
+} from '../datos/empresas.js';
+import { comoJson, fechaDe, preguntar, texto1 } from './modelo.js';
 import { diaLocal } from './tablero.js';
 
 /**
@@ -60,7 +59,7 @@ export async function interpretarDictado(
   }
   const salida = await preguntar(config, {
     uso: 'dictado',
-    sistema: `${CONTEXTO_EMPRESAS}\nQuien te habla dicta pendientes, juntas y recordatorios en lenguaje natural, a veces varios de corrido. Conviértelos en elementos del sistema. Responde SOLO JSON: {"elementos":[{"titulo":"verbo + objeto o 'Junta con X · lugar', máx. 90 caracteres","descripcion":"el detalle que dictó, tal cual, o null","personal":false,"empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null","prioridad":"baja|media|alta|urgente","venceEn":"YYYY-MM-DDTHH:mm en hora de México o YYYY-MM-DD o null","responsable":"nombre o correo de quien lo hace, o null","proyecto":"cliente o proyecto mencionado (Vanguardia, Birdom…) o null","esJunta":false,"lugar":"lugar físico o 'Teams' si lo dice, o null"}]}. "esJunta" es true cuando es una reunión, cita o llamada con alguien a una hora. "personal" es true solo cuando claramente no es del trabajo (médico, familia, casa). Resuelve fechas relativas con la fecha de hoy; 'el martes' es el próximo martes. Si dice 'para mí' o no dice quién, responsable null. No inventes datos que no dijo.`,
+    sistema: `${contextoEmpresas()}\nQuien te habla dicta pendientes, juntas y recordatorios en lenguaje natural, a veces varios de corrido. Conviértelos en elementos del sistema. Responde SOLO JSON: {"elementos":[{"titulo":"verbo + objeto o 'Junta con X · lugar', máx. 90 caracteres","descripcion":"el detalle que dictó, tal cual, o null","personal":false,"empresa":"${opcionesEmpresa()}","prioridad":"baja|media|alta|urgente","venceEn":"YYYY-MM-DDTHH:mm en hora de México o YYYY-MM-DD o null","responsable":"nombre o correo de quien lo hace, o null","proyecto":"cliente o proyecto mencionado (Vanguardia, Birdom…) o null","esJunta":false,"lugar":"lugar físico o 'Teams' si lo dice, o null"}]}. "esJunta" es true cuando es una reunión, cita o llamada con alguien a una hora. "personal" es true solo cuando claramente no es del trabajo (médico, familia, casa). Resuelve fechas relativas con la fecha de hoy; 'el martes' es el próximo martes. Si dice 'para mí' o no dice quién, responsable null. No inventes datos que no dijo.`,
     usuario: JSON.stringify({
       hoy: diaLocal(ahora),
       diaSemana: new Date(ahora).toLocaleDateString('es-MX', {
@@ -85,7 +84,7 @@ export async function interpretarDictado(
         titulo: titulo.slice(0, 90),
         descripcion: texto1(e.descripcion),
         personal: e.personal === true,
-        empresa: EMPRESAS.find((x) => x === e.empresa),
+        empresa: empresaValida(e.empresa),
         prioridad:
           (['baja', 'media', 'alta', 'urgente'] as const).find(
             (p) => p === e.prioridad
@@ -134,13 +133,6 @@ const DIAS = [
   'sabado'
 ];
 
-const EMPRESA_POR_PALABRA: [RegExp, string][] = [
-  [/\bitech\b/i, 'Itech Dev'],
-  [/\bdealer\b/i, 'Dealer Solutions'],
-  [/\bnexus/i, 'NexusQTech'],
-  [/\boperativ/i, 'OperativAI']
-];
-
 const CLIENTES = ['Vanguardia', 'Birdom', 'AutoDeal'];
 
 export function interpretarPorReglas(
@@ -154,7 +146,7 @@ export function interpretarPorReglas(
     .filter((f) => f.length > 3);
   return frases.map((frase): Propuesta => {
     const sinAcentos = frase.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-    const empresa = EMPRESA_POR_PALABRA.find(([re]) => re.test(frase))?.[1];
+    const empresa = empresaPorPalabra(frase);
     const prioridad: TaskPriority = /urgente|ya mismo|hoy mismo/.test(
       sinAcentos
     )

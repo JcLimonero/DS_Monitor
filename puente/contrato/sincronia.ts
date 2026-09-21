@@ -17,6 +17,7 @@ type Igual<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 /* eslint-disable @typescript-eslint/no-unused-vars */
 type _Person = Igual<Portal.Person, Puente.Person>;
 type _TaskItem = Igual<Portal.TaskItem, Puente.TaskItem>;
+type _Empresa = Igual<Portal.Empresa, Puente.Empresa>;
 type _TaskComment = Igual<Portal.TaskComment, Puente.TaskComment>;
 type _TaskEvent = Igual<Portal.TaskEvent, Puente.TaskEvent>;
 type _Meeting = Igual<Portal.Meeting, Puente.Meeting>;
@@ -42,6 +43,7 @@ type _RepoCommit = Igual<Portal.RepoCommit, Puente.RepoCommit>;
 const comprobado: [
   _Person,
   _TaskItem,
+  _Empresa,
   _TaskComment,
   _TaskEvent,
   _Meeting,
@@ -57,6 +59,7 @@ const comprobado: [
   _RepoPullRequest,
   _RepoCommit
 ] = [
+  true,
   true,
   true,
   true,

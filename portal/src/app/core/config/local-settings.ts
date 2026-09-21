@@ -201,5 +201,6 @@ export const ACCOUNT_COLORS: readonly AccountColor[] = [
   'teal',
   'orange',
   'fuchsia',
+  'cyan',
   'slate'
 ];

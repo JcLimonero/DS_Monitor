@@ -2,12 +2,11 @@ import type { ConfiguracionIa } from '../config/entorno.js';
 import type { TaskItem, TaskPriority } from '../nucleo/contrato.js';
 import { correoDelRemitente } from '../pendientes/remitente.js';
 import {
-  CONTEXTO_EMPRESAS,
-  EMPRESAS,
-  comoJson,
-  preguntar,
-  texto1
-} from './modelo.js';
+  contextoEmpresas,
+  empresaValida,
+  opcionesEmpresa
+} from '../datos/empresas.js';
+import { comoJson, preguntar, texto1 } from './modelo.js';
 
 /**
  * Empresa y prioridad para los pendientes que llegan sin ellas: los de la API
@@ -32,7 +31,7 @@ export async function clasificarPendientes(
   }
   const texto = await preguntar(config, {
     uso: 'pendientes',
-    sistema: `${CONTEXTO_EMPRESAS}\nTe doy pendientes (título, descripción, proyecto, etiquetas, origen). Para cada uno di a qué empresa pertenece y qué prioridad merece. Responde SOLO JSON: {"pendientes":[{"id":"...","empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null","prioridad":"baja|media|alta|urgente"}]}. Urgente si hay dinero, cliente o servicio en riesgo o vence en menos de 2 días; alta si es de esta semana; media por omisión; baja si es opcional.`,
+    sistema: `${contextoEmpresas()}\nTe doy pendientes (título, descripción, proyecto, etiquetas, origen). Para cada uno di a qué empresa pertenece y qué prioridad merece. Responde SOLO JSON: {"pendientes":[{"id":"...","empresa":"${opcionesEmpresa()}","prioridad":"baja|media|alta|urgente"}]}. Urgente si hay dinero, cliente o servicio en riesgo o vence en menos de 2 días; alta si es de esta semana; media por omisión; baja si es opcional.`,
     usuario: JSON.stringify({
       hoy: ahora.toISOString().slice(0, 10),
       pendientes: tareas.map((t) => ({
@@ -62,7 +61,7 @@ export async function clasificarPendientes(
     const v = porId.get(t.id);
     return {
       id: t.id,
-      empresa: EMPRESAS.find((e) => e === v?.empresa),
+      empresa: empresaValida(v?.empresa),
       prioridad: (['baja', 'media', 'alta', 'urgente'] as const).find(
         (p) => p === texto1(v?.prioridad)
       ),
@@ -129,7 +128,7 @@ export async function sugerirResponsable(
 ): Promise<SugerenciaPendiente> {
   const texto = await preguntar(config, {
     uso: 'asistente',
-    sistema: `${CONTEXTO_EMPRESAS}\nTe doy un pendiente sin responsable, el equipo (nombre y rol), pendientes parecidos que ya tienen responsable y empresa, y pistas aprendidas por remitente. Propón quién del equipo debería atenderlo y a qué empresa pertenece. Responde SOLO JSON: {"responsable":"id de la persona o null","empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null","motivo":"una frase corta de por qué","confianza":"alta|media|baja"}. La confianza es "alta" SOLO si hay una regla aprendida para ese remitente, si un pendiente parecido del mismo remitente o proyecto ya está con esa persona, o si el cuerpo del correo pide explícitamente que esa persona lo atienda (que el correo vaya dirigido al dueño del buzón NO cuenta: todos le llegan a él); "media" si lo deduces por el rol o la empresa; "baja" si es una corazonada. Si no hay base para proponer, responsable null, confianza baja y dilo en el motivo.`,
+    sistema: `${contextoEmpresas()}\nTe doy un pendiente sin responsable, el equipo (nombre y rol), pendientes parecidos que ya tienen responsable y empresa, y pistas aprendidas por remitente. Propón quién del equipo debería atenderlo y a qué empresa pertenece. Responde SOLO JSON: {"responsable":"id de la persona o null","empresa":"${opcionesEmpresa()}","motivo":"una frase corta de por qué","confianza":"alta|media|baja"}. La confianza es "alta" SOLO si hay una regla aprendida para ese remitente, si un pendiente parecido del mismo remitente o proyecto ya está con esa persona, o si el cuerpo del correo pide explícitamente que esa persona lo atienda (que el correo vaya dirigido al dueño del buzón NO cuenta: todos le llegan a él); "media" si lo deduces por el rol o la empresa; "baja" si es una corazonada. Si no hay base para proponer, responsable null, confianza baja y dilo en el motivo.`,
     usuario: JSON.stringify({
       pendiente: {
         titulo: tarea.title,
@@ -159,7 +158,7 @@ export async function sugerirResponsable(
   const valido = equipo.some((p) => p.id === responsable);
   return {
     responsable: valido ? responsable : undefined,
-    empresa: EMPRESAS.find((e) => e === salida.empresa),
+    empresa: empresaValida(salida.empresa),
     motivo: texto1(salida.motivo) ?? 'Sin base suficiente para proponer.',
     confianza:
       (valido &&

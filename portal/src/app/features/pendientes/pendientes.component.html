@@ -153,7 +153,7 @@
               (ngModelChange)="newCompany.set($event)"
               name="empresa">
               <option value="">Elige la empresa</option>
-              @for (empresa of empresas; track empresa) {
+              @for (empresa of empresas(); track empresa) {
                 <option [value]="empresa">{{ empresa }}</option>
               }
             </select>
@@ -235,7 +235,7 @@
           (ngModelChange)="company.set($event)"
           name="filtro-empresa">
           <option value="todas">Todas</option>
-          @for (empresa of empresas; track empresa) {
+          @for (empresa of empresas(); track empresa) {
             <option [value]="empresa">{{ empresa }}</option>
           }
           <option value="ninguna">Sin empresa</option>

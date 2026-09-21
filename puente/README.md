@@ -156,6 +156,18 @@ El equipo (`GET /equipo`, `POST /equipo/guardar`) y los dominios
 (`GET /dominios`, `POST /dominios/guardar`, y `GET /dominios/licenses` para el
 tablero) viven en `DATOS_DIRECTORIO` como JSON, junto con las sesiones.
 
+Las empresas del grupo también son un catálogo editable (`GET /empresas`,
+`POST /empresas/guardar {empresas}` con la lista completa; Integraciones →
+Empresas en el portal). Cada una lleva nombre, descripción para la IA, color,
+los buzones que le pertenecen y si está activa. La primera vez que el puente
+arranca con la lista vacía siembra las cuatro de siempre (Itech Dev, Dealer
+Solutions, NexusQTech y OperativAI). De ahí salen el "quiénes somos" de cada
+prompt (`contextoEmpresas`), la lista de empresas que se le pide al modelo, la
+empresa con la que se etiqueta lo que llega por cada buzón (`empresaDeCuenta`)
+y los selectores del portal. Renombrar una empresa reetiqueta los pendientes,
+las ediciones a mano y lo aprendido por remitente; una empresa con pendientes
+abiertos no se puede borrar, solo desactivar.
+
 ## Dos maneras de traer datos
 
 **Ir por ellos**: el puente consulta la API del proveedor cada tanto. Es lo que
