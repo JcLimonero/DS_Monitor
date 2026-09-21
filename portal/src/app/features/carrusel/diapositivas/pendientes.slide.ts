@@ -39,7 +39,7 @@ const CLASE_PRIORIDAD: Record<TaskPriority, string> = {
 };
 
 interface Columna {
-  id: 'hoy' | 'manana' | 'despues';
+  id: 'hoy' | 'proximos' | 'sinfecha';
   titulo: string;
   tareas: TaskItem[];
   restantes: number;
@@ -116,7 +116,13 @@ const CLASE_DIALOGO = 'con-dialogo';
                     </span>
                   </span>
                   <span class="shrink-0 text-right">
-                    @if (col.id === 'despues') {
+                    @if (col.id === 'sinfecha') {
+                      <span
+                        class="chip px-2 py-0.5 text-xs"
+                        [class]="clasePrioridad(tarea)">
+                        {{ etiquetaPrioridad(tarea) }}
+                      </span>
+                    } @else if (col.id === 'proximos') {
                       <span
                         class="block whitespace-nowrap text-base font-bold text-ink">
                         {{ tarea.dueDate | dia }}
@@ -137,13 +143,7 @@ const CLASE_DIALOGO = 'con-dialogo';
                     } @else {
                       <span
                         class="block whitespace-nowrap text-base font-bold text-ink">
-                        {{
-                          tarea.dueHasTime
-                            ? (tarea.dueDate | hora)
-                            : col.id === 'hoy'
-                              ? 'hoy'
-                              : 'mañana'
-                        }}
+                        {{ tarea.dueHasTime ? (tarea.dueDate | hora) : 'hoy' }}
                       </span>
                       <span
                         class="chip mt-0.5 px-2 py-0.5 text-xs"
@@ -296,19 +296,22 @@ export class PendientesSlideComponent implements DiapositivaConContenido {
     const abiertos = openTasks(this.store.tasks()).sort((a, b) =>
       byUrgency(a, b, ahora)
     );
+    // Todo lo abierto del equipo, no solo lo que tiene fecha: la pantalla
+    // sirve para ver quien trae que. Lo sin fecha va aparte, lo mas reciente
+    // primero.
     const hoy = abiertos.filter((t) => {
       const c = dueBucket(t.dueDate, ahora);
       return c === 'vencido' || c === 'hoy';
     });
-    const manana = abiertos.filter(
-      (t) => dueBucket(t.dueDate, ahora) === 'manana'
-    );
-    const despues = abiertos
+    const proximos = abiertos
       .filter((t) => {
         const c = dueBucket(t.dueDate, ahora);
-        return c === 'semana' || c === 'despues';
+        return c === 'manana' || c === 'semana' || c === 'despues';
       })
       .sort((a, b) => (a.dueDate as string).localeCompare(b.dueDate as string));
+    const sinFecha = abiertos
+      .filter((t) => !t.dueDate)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     const columna = (
       id: Columna['id'],
       titulo: string,
@@ -321,8 +324,8 @@ export class PendientesSlideComponent implements DiapositivaConContenido {
     });
     return [
       columna('hoy', 'Hoy', hoy),
-      columna('manana', 'Mañana', manana),
-      columna('despues', 'Por venir', despues)
+      columna('proximos', 'Por venir', proximos),
+      columna('sinfecha', 'Sin fecha', sinFecha)
     ];
   });
 
