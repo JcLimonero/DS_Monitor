@@ -45,6 +45,21 @@
       Limpiar filtros
     </button>
   }
+  <!-- Los hechos van escondidos por omision; el interruptor siempre esta a la vista. -->
+  <button
+    type="button"
+    class="btn"
+    [class.btn-activo]="includeDone()"
+    [attr.aria-pressed]="includeDone()"
+    [title]="
+      includeDone()
+        ? 'Volver a esconder los pendientes hechos'
+        : 'Mostrar también los pendientes hechos'
+    "
+    (click)="includeDone.set(!includeDone())">
+    <pt-icon name="ok" class="h-4 w-4" />
+    {{ includeDone() ? "Con hechos" : "Sin hechos" }}
+  </button>
   <a routerLink="/dictado" class="btn hidden lg:inline-flex">
     <pt-icon name="microfono" class="h-4 w-4" />
     Dictar
@@ -240,15 +255,6 @@
             <option [value]="k">{{ senderLabel[k] }}</option>
           }
         </select>
-      </label>
-      <label class="flex items-center gap-2 self-end pb-2.5">
-        <input
-          type="checkbox"
-          class="h-4 w-4 rounded border-line text-brand focus:ring-brand"
-          [ngModel]="includeDone()"
-          (ngModelChange)="includeDone.set($event)"
-          name="incluir-hechos" />
-        <span class="text-sm text-ink-muted">Incluir los hechos</span>
       </label>
     </div>
   </section>

@@ -58,6 +58,9 @@ const CALENDAR_DAYS_FORWARD = 21;
 /** Cuánto se espera a una fuente antes de darla por caída en este refresco. */
 const ESPERA_MAXIMA_MS = 90_000;
 
+/** Cuanto se queda a la vista un pendiente recien marcado hecho. */
+const RECIEN_HECHO_MS = 8_000;
+
 @Injectable({ providedIn: 'root' })
 export class PortalStore {
   private readonly config = inject(PORTAL_CONFIG);
@@ -145,13 +148,19 @@ export class PortalStore {
   readonly puenteCaido = signal(false);
 
   /**
-   * Lo que se marcó hecho en esta sesión. Se queda a la vista, tachado y con
-   * "Reabrir", en lugar de desaparecer: así se ve que sí pasó y se puede
-   * deshacer si fue un error.
+   * Lo que se acaba de marcar hecho. Se queda unos segundos a la vista,
+   * tachado y con "Reabrir", por si fue un error; después se esconde solo
+   * (los hechos no se muestran salvo que se pida).
    */
   readonly recienHechos = signal<ReadonlySet<string>>(new Set());
+  private readonly temporizadoresHecho = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
 
   marcarRecienHecho(id: string, hecho: boolean): void {
+    clearTimeout(this.temporizadoresHecho.get(id));
+    this.temporizadoresHecho.delete(id);
     this.recienHechos.update((actual) => {
       const nuevo = new Set(actual);
       if (hecho) {
@@ -161,6 +170,19 @@ export class PortalStore {
       }
       return nuevo;
     });
+    if (hecho) {
+      this.temporizadoresHecho.set(
+        id,
+        setTimeout(() => {
+          this.temporizadoresHecho.delete(id);
+          this.recienHechos.update((actual) => {
+            const nuevo = new Set(actual);
+            nuevo.delete(id);
+            return nuevo;
+          });
+        }, RECIEN_HECHO_MS)
+      );
+    }
   }
 
   constructor() {
