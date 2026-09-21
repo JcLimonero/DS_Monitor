@@ -366,20 +366,41 @@ export async function leerCorreoMicrosoft(
   }
 
   // --- Lo que las reglas no reconocen, para la IA ---
-  // Graph manda con cada mensaje un adelanto del cuerpo (bodyPreview); con
-  // eso alcanza para clasificar sin bajar nada mas.
-  const paraIa: CandidatoIa[] = ia
-    ? candidatosParaIa(
-        encabezados,
-        new Set([
-          ...evidencias.map((e) => e.ultimo.uid),
-          ...pendientes.map((p) => p.encabezado.uid)
-        ]),
-        config.accountId,
-        ia,
-        ahora
-      ).map((c) => ({ ...c, texto: vistaPorUid.get(c.encabezado.uid) ?? '' }))
-    : [];
+  // Se baja el cuerpo completo de cada candidato (son a lo mas `ia.maximo`
+  // por lectura): el adelanto de Graph (bodyPreview, ~255 caracteres) no
+  // llega al pie del correo, que es donde Total One firma sus avisos.
+  const paraIa: CandidatoIa[] = [];
+  if (ia) {
+    for (const candidato of candidatosParaIa(
+      encabezados,
+      new Set([
+        ...evidencias.map((e) => e.ultimo.uid),
+        ...pendientes.map((p) => p.encabezado.uid)
+      ]),
+      config.accountId,
+      ia,
+      ahora
+    )) {
+      const idMensaje = idPorUid.get(candidato.encabezado.uid);
+      let texto = vistaPorUid.get(candidato.encabezado.uid) ?? '';
+      if (idMensaje) {
+        try {
+          const mensaje = await graph<{
+            body?: { content?: string; contentType?: string };
+          }>(token, `/me/messages/${idMensaje}?$select=body`);
+          const contenido = mensaje.body?.content ?? '';
+          texto = (
+            mensaje.body?.contentType === 'html'
+              ? sinEtiquetas(contenido)
+              : contenido
+          ).slice(0, 2000);
+        } catch {
+          // Sin cuerpo completo se clasifica con el adelanto, como antes.
+        }
+      }
+      paraIa.push({ ...candidato, texto });
+    }
+  }
 
   // --- Calendario completo, no solo invitaciones ---
   const inicio = new Date(ahora.getTime() - DIAS_CALENDARIO_ATRAS * 86_400_000);
