@@ -117,6 +117,26 @@ sugerir responsable, ser el dueño del buzón (el "Para:" del correo) no cuenta
 como evidencia: proponerlo queda como sugerencia, nunca asignación automática
 (`acotarConfianza` en `src/ia/pendientes.ts`, además de decírselo al modelo).
 
+Cuando un pendiente es de alguien más (tiene responsable o seguidores y ninguno
+es quien está en sesión), desde la tarjeta se le puede **pedir una
+actualización**: `POST /pendientes/solicitar-actualizacion` `{ id, tarea, nota }`
+manda un solo correo al responsable con copia a quienes dan seguimiento (sin
+responsable, al primero que siga; quien pide nunca se incluye), con la nota
+opcional, el estado, los últimos comentarios y la liga personal de cada quien;
+deja "Solicitó actualización a X (cc Y)" en la trazabilidad y marca el pendiente
+con `updateRequested` (chip "Actualización pedida hace N"). Si el único
+involucrado es uno mismo contesta 400 ("Es tuyo; no hay a quién pedirle") y no
+se repite antes de dos horas (409 "Ya se pidió hace N min"). Cuando alguien del
+equipo (no el dueño) contesta desde su liga —`/mio/:token/anotar`, comentario o
+estado—, el pendiente queda con una **novedad** `unread` de tipo `respuesta`
+("Respondió a tu solicitud: Ana: …" si había solicitud, que se borra; si no,
+"Ana: …") que el portal enseña como chip "Respondió el responsable" (y
+"respuesta" en el carrusel) hasta que se abre la tarjeta (`POST
+/pendientes/visto`), igual que la novedad por correo
+(`src/pendientes/solicitud-actualizacion.ts`). Las rutas `/mio/:token/*` son
+libres aunque el acceso esté configurado: se identifican con el token de la
+liga.
+
 Cada buzón es una conexión del portal con ruta `/correo/<id>`, y se configuran
 en `CORREO_CUENTAS` con la contraseña de cada uno en `CORREO_CONTRASENA_<ID>`
 (ver `.env.example`). Hay dos caminos según el proveedor:

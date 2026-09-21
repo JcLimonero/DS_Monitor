@@ -173,6 +173,10 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
         <rect x="9" y="3" width="6" height="11" rx="3" />
         <path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8" />
       </symbol>
+      <symbol id="i-enviar" viewBox="0 0 24 24">
+        <path d="M21 3 3 10.5l7.5 3 3 7.5L21 3z" />
+        <path d="m10.5 13.5 4.5-4.5" />
+      </symbol>
       <symbol id="i-puntos" viewBox="0 0 24 24">
         <circle cx="12" cy="5" r="1.25" />
         <circle cx="12" cy="12" r="1.25" />

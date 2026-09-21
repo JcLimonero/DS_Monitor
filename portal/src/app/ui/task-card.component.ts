@@ -25,7 +25,8 @@ import {
   TaskItem,
   TaskOrigin,
   TaskPriority,
-  TaskStatus
+  TaskStatus,
+  TaskUnread
 } from '../core/models';
 import { LocalTaskStore } from '../core/sources/local/local-task.store';
 import { PortalStore } from '../core/state/portal.store';
@@ -110,12 +111,37 @@ const ESPERA_BORRAR_MS = 5000;
               <span class="chip" [class]="companyClass()">{{ company }}</span>
             }
             @if (task().unread; as u) {
-              <!-- Llegó un correo del hilo; se quita al abrir la tarjeta. -->
+              <!-- Llegó un correo del hilo, o alguien del equipo contestó
+                   desde su liga; se quita al abrir la tarjeta. -->
               <span
-                class="chip bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200"
-                [title]="u.text">
-                <pt-icon name="bandeja" class="h-3.5 w-3.5" />
-                Novedad por correo
+                class="chip"
+                [class]="
+                  u.kind === 'respuesta'
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200'
+                    : 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200'
+                "
+                [title]="
+                  u.kind === 'respuesta'
+                    ? 'Respuesta del responsable: ' + u.text
+                    : u.text
+                ">
+                <pt-icon
+                  [name]="u.kind === 'respuesta' ? 'enviar' : 'bandeja'"
+                  class="h-3.5 w-3.5" />
+                {{
+                  u.kind === 'respuesta'
+                    ? 'Respondió el responsable'
+                    : 'Novedad por correo'
+                }}
+              </span>
+            }
+            @if (task().updateRequested; as r) {
+              <!-- Se les pidió actualización y nadie ha contestado. -->
+              <span
+                class="chip bg-surface-muted text-ink-muted"
+                [title]="'Se pidió a ' + r.to.join(', ')">
+                <pt-icon name="reloj" class="h-3.5 w-3.5" />
+                Actualización pedida {{ r.at | relativo }}
               </span>
             }
             @if (done()) {
@@ -407,6 +433,21 @@ const ESPERA_BORRAR_MS = 5000;
 
           @if (open()) {
             <div class="mt-3 space-y-3 border-t border-line pt-3">
+              @if (respuestaVista(); as u) {
+                <!-- Lo que contestó el equipo, a la vista mientras la tarjeta
+                     esté abierta (el chip ya se quitó al abrirla). -->
+                <p
+                  class="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100">
+                  <pt-icon
+                    name="enviar"
+                    class="mr-1 h-3.5 w-3.5 align-middle" />
+                  {{ u.text }}
+                  <span
+                    class="text-xs text-emerald-800/70 dark:text-emerald-200/70"
+                    >· {{ u.at | relativo }}</span
+                  >
+                </p>
+              }
               @if (task().reassignRequest; as r) {
                 <div
                   class="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-500/40 dark:bg-amber-500/10">
@@ -598,6 +639,20 @@ const ESPERA_BORRAR_MS = 5000;
                       {{ drafting() ? 'Redactando…' : 'Borrador de respuesta' }}
                     </button>
                   }
+                  @if (puedePedirActualizacion()) {
+                    <!-- Es de alguien más: se le pide por correo en qué va,
+                         con copia a quienes dan seguimiento. -->
+                    <button
+                      type="button"
+                      class="btn"
+                      [class.btn-activo]="!!pidiendo()"
+                      [disabled]="saving()"
+                      title="Correo al responsable (copia a quienes dan seguimiento) con su liga para contestar"
+                      (click)="abrirPedir()">
+                      <pt-icon name="enviar" class="h-4 w-4" />
+                      Pedir actualización
+                    </button>
+                  }
                   @if (message(); as m) {
                     @if (m.error) {
                       <p class="banner banner-danger basis-full py-2 text-xs">
@@ -608,6 +663,46 @@ const ESPERA_BORRAR_MS = 5000;
                     }
                   }
                 </div>
+
+                @if (pidiendo(); as p) {
+                  <form
+                    class="flex flex-wrap items-end gap-2 rounded-lg border border-line bg-surface-muted p-3"
+                    role="group"
+                    aria-label="Pedir actualización"
+                    (ngSubmit)="enviarSolicitud()">
+                    <!-- En celular la nota ocupa el renglón completo y los
+                         botones van debajo; en escritorio, todo en línea. -->
+                    <label class="min-w-0 basis-full sm:basis-0 sm:flex-1">
+                      <span
+                        class="mb-1 block text-xs font-medium text-ink-muted"
+                        >Nota para el responsable (opcional)</span
+                      >
+                      <input
+                        class="field"
+                        type="text"
+                        placeholder="Qué necesitas saber…"
+                        [ngModel]="p.nota"
+                        (ngModelChange)="pidiendo.set({ nota: $event })"
+                        name="nota-act-{{ task().id }}" />
+                    </label>
+                    <div class="flex gap-2">
+                      <button
+                        type="submit"
+                        class="btn btn-primary"
+                        [disabled]="saving()">
+                        <pt-icon name="enviar" class="h-4 w-4" />
+                        Enviar
+                      </button>
+                      <button
+                        type="button"
+                        class="btn"
+                        [disabled]="saving()"
+                        (click)="pidiendo.set(undefined)">
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                }
 
                 <form
                   class="flex flex-wrap items-end gap-2"
@@ -1008,6 +1103,34 @@ export class TaskCardComponent {
   readonly varios = signal<
     { principal: string; seguidores: string[] } | undefined
   >(undefined);
+  /** El campo "Nota para el responsable" abierto para pedir actualización. */
+  readonly pidiendo = signal<{ nota: string } | undefined>(undefined);
+  /**
+   * La respuesta del equipo que se acaba de ver al abrir la tarjeta: se
+   * deja a la vista en el detalle aunque el chip ya se haya quitado.
+   */
+  readonly respuestaVista = signal<TaskUnread | undefined>(undefined);
+  /**
+   * Se puede pedir actualización cuando el pendiente es de alguien más:
+   * tiene responsable o seguidores y ninguno es quien entró. Lo hecho ya
+   * no se pregunta.
+   */
+  readonly puedePedirActualizacion = computed(() => {
+    const t = this.task();
+    if (!this.ia.disponible || t.personal || this.done()) {
+      return false;
+    }
+    const involucrados = [t.assignee, ...(t.followers ?? [])].filter(
+      (p): p is Person => !!p
+    );
+    if (involucrados.length === 0) {
+      return false;
+    }
+    const correo = this.sesion.correo()?.trim().toLowerCase();
+    return (
+      !correo || !involucrados.some((p) => p.email?.toLowerCase() === correo)
+    );
+  });
   readonly historial = computed(() =>
     [...(this.task().history ?? [])].sort((a, b) => b.at.localeCompare(a.at))
   );
@@ -1099,6 +1222,9 @@ export class TaskCardComponent {
         return;
       }
       this.vistoEnviado = true;
+      if (novedad.kind === 'respuesta') {
+        this.respuestaVista.set(novedad);
+      }
       const id = this.task().id;
       this.admin.marcarVisto(id).subscribe({
         next: () => this.store.actualizarTarea(id, { unread: undefined }),
@@ -1362,6 +1488,56 @@ export class TaskCardComponent {
         this.message.set({ texto: describirError(error), error: true });
       }
     });
+  }
+
+  /** Abre el campo de la nota y le pone el foco. */
+  abrirPedir(): void {
+    if (this.pidiendo()) {
+      this.pidiendo.set(undefined);
+      return;
+    }
+    this.pidiendo.set({ nota: '' });
+    setTimeout(() => {
+      document
+        .querySelector<HTMLInputElement>(
+          `input[name="nota-act-${CSS.escape(this.task().id)}"]`
+        )
+        ?.focus();
+    });
+  }
+
+  /**
+   * Pide la actualización: el puente escribe al responsable (copia a quienes
+   * dan seguimiento) y devuelve la tarea marcada; el aviso dice a quién.
+   */
+  enviarSolicitud(): void {
+    const p = this.pidiendo();
+    if (!p) {
+      return;
+    }
+    this.saving.set(true);
+    this.message.set(undefined);
+    const id = this.task().id;
+    this.ia
+      .solicitarActualizacion(id, p.nota.trim() || undefined, this.task())
+      .subscribe({
+        next: (r) => {
+          this.saving.set(false);
+          this.pidiendo.set(undefined);
+          if (r.tarea) {
+            this.store.actualizarTarea(id, {
+              updateRequested: r.tarea.updateRequested,
+              history: r.tarea.history,
+              updatedAt: r.tarea.updatedAt
+            });
+          }
+          this.message.set(r.aviso ? { texto: r.aviso } : undefined);
+        },
+        error: (error: unknown) => {
+          this.saving.set(false);
+          this.message.set({ texto: describirError(error), error: true });
+        }
+      });
   }
 
   descartarSugerencia(): void {

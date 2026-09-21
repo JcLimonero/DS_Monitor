@@ -330,6 +330,25 @@ export class IaService {
     );
   }
 
+  /**
+   * Pedirle una actualización a los responsables de un pendiente ajeno: el
+   * puente manda un solo correo (responsable de destinatario, seguimiento
+   * con copia) con la liga personal de cada quien y marca el pendiente como
+   * "actualización pedida" hasta que alguien conteste. No se repite antes
+   * de dos horas (409).
+   */
+  solicitarActualizacion(
+    id: string,
+    nota: string | undefined,
+    tarea?: Partial<TaskItem>
+  ): Observable<{ ok: boolean; tarea?: TaskItem; aviso?: string }> {
+    return this.http.post<{ ok: boolean; tarea?: TaskItem; aviso?: string }>(
+      this.url('/pendientes/solicitar-actualizacion'),
+      { id, nota, tarea },
+      { headers: this.headers() }
+    );
+  }
+
   private url(path: string): string {
     return `${this.config.gatewayUrl}${path}`;
   }

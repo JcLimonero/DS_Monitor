@@ -105,12 +105,22 @@ const CLASE_DIALOGO = 'con-dialogo';
                       }
                       {{ tarea.assignee?.name ?? 'Sin asignar' }}
                       @if (tarea.unread; as u) {
-                        <!-- Llegó un correo del hilo y nadie lo ha abierto. -->
+                        <!-- Llegó un correo del hilo o contestó el equipo, y
+                             nadie lo ha abierto. -->
                         <span
-                          class="ml-1 inline-flex items-center gap-1 rounded bg-sky-100 px-1.5 text-xs font-bold uppercase tracking-wide text-sky-800 dark:bg-sky-500/20 dark:text-sky-200"
+                          class="ml-1 inline-flex items-center gap-1 rounded px-1.5 text-xs font-bold uppercase tracking-wide"
+                          [class]="
+                            u.kind === 'respuesta'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200'
+                              : 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200'
+                          "
                           [title]="u.text">
-                          <pt-icon name="bandeja" class="h-3 w-3" />
-                          correo
+                          <pt-icon
+                            [name]="
+                              u.kind === 'respuesta' ? 'enviar' : 'bandeja'
+                            "
+                            class="h-3 w-3" />
+                          {{ u.kind === 'respuesta' ? 'respuesta' : 'correo' }}
                         </span>
                       }
                     </span>

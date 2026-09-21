@@ -43,7 +43,17 @@ export interface Anotacion {
   autoAsignacionIntentada?: boolean;
   /** El responsable pidio que se lo quiten; se borra al decidir. */
   solicitudReasignacion?: ReassignRequest;
+  /** Se les pidio una actualizacion; se borra cuando alguno contesta. */
+  solicitudActualizacion?: SolicitudActualizacion;
   actualizadoEn: string;
+}
+
+export interface SolicitudActualizacion {
+  at: string;
+  /** Quien la pidio (correo de la sesion). */
+  por: string;
+  /** Correos a los que se les pidio (destinatario y copias). */
+  a: string[];
 }
 
 export interface SugerenciaResponsable {
@@ -100,6 +110,12 @@ export function anotar(
             : undefined,
         unread: nota.novedad,
         reassignRequest: nota.solicitudReasignacion,
+        updateRequested: nota.solicitudActualizacion
+          ? {
+              at: nota.solicitudActualizacion.at,
+              to: nota.solicitudActualizacion.a
+            }
+          : undefined,
         history: nota.historial?.length ? nota.historial : tarea.history,
         comments:
           nota.comentarios.length > 0 ? nota.comentarios : tarea.comments,
