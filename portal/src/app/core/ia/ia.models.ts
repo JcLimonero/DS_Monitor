@@ -99,12 +99,7 @@ export type JuntaParaAcuerdos = Pick<
   'id' | 'title' | 'start' | 'end' | 'organizer' | 'attendees' | 'notes'
 >;
 
-export const EMPRESAS = [
-  'Itech Dev',
-  'Dealer Solutions',
-  'NexusQTech',
-  'OperativAI'
-] as const;
+// Las empresas ya no están fijas: ver core/empresas/empresas.service.ts.
 
 /** Lo que el puente entendió de un dictado; se corrige antes de guardar. */
 export interface Propuesta {

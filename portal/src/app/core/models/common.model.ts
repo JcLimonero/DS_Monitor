@@ -55,7 +55,8 @@ export type AccountColor =
   | 'indigo'
   | 'teal'
   | 'orange'
-  | 'fuchsia';
+  | 'fuchsia'
+  | 'cyan';
 
 /** Persona involucrada en un pendiente, una junta o una oportunidad. */
 export interface Person {

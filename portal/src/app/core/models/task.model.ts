@@ -65,7 +65,7 @@ export interface TaskItem {
   comments?: TaskComment[];
   /** Trazabilidad: comentarios, cambios de estado, asignaciones y ediciones. */
   history?: TaskEvent[];
-  /** Empresa a la que pertenece: Itech Dev, Dealer Solutions, NexusQTech, OperativAI. */
+  /** Empresa a la que pertenece: el nombre de una del catálogo (Integraciones → Empresas). */
   company?: string;
   /**
    * Personal, no del negocio. Vive en Personales y no sale en el tablero, el

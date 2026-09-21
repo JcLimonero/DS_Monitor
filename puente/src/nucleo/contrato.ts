@@ -80,7 +80,7 @@ export interface TaskItem {
   comments?: TaskComment[];
   /** Trazabilidad: comentarios, cambios de estado, asignaciones y ediciones. */
   history?: TaskEvent[];
-  /** Empresa a la que pertenece: Itech Dev, Dealer Solutions, NexusQTech, OperativAI. */
+  /** Empresa a la que pertenece: el nombre de una del catalogo (Integraciones → Empresas). */
   company?: string;
   /** Personal, no del negocio: solo se ve en Personales. */
   personal?: boolean;
@@ -111,6 +111,29 @@ export interface TaskItem {
   url?: string;
   tags: string[];
   updatedAt: string;
+}
+
+// --- Empresas ---
+
+/**
+ * Una empresa del grupo, del catalogo que se edita en Integraciones →
+ * Empresas. El nombre es la etiqueta con la que se marcan los pendientes
+ * (`TaskItem.company`); las cuentas son los buzones o fuentes que le
+ * pertenecen, para que lo que llega por ahi se etiquete solo.
+ */
+export interface Empresa {
+  id: string;
+  nombre: string;
+  /** Que hace, en una frase: es lo que se le cuenta al modelo. */
+  descripcion?: string;
+  /** Color de la etiqueta, en nombre de Tailwind (por ejemplo "violet"). */
+  color?: string;
+  /** Ids de los buzones o fuentes (`accountId`) que le pertenecen. */
+  cuentas: string[];
+  /** Inactiva: no se ofrece en selectores ni al modelo, pero conserva lo etiquetado. */
+  activa: boolean;
+  orden: number;
+  actualizadoEn: string;
 }
 
 // --- Juntas ---

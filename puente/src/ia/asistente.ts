@@ -1,6 +1,7 @@
 import type { ConfiguracionIa } from '../config/entorno.js';
 import type { Alerta } from './alertas.js';
-import { CONTEXTO_EMPRESAS, preguntar } from './modelo.js';
+import { contextoEmpresas } from '../datos/empresas.js';
+import { preguntar } from './modelo.js';
 import { contextoDelDia } from './resumen.js';
 import { abiertos, type Tablero } from './tablero.js';
 
@@ -56,7 +57,7 @@ export async function responderAsistente(
   }
   return preguntar(config, {
     uso: 'asistente',
-    sistema: `${CONTEXTO_EMPRESAS}\nEres el asistente del tablero DS Monitor. Respondes a Carlos (director) sobre lo que hay en el tablero: pendientes, juntas, equipo, licencias, dominios, sitios y despliegues. Usa SOLO los datos que te doy; si algo no está, dilo. Sé breve y concreto (listas cortas, fechas y nombres). Contesta en texto plano: sin Markdown, sin asteriscos, sin tablas; para listas usa guiones. Si te piden redactar (un correo, un mensaje, un resumen para alguien), redáctalo listo para copiar. No inventes pendientes ni fechas.\n\nHoy: ${JSON.stringify(contexto)}\n\nPendientes abiertos:\n${pendientes.join('\\n')}\n\nJuntas próximas:\n${juntas.join('\\n')}\n\nEquipo: ${equipo.join(', ')}`,
+    sistema: `${contextoEmpresas()}\nEres el asistente del tablero DS Monitor. Respondes a Carlos (director) sobre lo que hay en el tablero: pendientes, juntas, equipo, licencias, dominios, sitios y despliegues. Usa SOLO los datos que te doy; si algo no está, dilo. Sé breve y concreto (listas cortas, fechas y nombres). Contesta en texto plano: sin Markdown, sin asteriscos, sin tablas; para listas usa guiones. Si te piden redactar (un correo, un mensaje, un resumen para alguien), redáctalo listo para copiar. No inventes pendientes ni fechas.\n\nHoy: ${JSON.stringify(contexto)}\n\nPendientes abiertos:\n${pendientes.join('\\n')}\n\nJuntas próximas:\n${juntas.join('\\n')}\n\nEquipo: ${equipo.join(', ')}`,
     usuario:
       (previos.length
         ? `Conversación previa:\n${previos.map((t) => `${t.rol === 'usuario' ? 'Carlos' : 'Asistente'}: ${t.texto.slice(0, 500)}`).join('\n')}\n\n`

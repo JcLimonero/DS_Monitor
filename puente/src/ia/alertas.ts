@@ -1,7 +1,8 @@
 import type { ConfiguracionIa } from '../config/entorno.js';
 import type { Dominio } from '../datos/dominios.js';
 import type { LicenseUsage } from '../nucleo/contrato.js';
-import { CONTEXTO_EMPRESAS, comoJson, preguntar, texto1 } from './modelo.js';
+import { contextoEmpresas } from '../datos/empresas.js';
+import { comoJson, preguntar, texto1 } from './modelo.js';
 import { diasHasta } from './tablero.js';
 
 /**
@@ -203,7 +204,7 @@ export async function redactarAlertas(
   }
   const texto = await preguntar(config, {
     uso: 'alertas',
-    sistema: `${CONTEXTO_EMPRESAS}\nTe doy alertas de licencias y dominios detectadas por reglas. Para cada una escribe UNA frase (máx. 140 caracteres) que diga qué pasa y qué conviene hacer, sin repetir el título. Responde SOLO JSON: {"alertas":[{"id":"...","texto":"..."}]}`,
+    sistema: `${contextoEmpresas()}\nTe doy alertas de licencias y dominios detectadas por reglas. Para cada una escribe UNA frase (máx. 140 caracteres) que diga qué pasa y qué conviene hacer, sin repetir el título. Responde SOLO JSON: {"alertas":[{"id":"...","texto":"..."}]}`,
     usuario: JSON.stringify(
       alertas.map((a) => ({
         id: a.id,

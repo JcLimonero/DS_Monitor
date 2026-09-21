@@ -7,7 +7,8 @@ import {
   signal
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Borrador, EMPRESAS, Propuesta } from '../../core/ia/ia.models';
+import { Borrador, Propuesta } from '../../core/ia/ia.models';
+import { EmpresasService } from '../../core/empresas/empresas.service';
 import { IaService, describirError } from '../../core/ia/ia.service';
 import { TASK_PRIORITY_LABEL, TaskPriority } from '../../core/models';
 import { PortalStore } from '../../core/state/portal.store';
@@ -64,7 +65,7 @@ export class DictadoComponent implements OnDestroy {
 
   readonly priorityLabel = TASK_PRIORITY_LABEL;
   readonly priorities: TaskPriority[] = ['urgente', 'alta', 'media', 'baja'];
-  readonly empresas = EMPRESAS;
+  readonly empresas = inject(EmpresasService).nombres;
   readonly hayVoz = !!(
     (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition ||
     (window as unknown as { webkitSpeechRecognition?: unknown })

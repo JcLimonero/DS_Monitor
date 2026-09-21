@@ -1,14 +1,11 @@
 import type { ConfiguracionIa } from '../config/entorno.js';
 import type { Meeting, Person, TaskPriority } from '../nucleo/contrato.js';
 import {
-  CONTEXTO_EMPRESAS,
-  EMPRESAS,
-  comoJson,
-  enHorario,
-  fechaDe,
-  preguntar,
-  texto1
-} from './modelo.js';
+  contextoEmpresas,
+  empresaValida,
+  opcionesEmpresa
+} from '../datos/empresas.js';
+import { comoJson, enHorario, fechaDe, preguntar, texto1 } from './modelo.js';
 
 /**
  * Acuerdos de una junta, propuestos como pendientes.
@@ -42,7 +39,7 @@ export async function acuerdosDeJunta(
   }
   const texto = await preguntar(config, {
     uso: 'juntas',
-    sistema: `${CONTEXTO_EMPRESAS}\nTe doy una junta (título, fecha, asistentes y notas). Extrae los ACUERDOS: compromisos concretos que alguien tiene que hacer después de la junta. No inventes: si las notas no dicen nada accionable, devuelve una lista vacía. Responde SOLO JSON: {"acuerdos":[{"titulo":"verbo + objeto, máx. 80 caracteres","descripcion":"contexto en 1 frase o null","responsable":"nombre o correo de quien lo hace, o null","venceEn":"YYYY-MM-DD o null","prioridad":"baja|media|alta|urgente","empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null"}]}`,
+    sistema: `${contextoEmpresas()}\nTe doy una junta (título, fecha, asistentes y notas). Extrae los ACUERDOS: compromisos concretos que alguien tiene que hacer después de la junta. No inventes: si las notas no dicen nada accionable, devuelve una lista vacía. Responde SOLO JSON: {"acuerdos":[{"titulo":"verbo + objeto, máx. 80 caracteres","descripcion":"contexto en 1 frase o null","responsable":"nombre o correo de quien lo hace, o null","venceEn":"YYYY-MM-DD o null","prioridad":"baja|media|alta|urgente","empresa":"${opcionesEmpresa()}"}]}`,
     usuario: JSON.stringify({
       hoy: ahora.toISOString().slice(0, 10),
       titulo: junta.title,
@@ -73,7 +70,7 @@ export async function acuerdosDeJunta(
           (['baja', 'media', 'alta', 'urgente'] as const).find(
             (p) => p === a.prioridad
           ) ?? 'media',
-        empresa: EMPRESAS.find((e) => e === a.empresa)
+        empresa: empresaValida(a.empresa)
       };
     })
     .filter((a): a is Acuerdo => a !== undefined);

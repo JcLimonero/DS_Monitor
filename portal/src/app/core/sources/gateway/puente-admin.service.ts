@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import { PORTAL_CONFIG } from '../../config/portal-config.token';
-import { Person, SourceKind, TaskItem } from '../../models';
+import { Empresa, Person, SourceKind, TaskItem } from '../../models';
 
 /** Un dominio registrado, tal como lo guarda el puente. */
 export interface Dominio {
@@ -394,6 +394,24 @@ export class PuenteAdminService {
     return this.http.post<{ ok: boolean }>(
       this.url('/pendientes/visto'),
       { id },
+      { headers: this.headers() }
+    );
+  }
+
+  /** El catálogo de empresas del grupo, activas e inactivas. */
+  empresas(): Observable<Empresa[]> {
+    return this.http.get<Empresa[]>(this.url('/empresas'));
+  }
+
+  /** Guarda el catálogo completo; renombrar reetiqueta lo ya guardado. */
+  guardarEmpresas(
+    empresas: (Omit<Empresa, 'id' | 'orden' | 'actualizadoEn'> & {
+      id?: string;
+    })[]
+  ): Observable<Empresa[]> {
+    return this.http.post<Empresa[]>(
+      this.url('/empresas/guardar'),
+      { empresas },
       { headers: this.headers() }
     );
   }

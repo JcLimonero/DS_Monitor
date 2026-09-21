@@ -21,6 +21,7 @@ import {
   TABLA_DOMINIOS,
   TABLA_EJECUCIONES,
   TABLA_EMISORES,
+  TABLA_EMPRESAS,
   TABLA_EQUIPO,
   TABLA_LIGAS,
   TABLA_PERSONALES,
@@ -42,6 +43,15 @@ import {
   validarDominio,
   type Dominio
 } from '../datos/dominios.js';
+import {
+  EMPRESAS_INICIALES,
+  empresaDeCuenta,
+  establecerCatalogo,
+  pendientesAbiertosDe,
+  renombrarEmpresa,
+  validarCatalogo,
+  type Empresa
+} from '../datos/empresas.js';
 import type {
   HostedApp,
   LicenseUsage,
@@ -187,7 +197,6 @@ import {
 } from '../proveedores/correo.js';
 import {
   clasificarCorreos,
-  empresaDeCuenta,
   idDeClasificacion,
   pendienteDeClasificacion,
   type Clasificacion
@@ -342,6 +351,8 @@ function buzones_(
 /** Los almacenes de datos propios: equipo, dominios y sesiones. */
 export interface Datos {
   equipo: AlmacenJson<Person[]>;
+  /** Las empresas del grupo (Integraciones → Empresas). */
+  empresas: AlmacenJson<Empresa[]>;
   dominios: AlmacenJson<Dominio[]>;
   sesiones: AlmacenJson<Sesion[]>;
   /** Los pendientes personales: los que uno se apunta en el portal. */
@@ -425,11 +436,23 @@ export async function cargarDatos(
       (almacen as AlmacenJson<unknown>).cargarDe(todos);
     }
   }
+  await sembrarEmpresas(datos);
+}
+
+/** La primera vez, con la lista vacia, entran las cuatro empresas de siempre. */
+async function sembrarEmpresas(datos: Datos): Promise<void> {
+  if (datos.empresas.leer().length === 0) {
+    await datos.empresas.escribir(EMPRESAS_INICIALES);
+    console.log(
+      `[puente] empresas: sembradas ${EMPRESAS_INICIALES.length} iniciales`
+    );
+  }
 }
 
 export function abrirDatos(persistencia: Persistencia): Datos {
   return {
     equipo: new AlmacenTabla<Person[]>(persistencia, TABLA_EQUIPO, []),
+    empresas: new AlmacenTabla<Empresa[]>(persistencia, TABLA_EMPRESAS, []),
     dominios: new AlmacenTabla<Dominio[]>(persistencia, TABLA_DOMINIOS, []),
     sesiones: new AlmacenTabla<Sesion[]>(persistencia, TABLA_SESIONES, []),
     personales: new AlmacenTabla<TaskItem[]>(
@@ -688,6 +711,12 @@ export function construirRutas(
   const router = new Router();
   const ttl = configInicial.cacheSegundos;
   const acceso = new Acceso(datos.sesiones);
+  // Los prompts y los selectores leen siempre el catalogo vigente.
+  establecerCatalogo(() =>
+    datos.empresas.leer().length > 0
+      ? datos.empresas.leer()
+      : EMPRESAS_INICIALES
+  );
   // Cada llamada al modelo queda en la bitacora (las ultimas 300).
   establecerBitacora((entrada) => {
     void datos.iaBitacora.escribir(
@@ -849,6 +878,90 @@ export function construirRutas(
   };
 
   router.get('/equipo', async () => equipoCompleto());
+
+  // --- Empresas: el catalogo del grupo ---
+  //
+  // Se lee sin token (el portal lo necesita al arrancar para sus selectores)
+  // y se guarda completo, como el equipo. Renombrar reetiqueta lo guardado;
+  // borrar solo se permite si no hay pendientes abiertos con esa empresa.
+
+  router.get('/empresas', async () => {
+    await sembrarEmpresas(datos);
+    return datos.empresas.leer();
+  });
+
+  router.post('/empresas/guardar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { empresas } = (contexto.cuerpo ?? {}) as { empresas?: unknown };
+    if (!Array.isArray(empresas)) {
+      throw new ErrorPuente('"empresas" debe ser una lista.', 400);
+    }
+    const previas = datos.empresas.leer();
+    let limpias: Empresa[];
+    try {
+      limpias = validarCatalogo(empresas, previas, new Date().toISOString());
+    } catch (error) {
+      throw new ErrorPuente(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
+    }
+    const abiertos = anotar(
+      [
+        ...Object.values(datos.registroCorreo.leer()).flat(),
+        ...datos.personales.leer()
+      ],
+      datos.anotaciones.leer()
+    );
+    for (const previa of previas) {
+      if (limpias.some((e) => e.id === previa.id)) {
+        continue;
+      }
+      const usados = pendientesAbiertosDe(previa.nombre, abiertos);
+      if (usados > 0) {
+        throw new ErrorPuente(
+          `"${previa.nombre}" tiene ${usados} ${usados === 1 ? 'pendiente abierto' : 'pendientes abiertos'}; desactívala en vez de borrarla.`,
+          400
+        );
+      }
+    }
+    // Un nombre nuevo para la misma empresa: lo etiquetado sigue a la empresa.
+    for (const previa of previas) {
+      const nueva = limpias.find((e) => e.id === previa.id);
+      if (!nueva || nueva.nombre === previa.nombre) {
+        continue;
+      }
+      const { datos: cambiados, tocados } = renombrarEmpresa(
+        {
+          registroCorreo: datos.registroCorreo.leer(),
+          anotaciones: datos.anotaciones.leer(),
+          personales: datos.personales.leer(),
+          aprendido: datos.aprendido.leer()
+        },
+        previa.nombre,
+        nueva.nombre
+      );
+      if (tocados > 0) {
+        if (cambiados.registroCorreo !== datos.registroCorreo.leer()) {
+          await datos.registroCorreo.escribir(cambiados.registroCorreo);
+        }
+        if (cambiados.anotaciones !== datos.anotaciones.leer()) {
+          await datos.anotaciones.escribir(cambiados.anotaciones);
+        }
+        if (cambiados.personales !== datos.personales.leer()) {
+          await datos.personales.escribir(cambiados.personales);
+        }
+        if (cambiados.aprendido !== datos.aprendido.leer()) {
+          await datos.aprendido.escribir(cambiados.aprendido);
+        }
+        console.log(
+          `[puente] empresas: "${previa.nombre}" ahora es "${nueva.nombre}" (${tocados} registros reetiquetados)`
+        );
+      }
+    }
+    await datos.empresas.escribir(limpias);
+    return limpias;
+  });
 
   // --- Emisores: quien puede alimentar la API desde afuera ---
   //

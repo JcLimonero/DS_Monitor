@@ -4,7 +4,8 @@ import type {
 } from '../config/entorno.js';
 import type { Deployment, MonitorTarget } from '../nucleo/contrato.js';
 import { bitacoraDeConstruccion } from '../proveedores/vercel.js';
-import { CONTEXTO_EMPRESAS, comoJson, preguntar, texto1 } from './modelo.js';
+import { contextoEmpresas } from '../datos/empresas.js';
+import { comoJson, preguntar, texto1 } from './modelo.js';
 
 /**
  * Diagnostico de caidas y de despliegues fallidos.
@@ -96,7 +97,7 @@ export async function diagnosticar(
 ): Promise<Diagnostico> {
   const texto = await preguntar(config, {
     uso: 'diagnosticos',
-    sistema: `${CONTEXTO_EMPRESAS}\nEres quien atiende la guardia técnica. Te doy la evidencia de ${clase === 'sitio' ? 'un sitio que el monitoreo marca caído' : 'un despliegue de Vercel que falló'}. Responde SOLO JSON: {"resumen":"qué pasa, en una línea de máx. 120 caracteres","causa":"la causa más probable, máx. 160 caracteres","accion":"qué hacer primero, máx. 160 caracteres"}. Sé concreto: cita el código HTTP, el error o la línea de la bitácora que lo delata. Si la evidencia no alcanza, dilo.`,
+    sistema: `${contextoEmpresas()}\nEres quien atiende la guardia técnica. Te doy la evidencia de ${clase === 'sitio' ? 'un sitio que el monitoreo marca caído' : 'un despliegue de Vercel que falló'}. Responde SOLO JSON: {"resumen":"qué pasa, en una línea de máx. 120 caracteres","causa":"la causa más probable, máx. 160 caracteres","accion":"qué hacer primero, máx. 160 caracteres"}. Sé concreto: cita el código HTTP, el error o la línea de la bitácora que lo delata. Si la evidencia no alcanza, dilo.`,
     usuario: `Objetivo: ${objetivo}\n\nEvidencia:\n${evidencia}`,
     json: true,
     maxTokens: 500

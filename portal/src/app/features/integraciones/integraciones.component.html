@@ -35,7 +35,7 @@
         [class.text-ink]="activa() !== p.id"
         [attr.aria-current]="activa() === p.id ? 'page' : null"
         (click)="elegir(p.id)">
-        <!-- El detalle va en el subtitulo de la pagina; aqui solo el nombre, para que las once quepan sin scroll. -->
+        <!-- El detalle va en el subtitulo de la pagina; aqui solo el nombre, para que las doce quepan sin scroll. -->
         <span class="block font-medium">{{ p.titulo }}</span>
       </button>
     }
@@ -45,6 +45,9 @@
     @switch (activa()) {
       @case ("equipo") {
         <pt-equipo-config />
+      }
+      @case ("empresas") {
+        <pt-empresas-config />
       }
       @case ("avisos") {
         <pt-avisos-config />

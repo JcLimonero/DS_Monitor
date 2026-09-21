@@ -134,7 +134,7 @@
                       "
                       name="empresa-{{ $index }}">
                       <option value="">Sin empresa</option>
-                      @for (e of empresas; track e) {
+                      @for (e of empresas(); track e) {
                         <option [value]="e">{{ e }}</option>
                       }
                     </select>

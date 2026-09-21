@@ -163,12 +163,5 @@ export function enHorario(iso: string, conHora = true): string {
   });
 }
 
-export const EMPRESAS = [
-  'Itech Dev',
-  'Dealer Solutions',
-  'NexusQTech',
-  'OperativAI'
-] as const;
-
-export const CONTEXTO_EMPRESAS =
-  'Trabajas para un grupo con cuatro empresas: Itech Dev (desarrollo de software a la medida), Dealer Solutions (software para agencias automotrices), NexusQTech (integraciones y tecnología para grupos automotrices) y OperativAI (agentes de IA). Escribes en español de México, directo y sin adornos.';
+// El "quienes somos" de cada prompt sale del catalogo de empresas
+// (datos/empresas.ts: contextoEmpresas, opcionesEmpresa, empresaValida).

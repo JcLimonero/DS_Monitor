@@ -3,6 +3,7 @@ import type { Person, TaskItem } from '../nucleo/contrato.js';
 import { notasDe, type Transcripcion } from '../proveedores/fireflies.js';
 import { acuerdosDeJunta, personaDe } from './acuerdos.js';
 import { huella } from '../proveedores/ia.js';
+import { empresaPorPalabra } from '../datos/empresas.js';
 
 /**
  * De cada junta que termina (Fireflies la transcribe minutos despues) salen
@@ -12,13 +13,6 @@ import { huella } from '../proveedores/ia.js';
  * sin modelo se toman los "action items" de Fireflies tal cual, que ya
  * vienen por persona.
  */
-
-const EMPRESA_POR_PALABRA: [RegExp, string][] = [
-  [/\bitech\b/i, 'Itech Dev'],
-  [/\bdealer/i, 'Dealer Solutions'],
-  [/\bnexus/i, 'NexusQTech'],
-  [/\boperativ/i, 'OperativAI']
-];
 
 export interface AcuerdoFireflies {
   titulo: string;
@@ -67,7 +61,7 @@ export function leerAcuerdos(
 
 export function empresaDe(t: Transcripcion): string | undefined {
   const texto = `${t.titulo} ${t.resumen ?? ''} ${t.temas?.join(' ') ?? ''}`;
-  return EMPRESA_POR_PALABRA.find(([re]) => re.test(texto))?.[1];
+  return empresaPorPalabra(texto);
 }
 
 /** Los pendientes que salen de una transcripcion; ids estables por junta y acuerdo. */
