@@ -36,51 +36,93 @@ describe('asuntoNormalizado', () => {
 });
 
 describe('relacionarPorAsunto', () => {
-  it('encuentra el pendiente cuyo Asunto: es el mismo hilo', () => {
-    const t = relacionarPorAsunto('RE: Cotización portal de proveedores', [
-      base
-    ]);
+  const otro = { remitente: 'Luis <luis@proveedor.com>' };
+
+  it('una respuesta (RE:) del mismo hilo relaciona aunque venga de otro remitente', () => {
+    const t = relacionarPorAsunto(
+      { asunto: 'RE: Cotización portal de proveedores', ...otro },
+      [base]
+    );
     assert.equal(t?.id, base.id);
   });
 
+  it('sin RE: relaciona solo si es el mismo remitente', () => {
+    assert.equal(
+      relacionarPorAsunto(
+        {
+          asunto: 'Cotización portal de proveedores',
+          remitente: 'Ana Cliente <ANA@cliente.com>'
+        },
+        [base]
+      )?.id,
+      base.id
+    );
+    // Asunto generico, otro remitente y sin RE: no es el mismo hilo.
+    assert.equal(
+      relacionarPorAsunto(
+        { asunto: 'Cotización portal de proveedores', ...otro },
+        [base]
+      ),
+      undefined
+    );
+  });
+
   it('no relaciona asuntos distintos ni muy cortos', () => {
-    assert.equal(relacionarPorAsunto('RE: Factura 123', [base]), undefined);
+    assert.equal(
+      relacionarPorAsunto({ asunto: 'RE: Factura 123', ...otro }, [base]),
+      undefined
+    );
     const corto = {
       ...base,
       description: 'De: x <x@y.com>\nAsunto: Hola'
     };
-    assert.equal(relacionarPorAsunto('RE: Hola', [corto]), undefined);
+    assert.equal(
+      relacionarPorAsunto({ asunto: 'RE: Hola', ...otro }, [corto]),
+      undefined
+    );
   });
 
   it('entre varios gana el más reciente y solo los de correo', () => {
     const viejo = { ...base, id: 'viejo', updatedAt: '2026-01-01T00:00:00Z' };
     const local = { ...base, id: 'local', origin: 'local' as const };
     assert.equal(
-      relacionarPorAsunto('Cotización portal de proveedores', [
-        viejo,
-        base,
-        local
-      ])?.id,
+      relacionarPorAsunto(
+        { asunto: 'RE: Cotización portal de proveedores', ...otro },
+        [viejo, base, local]
+      )?.id,
       base.id
     );
   });
 });
 
 describe('candidatos', () => {
-  it('excluye los eliminados; los hechos no van al modelo', () => {
-    const hecho = { ...base, id: 'hecho' };
+  const ahora = new Date('2026-09-20T12:00:00Z');
+
+  it('excluye los eliminados y los hechos viejos; los hechos no van al modelo', () => {
+    const reciente = { ...base, id: 'reciente' };
+    const viejo = { ...base, id: 'viejo', updatedAt: '2026-06-01T00:00:00Z' };
     const borrado = { ...base, id: 'borrado' };
     const anotaciones = {
-      hecho: { hecho: true, comentarios: [], actualizadoEn: '' },
+      reciente: {
+        hecho: true,
+        comentarios: [],
+        actualizadoEn: '2026-09-15T00:00:00Z'
+      },
+      viejo: {
+        hecho: true,
+        comentarios: [],
+        actualizadoEn: '2026-08-01T00:00:00Z'
+      },
       borrado: { eliminado: true, comentarios: [], actualizadoEn: '' }
     };
     const candidatos = candidatosDeRelacion(
-      [base, hecho, borrado],
-      anotaciones
+      [base, reciente, viejo, borrado],
+      anotaciones,
+      ahora
     );
     assert.deepEqual(
       candidatos.map((t) => t.id),
-      [base.id, 'hecho']
+      [base.id, 'reciente']
     );
     assert.deepEqual(
       abiertosParaModelo(candidatos, anotaciones, () => 'ana@cliente.com'),
@@ -91,6 +133,26 @@ describe('candidatos', () => {
           remitente: 'ana@cliente.com'
         }
       ]
+    );
+  });
+
+  it('un hecho hace 40 días ya no recibe respuestas', () => {
+    const hecho = {
+      ...base,
+      status: 'hecho' as const,
+      updatedAt: '2026-08-11T00:00:00Z'
+    };
+    const candidatos = candidatosDeRelacion([hecho], {}, ahora);
+    assert.deepEqual(candidatos, []);
+    assert.equal(
+      relacionarPorAsunto(
+        {
+          asunto: 'RE: Cotización portal de proveedores',
+          remitente: 'Ana <ana@cliente.com>'
+        },
+        candidatos
+      ),
+      undefined
     );
   });
 });

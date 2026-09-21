@@ -258,21 +258,24 @@ const ESPERA_BORRAR_MS = 5000;
             }
             @if (!task().assignee && task().suggestedAssignee; as sg) {
               <!-- La IA propone; un clic asigna (y avisa), la × descarta. -->
+              <!-- Botones con area tactil de 40 px en celular; compactos en escritorio. -->
               <span
                 class="inline-flex items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-xs text-ink"
                 [title]="sg.reason">
                 <span class="text-brand">✦</span>
-                Sugerido: <strong>{{ sg.person.name }}</strong>
+                <span class="whitespace-nowrap"
+                  >Sugerido: <strong>{{ sg.person.name }}</strong></span
+                >
                 <button
                   type="button"
-                  class="ml-0.5 rounded px-1.5 font-medium text-brand transition hover:bg-brand/10 hover:underline"
+                  class="ml-0.5 inline-flex min-h-10 min-w-10 items-center justify-center rounded px-1.5 font-medium text-brand transition hover:bg-brand/10 hover:underline lg:min-h-0 lg:min-w-0"
                   [disabled]="saving()"
                   (click)="asignarSugerido()">
                   Asignar
                 </button>
                 <button
                   type="button"
-                  class="rounded px-1 text-base leading-none text-ink-subtle transition hover:text-ink"
+                  class="inline-flex min-h-10 min-w-10 items-center justify-center rounded px-1 text-base leading-none text-ink-subtle transition hover:text-ink lg:min-h-0 lg:min-w-0"
                   aria-label="Descartar sugerencia"
                   title="Descartar sugerencia"
                   [disabled]="saving()"
@@ -391,10 +394,10 @@ const ESPERA_BORRAR_MS = 5000;
                   <span>También da seguimiento:</span>
                   @for (p of seguidores(); track p.id) {
                     <span class="chip bg-surface-muted text-ink">
-                      {{ p.name }}
+                      <span class="whitespace-nowrap">{{ p.name }}</span>
                       <button
                         type="button"
-                        class="ml-0.5 rounded px-1 text-base leading-none text-ink-subtle transition hover:text-danger"
+                        class="ml-0.5 inline-flex min-h-10 min-w-10 items-center justify-center rounded px-1 text-base leading-none text-ink-subtle transition hover:text-danger lg:min-h-0 lg:min-w-0"
                         [attr.aria-label]="'Quitar a ' + p.name"
                         [disabled]="saving()"
                         (click)="quitarSeguidor(p)">

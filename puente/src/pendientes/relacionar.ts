@@ -1,5 +1,6 @@
 import type { TaskItem } from '../nucleo/contrato.js';
 import { type Anotacion, type Anotaciones, conEvento } from './anotaciones.js';
+import { correoDelRemitente } from './remitente.js';
 
 /**
  * Un correo que llega sobre un pendiente que ya existe.
@@ -29,6 +30,11 @@ export function asuntoNormalizado(asunto: string): string {
   return asunto.replace(PREFIJOS, '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+/** El asunto es una respuesta o un reenvio (trae RE:, RV:, Fwd:…). */
+export function esRespuesta(asunto: string): boolean {
+  return PREFIJOS.test(asunto);
+}
+
 /** El "Asunto: …" que guarda la descripcion de un pendiente de correo. */
 export function asuntoDeDescripcion(
   descripcion: string | undefined
@@ -39,38 +45,74 @@ export function asuntoDeDescripcion(
 /** Asuntos de menos de esto ("hola", "info") no identifican un hilo. */
 const ASUNTO_MINIMO = 6;
 
+/** Un correo con el que se busca el pendiente del mismo hilo. */
+export interface CorreoEntrante {
+  asunto: string;
+  /** Tal cual viene, por ejemplo `Ana <ana@cliente.com>`. */
+  remitente: string;
+}
+
 /**
- * El pendiente de correo cuyo asunto es el mismo hilo que el del correo
- * nuevo. Si varios coinciden gana el mas reciente. Los asuntos muy cortos no
- * cuentan: "Factura" o "Hola" no dicen de que hilo son.
+ * El pendiente de correo del mismo hilo que el correo nuevo. El asunto
+ * normalizado tiene que ser el mismo y, para no colgar de un pendiente
+ * cualquier correo con un asunto generico ("Factura", "Reporte semanal"),
+ * ademas el correo debe ser una respuesta o reenvio (RE:, RV:, Fwd:) o
+ * venir del mismo remitente que el pendiente. Si varios coinciden gana el
+ * mas reciente. Los asuntos muy cortos no cuentan.
  */
 export function relacionarPorAsunto(
-  asunto: string,
+  correo: CorreoEntrante,
   candidatos: readonly TaskItem[]
 ): TaskItem | undefined {
-  const buscado = asuntoNormalizado(asunto);
+  const buscado = asuntoNormalizado(correo.asunto);
   if (buscado.length < ASUNTO_MINIMO) {
     return undefined;
   }
+  const respuesta = esRespuesta(correo.asunto);
+  const remitente = correoDelRemitente(`De: ${correo.remitente}`);
   return candidatos
     .filter(
       (t) =>
         t.origin === 'correo' &&
-        asuntoNormalizado(asuntoDeDescripcion(t.description) ?? '') === buscado
+        asuntoNormalizado(asuntoDeDescripcion(t.description) ?? '') ===
+          buscado &&
+        (respuesta ||
+          (!!remitente && correoDelRemitente(t.description) === remitente))
     )
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
 }
 
+/** Un pendiente hecho recibe correos solo si se cerro hace menos de esto. */
+const HECHO_RECIENTE_MS = 30 * 86_400_000;
+
 /**
  * Los pendientes que pueden recibir un correo: los registrados de la cuenta
- * que nadie ha borrado. Los hechos se quedan: una respuesta a algo cerrado
- * vale la pena verla, y el que lo abre decide si lo reabre.
+ * que nadie ha borrado. Los hechos se quedan solo si se cerraron hace poco:
+ * una respuesta a algo recien cerrado vale la pena verla (quien lo abre
+ * decide si lo reabre), pero una nota en un pendiente hecho hace meses no
+ * la ve nadie.
  */
 export function candidatosDeRelacion(
   registrados: readonly TaskItem[],
-  anotaciones: Anotaciones
+  anotaciones: Anotaciones,
+  ahora = new Date()
 ): TaskItem[] {
-  return registrados.filter((t) => !anotaciones[t.id]?.eliminado);
+  return registrados.filter((t) => {
+    const nota = anotaciones[t.id];
+    if (nota?.eliminado) {
+      return false;
+    }
+    const hecho = nota?.hecho || (nota?.estado ?? t.status) === 'hecho';
+    if (!hecho) {
+      return true;
+    }
+    const cerrado = Date.parse(
+      nota?.actualizadoEn && nota.actualizadoEn > t.updatedAt
+        ? nota.actualizadoEn
+        : t.updatedAt
+    );
+    return ahora.getTime() - cerrado < HECHO_RECIENTE_MS;
+  });
 }
 
 /** Los abiertos, mas recientes primero, como los ve el modelo. */

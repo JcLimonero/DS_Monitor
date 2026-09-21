@@ -50,21 +50,24 @@ encabezados de los últimos meses.
 Lo que las reglas no reconocen lo lee la IA (`src/proveedores/ia.ts`) y decide
 si es un pendiente. Antes de crear uno nuevo se revisa si el correo es la
 respuesta o el seguimiento de un pendiente que ya está registrado
-(`src/pendientes/relacionar.ts`): por asunto (el mismo hilo con RE:/RV: encima)
-sin modelo, y por la lista de pendientes abiertos que se le pasa al modelo. Si lo
-es, no se crea otro: el resumen del correo se pone como comentario ("Correo") en
+(`src/pendientes/relacionar.ts`): por asunto sin modelo (mismo asunto y, además,
+que sea respuesta o reenvío —RE:/RV:/Fwd:— o venga del mismo remitente; los
+hechos solo si se cerraron hace menos de 30 días), y por la lista de pendientes
+abiertos que se le pasa al modelo. Si lo es, no se crea otro: el resumen del correo se pone como comentario ("Correo") en
 el pendiente, queda en la trazabilidad y el pendiente sale con una **novedad**
 (`unread`) que el portal enseña como chip hasta que alguien abre la tarjeta
 (`POST /pendientes/visto`).
 
-A los pendientes de correo recién registrados se les busca responsable
-(`autoasignar` en `rutas.ts`): si ya se aprendió a quién se le asigna lo de ese
+A los pendientes de correo abiertos, sin responsable y que nadie ha tocado (de
+los últimos 30 días) se les busca responsable en cada lectura (`autoasignar` en
+`rutas.ts`): si ya se aprendió a quién se le asigna lo de ese
 remitente (`src/pendientes/aprendido.ts`, se aprende al asignar a mano y se
 olvida al quitarlo), se asigna directo y se avisa por correo con la liga; si no,
 la IA propone y solo se asigna sola con confianza alta. Con confianza media o
 baja la propuesta queda como **sugerencia** (`suggestedAssignee`) en la tarjeta,
-con "Asignar" y "×" para descartarla. Como mucho cinco consultas por lectura;
-con el equipo vacío no se hace nada.
+con "Asignar" y "×" para descartarla. A la IA se le pregunta una sola vez por
+pendiente y como mucho cinco por lectura (el resto en la siguiente); con el
+equipo vacío no se hace nada.
 
 Además del responsable, un pendiente puede tener **seguidores** (`followers`):
 se agregan desde el detalle de la tarjeta, reciben el mismo correo con liga, ven

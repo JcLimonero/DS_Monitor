@@ -1402,7 +1402,7 @@ export function construirRutas(
             [
               c.clave,
               relacionarPorAsunto(
-                c.encabezado.asunto,
+                c.encabezado,
                 candidatos.filter((t) => t.id !== propio(c.clave))
               )?.id
             ] as const
@@ -1475,22 +1475,44 @@ export function construirRutas(
       );
   };
 
-  /** Cuantos pendientes nuevos por lectura se le preguntan a la IA quien los atiende. */
+  /** Cuantos pendientes por lectura se le preguntan a la IA quien los atiende. */
   const MAXIMO_SUGERENCIAS_POR_LECTURA = 5;
+  /** Mas viejo que esto ya no se autoasigna: llego antes de que hubiera regla. */
+  const DIAS_PARA_AUTOASIGNAR = 30;
 
   /**
-   * A los pendientes de correo recien registrados (sin anotacion previa) se
-   * les busca responsable: primero por la regla aprendida del remitente, que
-   * asigna directo; si no hay, la IA propone. Solo se asigna sin preguntar
-   * cuando la propuesta viene con confianza alta; si no, queda como
-   * sugerencia en la tarjeta para que alguien la acepte o la descarte. Con
-   * el equipo vacio no se hace nada.
+   * A los pendientes de correo abiertos y sin responsable que nadie ha
+   * tocado (sin anotacion con movimientos) se les busca quien los atienda:
+   * primero por la regla aprendida del remitente, que asigna directo; si no
+   * hay, la IA propone. Solo se asigna sin preguntar cuando la propuesta
+   * viene con confianza alta; si no, queda como sugerencia en la tarjeta
+   * para que alguien la acepte o la descarte. Cada pendiente se le pregunta
+   * a la IA una sola vez (`autoAsignacionIntentada`), como mucho cinco por
+   * lectura: los que no alcanzan se atienden en la siguiente. Con el equipo
+   * vacio no se hace nada.
    */
   const autoasignar = async (
     cuenta: ConfiguracionCorreo,
-    nuevos: TaskItem[]
+    registrados: TaskItem[]
   ): Promise<void> => {
-    if (nuevos.length === 0) {
+    const anotaciones = datos.anotaciones.leer();
+    const limite = Date.now() - DIAS_PARA_AUTOASIGNAR * 86_400_000;
+    const pendientes = registrados.filter((t) => {
+      const nota = anotaciones[t.id];
+      return (
+        !t.assignee &&
+        t.status !== 'hecho' &&
+        Date.parse(t.updatedAt) >= limite &&
+        !nota?.eliminado &&
+        !nota?.hecho &&
+        !nota?.asignado &&
+        !nota?.autoAsignacionIntentada &&
+        // Con movimientos ya alguien decidio algo (por ejemplo quitarle el
+        // responsable): no se le pone otro solo.
+        !nota?.historial?.length
+      );
+    });
+    if (pendientes.length === 0) {
       return;
     }
     const equipo = await equipoCompleto();
@@ -1500,21 +1522,23 @@ export function construirRutas(
     const enEquipo = (p: Person) => equipo.find((q) => mismaPersona(q, p));
     const aprendido = datos.aprendido.leer();
     let consultas = 0;
-    for (const tarea of nuevos) {
-      const anotaciones = datos.anotaciones.leer();
-      if (anotaciones[tarea.id] || tarea.assignee) {
-        continue;
-      }
+    for (const tarea of pendientes) {
       const porRegla = responsableAprendido(tarea, aprendido);
       const persona = porRegla && enEquipo(porRegla);
       if (persona) {
-        await asignarPendiente(
-          tarea.id,
-          persona.email ?? persona.id,
-          tarea,
-          undefined,
-          `regla aprendida (${correoDelRemitente(tarea.description) ?? 'remitente'})`
-        );
+        try {
+          await asignarPendiente(
+            tarea.id,
+            persona.email ?? persona.id,
+            tarea,
+            undefined,
+            `regla aprendida (${correoDelRemitente(tarea.description) ?? 'remitente'})`
+          );
+        } catch (error) {
+          console.warn(
+            `[puente] no se pudo asignar "${tarea.title}" (${cuenta.id}) por regla aprendida: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
         continue;
       }
       const ia = iaPara('asistente');
@@ -1622,22 +1646,18 @@ export function construirRutas(
       const sinTotalOne = (lista: TaskItem[]) =>
         lista.filter((t) => !esCorreoDeTotalOne(t.title, t.description ?? ''));
       const registro = datos.registroCorreo.leer();
-      const previos = new Set((registro[cuenta.id] ?? []).map((t) => t.id));
       const actual = registrar(
         sinTotalOne(registro[cuenta.id] ?? []),
         sinTotalOne(detectados),
         hechos()
       );
       await datos.registroCorreo.escribir({ ...registro, [cuenta.id]: actual });
-      // Los recien registrados buscan responsable. Es un extra: si falla,
+      // Los que siguen sin responsable buscan uno. Es un extra: si falla,
       // la lectura sigue.
       await autoasignar(
         cuenta,
         aplicarAprendido(
-          conRemitente(
-            actual.filter((t) => !previos.has(t.id)),
-            await equipoCompleto()
-          ),
+          conRemitente(actual, await equipoCompleto()),
           datos.aprendido.leer()
         )
       ).catch((error: unknown) =>
