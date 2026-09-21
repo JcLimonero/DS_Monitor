@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Observable, of, tap } from 'rxjs';
 import { PORTAL_CONFIG } from '../config/portal-config.token';
 import { PuenteAdminService } from '../sources/gateway/puente-admin.service';
+import { SesionService } from '../acceso/sesion.service';
 import { Person, TaskItem, TaskStatus } from '../models';
 import {
   Acuerdo,
@@ -33,6 +34,7 @@ export class IaService {
   private readonly http = inject(HttpClient);
   private readonly config = inject(PORTAL_CONFIG);
   private readonly admin = inject(PuenteAdminService);
+  private readonly sesion = inject(SesionService);
 
   /** Si el puente tiene la API key. Se sabe tras la primera consulta. */
   readonly activa = signal<boolean | undefined>(undefined);
@@ -307,13 +309,38 @@ export class IaService {
     );
   }
 
+  /**
+   * Responsable principal y quiénes dan seguimiento, de una vez. El puente
+   * manda un solo correo (principal de destinatario, los demás con copia) y
+   * no avisa si quien asigna se lo pone a sí mismo sin nadie más. Devuelve
+   * la tarea con las anotaciones encima, para pintarla al instante.
+   */
+  responsables(
+    id: string,
+    /** Id o correo del equipo; vacío = sin responsable. */
+    principal: string,
+    /** Ids o correos del equipo; reemplazan a los que daban seguimiento. */
+    seguidores: string[],
+    tarea?: Partial<TaskItem>
+  ): Observable<{ ok: boolean; tarea?: TaskItem; aviso?: string }> {
+    return this.http.post<{ ok: boolean; tarea?: TaskItem; aviso?: string }>(
+      this.url('/pendientes/responsables'),
+      { id, principal, seguidores, tarea },
+      { headers: this.headers() }
+    );
+  }
+
   private url(path: string): string {
     return `${this.config.gatewayUrl}${path}`;
   }
 
-  /** El token de administración, si se capturó; la sesión la pone el interceptor. */
+  /**
+   * Con sesión, nada: el interceptor pone el token de quien entró y así el
+   * puente sabe quién anota (y no le manda correo a uno mismo). Sin sesión,
+   * el token de administración si se capturó.
+   */
   private headers(): Record<string, string> {
-    const token = this.admin.token();
+    const token = this.sesion.token() ? '' : this.admin.token();
     return token ? { authorization: `Bearer ${token}` } : {};
   }
 }

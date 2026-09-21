@@ -8,6 +8,7 @@ export type IconName =
   | 'monitoreo'
   | 'crm'
   | 'equipo'
+  | 'usuario'
   | 'ajustes'
   | 'refrescar'
   | 'sol'

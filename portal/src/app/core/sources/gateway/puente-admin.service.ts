@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
+import { SesionService } from '../../acceso/sesion.service';
 import { PORTAL_CONFIG } from '../../config/portal-config.token';
 import { Empresa, Person, SourceKind, TaskItem } from '../../models';
 
@@ -179,6 +180,7 @@ const TOKEN_KEY = 'ds-monitor.puente-token';
 export class PuenteAdminService {
   private readonly http = inject(HttpClient);
   private readonly config = inject(PORTAL_CONFIG);
+  private readonly sesion = inject(SesionService);
 
   readonly token = signal(readToken());
 
@@ -484,8 +486,12 @@ export class PuenteAdminService {
     return `${this.config.gatewayUrl}${path}`;
   }
 
+  /**
+   * Con sesión, nada: el interceptor pone el token de quien entró y el
+   * puente sabe quién es. Sin sesión, el token de administración.
+   */
   private headers(): Record<string, string> {
-    const token = this.token();
+    const token = this.sesion.token() ? '' : this.token();
     return token ? { authorization: `Bearer ${token}` } : {};
   }
 }

@@ -10,6 +10,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { IaService, describirError } from '../core/ia/ia.service';
+import { SesionService } from '../core/acceso/sesion.service';
 import { PuenteAdminService } from '../core/sources/gateway/puente-admin.service';
 import { AvisosService } from '../core/avisos/avisos.service';
 import { ElementRef, effect } from '@angular/core';
@@ -20,6 +21,7 @@ import {
   SENDER_KIND_LABEL,
   TASK_PRIORITY_LABEL,
   TASK_STATUS_LABEL,
+  Person,
   TaskItem,
   TaskOrigin,
   TaskPriority,
@@ -204,8 +206,24 @@ const ESPERA_BORRAR_MS = 5000;
               <span [class]="statusClass()">{{ statusLabel() }}</span>
             }
             @if (ia.disponible && ia.equipo().length > 0) {
-              <label class="inline-flex items-center gap-1">
+              <!-- Responsable de tres formas: Mío (me lo asigno, sin correo si
+                   nadie más sigue), el selector (avisa de inmediato) o Varios…
+                   (principal y quiénes dan seguimiento; un solo correo con copia). -->
+              <span class="inline-flex flex-wrap items-center gap-1">
                 <pt-icon name="equipo" class="h-3.5 w-3.5" />
+                @if (yo()) {
+                  <button
+                    type="button"
+                    class="btn h-10 gap-1 px-2 text-xs lg:h-8"
+                    [class.btn-activo]="esMio()"
+                    [disabled]="saving() || esMio()"
+                    title="Asignármelo"
+                    aria-label="Asignármelo"
+                    (click)="asignarmelo()">
+                    <pt-icon name="usuario" class="h-3.5 w-3.5" />
+                    Mío
+                  </button>
+                }
                 <select
                   class="h-10 max-w-40 rounded border border-line bg-surface px-1 text-xs text-ink lg:h-8"
                   [class.text-ink-subtle]="!task().assignee"
@@ -219,7 +237,20 @@ const ESPERA_BORRAR_MS = 5000;
                     <option [value]="p.email ?? p.id">{{ p.name }}</option>
                   }
                 </select>
-              </label>
+                @if (!task().personal) {
+                  <button
+                    type="button"
+                    class="btn h-10 gap-1 px-2 text-xs lg:h-8"
+                    [class.btn-activo]="!!varios()"
+                    [disabled]="saving()"
+                    title="Elegir responsable principal y quiénes dan seguimiento; un solo correo con copia"
+                    aria-label="Varios responsables"
+                    (click)="abrirVarios()">
+                    <pt-icon name="equipo" class="h-3.5 w-3.5" />
+                    Varios…
+                  </button>
+                }
+              </span>
             } @else if (ia.disponible && !task().assignee) {
               <!-- Con puente pero sin equipo capturado: el selector saldria vacio. -->
               <a
@@ -305,6 +336,74 @@ const ESPERA_BORRAR_MS = 5000;
               <span class="text-ink-subtle">{{ project }}</span>
             }
           </div>
+
+          @if (varios(); as v) {
+            <!-- Varios…: principal del selector, seguimiento por chips; al
+                 guardar, un solo correo (principal, copia a los demás). -->
+            <div
+              class="mt-2 grid gap-3 rounded-lg border border-line bg-surface-muted p-3 text-xs"
+              role="group"
+              aria-label="Responsables del pendiente">
+              <label class="sm:max-w-xs">
+                <span class="mb-1 block font-medium text-ink-muted"
+                  >Responsable principal</span
+                >
+                <select
+                  class="field h-10 lg:h-8"
+                  [ngModel]="v.principal"
+                  (ngModelChange)="patchVarios({ principal: $event })"
+                  name="varios-resp-{{ task().id }}">
+                  <option value="">Sin responsable</option>
+                  @for (p of ia.equipo(); track p.id) {
+                    <option [value]="clave(p)">{{ p.name }}</option>
+                  }
+                </select>
+              </label>
+              <div>
+                <span class="mb-1 block font-medium text-ink-muted"
+                  >También dan seguimiento (van con copia)</span
+                >
+                <div
+                  class="flex flex-wrap gap-1.5"
+                  role="group"
+                  aria-label="Quiénes dan seguimiento">
+                  @for (p of ia.equipo(); track p.id) {
+                    @if (clave(p) !== v.principal) {
+                      <button
+                        type="button"
+                        class="inline-flex min-h-10 items-center rounded-full border px-3 font-medium transition lg:min-h-8"
+                        [class]="
+                          sigue(v, p)
+                            ? 'border-brand bg-brand/10 text-ink'
+                            : 'border-line bg-surface text-ink-muted hover:text-ink'
+                        "
+                        [attr.aria-pressed]="sigue(v, p)"
+                        [disabled]="saving()"
+                        (click)="toggleSeguidor(p)">
+                        {{ sigue(v, p) ? '✓ ' : '' }}{{ p.name }}
+                      </button>
+                    }
+                  }
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  [disabled]="saving()"
+                  (click)="guardarVarios()">
+                  Guardar y avisar
+                </button>
+                <button
+                  type="button"
+                  class="btn"
+                  [disabled]="saving()"
+                  (click)="varios.set(undefined)">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          }
 
           @if (open()) {
             <div class="mt-3 space-y-3 border-t border-line pt-3">
@@ -397,19 +496,16 @@ const ESPERA_BORRAR_MS = 5000;
                   } @empty {
                     <span class="text-ink-subtle">nadie más</span>
                   }
-                  @if (candidatosSeguimiento().length > 0) {
-                    <select
-                      class="h-10 max-w-40 rounded border border-line bg-surface px-1 text-xs text-ink lg:h-8"
+                  @if (!varios()) {
+                    <button
+                      type="button"
+                      class="btn h-10 gap-1 px-2 text-xs lg:h-8"
                       [disabled]="saving()"
-                      [ngModel]="''"
-                      (ngModelChange)="agregarSeguidor($event)"
-                      name="seg-{{ task().id }}"
-                      aria-label="Agregar a alguien que dé seguimiento">
-                      <option value="">Agregar…</option>
-                      @for (p of candidatosSeguimiento(); track p.id) {
-                        <option [value]="p.email ?? p.id">{{ p.name }}</option>
-                      }
-                    </select>
+                      title="Elegir responsable principal y quiénes dan seguimiento; un solo correo con copia"
+                      (click)="abrirVarios()">
+                      <pt-icon name="equipo" class="h-3.5 w-3.5" />
+                      Varios…
+                    </button>
                   }
                 </div>
               }
@@ -816,6 +912,7 @@ export class TaskCardComponent {
   private readonly local = inject(LocalTaskStore);
   readonly ia = inject(IaService);
   private readonly admin = inject(PuenteAdminService);
+  private readonly sesion = inject(SesionService);
 
   readonly task = input.required<TaskItem>();
 
@@ -894,22 +991,23 @@ export class TaskCardComponent {
       .map((p) => p.name)
       .join(', ')
   );
-  /** Del equipo, quién puede agregarse: ni el responsable ni los que ya siguen. */
-  readonly candidatosSeguimiento = computed(() => {
-    const fuera = [this.task().assignee, ...this.seguidores()].filter(
-      (p): p is NonNullable<typeof p> => !!p
-    );
-    return this.ia
-      .equipo()
-      .filter(
-        (q) =>
-          !fuera.some(
-            (p) =>
-              p.id === q.id ||
-              (!!p.email && p.email.toLowerCase() === q.email?.toLowerCase())
-          )
-      );
+  /** Quien entró, si está en el equipo (por correo, sin importar mayúsculas). */
+  readonly yo = computed(() => {
+    const correo = this.sesion.correo()?.trim().toLowerCase();
+    return correo
+      ? this.ia.equipo().find((p) => p.email?.toLowerCase() === correo)
+      : undefined;
   });
+  /** El pendiente ya está a mi nombre. */
+  readonly esMio = computed(() => {
+    const yo = this.yo();
+    const a = this.task().assignee;
+    return !!yo && !!a && mismaPersona(a, yo);
+  });
+  /** El panel "Varios…" abierto: principal y seguimiento por elegir (claves del equipo). */
+  readonly varios = signal<
+    { principal: string; seguidores: string[] } | undefined
+  >(undefined);
   readonly historial = computed(() =>
     [...(this.task().history ?? [])].sort((a, b) => b.at.localeCompare(a.at))
   );
@@ -1130,19 +1228,139 @@ export class TaskCardComponent {
       });
   }
 
+  /** Del selector: cambia el principal, conserva el seguimiento y avisa de inmediato. */
   reasignar(quien: string): void {
-    this.guardar({ asignarA: quien, tarea: this.task() });
+    if (quien === this.responsableValor()) {
+      return;
+    }
+    this.fijarResponsables(quien, this.clavesSeguidores());
   }
 
-  /** Acepta al que propuso la IA: se asigna por el flujo normal (y avisa). */
+  /** Mío: me lo pongo a mi nombre; sin nadie más que siga, no hay correo. */
+  asignarmelo(): void {
+    const yo = this.yo();
+    if (!yo || this.esMio()) {
+      return;
+    }
+    this.fijarResponsables(this.clave(yo), this.clavesSeguidores());
+  }
+
+  /** Acepta al que propuso la IA: principal el sugerido, con el seguimiento actual. */
   asignarSugerido(): void {
     const sg = this.task().suggestedAssignee;
     if (!sg) {
       return;
     }
-    this.guardar({
-      asignarA: sg.person.email ?? sg.person.id,
-      tarea: this.task()
+    this.fijarResponsables(
+      this.claveDe(sg.person) ?? sg.person.email ?? sg.person.id,
+      this.clavesSeguidores()
+    );
+  }
+
+  /** La clave con que el selector y los chips identifican a alguien del equipo. */
+  clave(p: Person): string {
+    return p.email ?? p.id;
+  }
+
+  /** La clave del equipo de una persona guardada (por id o correo), si está. */
+  private claveDe(persona: Person): string | undefined {
+    const q = this.ia.equipo().find((p) => mismaPersona(p, persona));
+    return q ? this.clave(q) : undefined;
+  }
+
+  /** Quiénes dan seguimiento hoy, como claves del equipo (los que ya no están, fuera). */
+  private clavesSeguidores(): string[] {
+    return this.seguidores()
+      .map((p) => this.claveDe(p))
+      .filter((k): k is string => !!k);
+  }
+
+  /** Abre "Varios…" con lo que hay: principal y seguimiento actuales. */
+  abrirVarios(): void {
+    this.varios.set({
+      principal: this.responsableValor(),
+      seguidores: this.clavesSeguidores()
+    });
+  }
+
+  patchVarios(cambio: { principal: string }): void {
+    this.varios.update((v) =>
+      v
+        ? {
+            principal: cambio.principal,
+            // El principal no se sigue a sí mismo.
+            seguidores: v.seguidores.filter((k) => k !== cambio.principal)
+          }
+        : v
+    );
+  }
+
+  sigue(v: { seguidores: string[] }, p: Person): boolean {
+    return v.seguidores.includes(this.clave(p));
+  }
+
+  toggleSeguidor(p: Person): void {
+    const k = this.clave(p);
+    this.varios.update((v) =>
+      v
+        ? {
+            ...v,
+            seguidores: v.seguidores.includes(k)
+              ? v.seguidores.filter((x) => x !== k)
+              : [...v.seguidores, k]
+          }
+        : v
+    );
+  }
+
+  /** Guarda principal y seguimiento de una vez: un solo correo con copia. */
+  guardarVarios(): void {
+    const v = this.varios();
+    if (!v) {
+      return;
+    }
+    this.fijarResponsables(
+      v.principal,
+      v.seguidores.filter((k) => k !== v.principal),
+      () => this.varios.set(undefined)
+    );
+  }
+
+  /**
+   * Manda principal y seguimiento al puente y pinta la tarea devuelta al
+   * instante; el aviso dice a quién se escribió (o por qué no).
+   */
+  private fijarResponsables(
+    principal: string,
+    seguidores: string[],
+    luego?: () => void
+  ): void {
+    this.saving.set(true);
+    this.message.set(undefined);
+    const id = this.task().id;
+    this.ia.responsables(id, principal, seguidores, this.task()).subscribe({
+      next: (r) => {
+        this.saving.set(false);
+        if (r.tarea) {
+          // Campo por campo: lo que quedó vacío (sin responsable) no viaja
+          // en el JSON y un simple {...} no lo borraría.
+          this.store.actualizarTarea(id, {
+            assignee: r.tarea.assignee,
+            followers: r.tarea.followers,
+            suggestedAssignee: r.tarea.suggestedAssignee,
+            history: r.tarea.history,
+            updatedAt: r.tarea.updatedAt
+          });
+        }
+        this.message.set(r.aviso ? { texto: r.aviso } : undefined);
+        luego?.();
+        this.local.invalidar();
+        this.store.refreshTasks();
+      },
+      error: (error: unknown) => {
+        this.saving.set(false);
+        this.message.set({ texto: describirError(error), error: true });
+      }
     });
   }
 
@@ -1152,13 +1370,6 @@ export class TaskCardComponent {
         suggestedAssignee: undefined
       })
     );
-  }
-
-  agregarSeguidor(quien: string): void {
-    if (!quien) {
-      return;
-    }
-    this.guardar({ agregarSeguidor: quien, tarea: this.task() });
   }
 
   quitarSeguidor(persona: { id: string; email?: string }): void {
@@ -1372,6 +1583,12 @@ export class TaskCardComponent {
       }
     });
   }
+}
+
+/** La misma persona del equipo, por id o por correo (sin importar mayúsculas). */
+function mismaPersona(a: Person, b: Person): boolean {
+  const correo = a.email?.toLowerCase();
+  return a.id === b.id || (!!correo && correo === b.email?.toLowerCase());
 }
 
 /** ISO → valor de un input datetime-local, en hora local. */

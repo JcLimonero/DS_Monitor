@@ -94,10 +94,21 @@ retoma) y en Telegram como `/autoasignar` (contesta "Revisando…" y manda el
 resumen al terminar; si ya hay uno en curso, lo dice).
 
 Además del responsable, un pendiente puede tener **seguidores** (`followers`):
-se agregan desde el detalle de la tarjeta, reciben el mismo correo con liga, ven
-el pendiente en `/mio/:token` marcado como "seguimiento" (pueden comentar y
+ven el pendiente en `/mio/:token` marcado como "seguimiento" (pueden comentar y
 cambiar el estado, no pedir que se reasigne) y en Equipo cuentan aparte
-("+M seguimiento").
+("+M seguimiento"). Responsable y seguidores se fijan de una vez con
+`POST /pendientes/responsables` `{ id, principal, seguidores, tarea }` (principal
+y seguidores por id o correo del equipo; principal vacío = sin responsable): deja
+un solo movimiento en la trazabilidad ("Responsable: X · seguimiento: Y, Z") y
+manda **un solo correo** con el principal de destinatario y los seguidores con
+copia (`cc_email` de EmailJS), cada quien con su liga personal en el cuerpo. Si
+quien asigna se lo pone a sí mismo y nadie más sigue, no se manda correo
+("Asignado sin aviso: eres tú"); si no cambió nada, ni correo ni movimiento
+(`src/pendientes/responsables.ts`). En el portal son el botón **Mío**, el
+selector de responsable (avisa de inmediato) y **Varios…** (principal y chips de
+seguimiento; "Guardar y avisar"). `/pendientes/anotar` con `asignarA` /
+`agregarSeguidor` sigue valiendo (lo usan `/mio` y el barrido) y tampoco avisa
+cuando la persona es quien está en sesión.
 
 Cada buzón es una conexión del portal con ruta `/correo/<id>`, y se configuran
 en `CORREO_CUENTAS` con la contraseña de cada uno en `CORREO_CONTRASENA_<ID>`

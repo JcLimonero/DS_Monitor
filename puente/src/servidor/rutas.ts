@@ -101,6 +101,12 @@ import {
   pendientesDePersona
 } from '../pendientes/seguidores.js';
 import { sugerirResponsable } from '../ia/pendientes.js';
+import {
+  decidirAviso,
+  depurarSeguidores,
+  textoAviso,
+  textoEventoResponsables
+} from '../pendientes/responsables.js';
 import { enviarPorEmailJs } from '../acceso/acceso.js';
 import type {
   ClienteIngesta,
@@ -2489,6 +2495,12 @@ export function construirRutas(
     return persona;
   };
 
+  /** Si la persona es quien esta en sesion (mismo correo, sin mayusculas). */
+  const esLaSesion = (persona: Person, sesion: Sesion | undefined): boolean =>
+    !!sesion &&
+    !!persona.email &&
+    persona.email.trim().toLowerCase() === sesion.correo.trim().toLowerCase();
+
   /**
    * Le avisa a alguien que un pendiente quedo a su nombre (o que lo agregaron
    * para darle seguimiento): push y correo con su liga personal. Devuelve el
@@ -2655,6 +2667,10 @@ export function construirRutas(
           : `Asignado a ${persona.name}`
       })
     });
+    if (esLaSesion(persona, sesion)) {
+      // Quien se lo pone a su nombre ya lo sabe: no se avisa.
+      return 'Asignado sin aviso: eres tú.';
+    }
     return avisarConLiga(
       persona,
       id,
@@ -2693,6 +2709,9 @@ export function construirRutas(
       return `${persona.name} ya da seguimiento a este pendiente.`;
     }
     await datos.anotaciones.escribir({ ...todas, [id]: nueva });
+    if (esLaSesion(persona, sesion)) {
+      return 'Agregado sin aviso: eres tú.';
+    }
     return avisarConLiga(
       persona,
       id,
@@ -2913,6 +2932,231 @@ export function construirRutas(
     }
     cache.olvidar();
     return { ok: true, anotacion: datos.anotaciones.leer()[id], aviso };
+  });
+
+  /**
+   * El cuerpo del unico correo de responsables: al destinatario le dice si
+   * el pendiente quedo a su nombre o si da seguimiento, y trae la liga
+   * personal de cada quien (la del destinatario como boton; las de los que
+   * van con copia, en una lista con su nombre). Cada liga abre solo este
+   * pendiente y vence al final del dia, como la de asignacion de siempre.
+   */
+  const correoResponsables = async (
+    para: Person,
+    cc: Person[],
+    principal: Person | undefined,
+    id: string,
+    tarea: Partial<TaskItem>,
+    sesion: Sesion | undefined,
+    comentarios: TaskComment[]
+  ): Promise<string> => {
+    const t = tarea;
+    const esResponsable = !!principal && mismaPersona(principal, para);
+    const de = sesion ? ` (${escapar(sesion.correo)})` : '';
+    const encabezado = esResponsable
+      ? `<p>Te asignaron un pendiente en <strong>DS Monitor</strong>${de}:</p>`
+      : `<p>Te agregaron para dar seguimiento a un pendiente en <strong>DS Monitor</strong>${de}:</p>`;
+    // Una liga a la vez: cada una lee y reescribe el mismo archivo.
+    const copias: { persona: Person; liga: string }[] = [];
+    for (const persona of cc) {
+      copias.push({ persona, liga: await ligaDe(persona, id) });
+    }
+    return (
+      encabezado +
+      `<p style="font-size:20px"><strong>${escapar(t.title ?? id)}</strong></p>` +
+      (t.description ? `<p>${escapar(t.description)}</p>` : '') +
+      `<p>Prioridad: ${escapar(t.priority ?? 'media')}` +
+      (t.dueDate
+        ? ` · Vence: ${new Date(t.dueDate).toLocaleDateString('es-MX', { dateStyle: 'long', timeZone: 'America/Mexico_City' })}`
+        : '') +
+      (t.project ? ` · Proyecto: ${escapar(t.project)}` : '') +
+      (principal ? ` · Responsable: ${escapar(principal.name)}` : '') +
+      `</p>` +
+      (comentarios.length > 0
+        ? `<p>Comentarios:</p><ul>${comentarios.map((c) => `<li>${escapar(c.text)}</li>`).join('')}</ul>`
+        : '') +
+      `<p><a href="${await ligaDe(para, id)}" style="display:inline-block;padding:10px 16px;background:#04202B;color:#fff;text-decoration:none;border-radius:6px">Ver el pendiente, cambiar su estado o comentar</a></p>` +
+      (copias.length > 0
+        ? `<p>Con copia a quienes dan seguimiento; cada quien con su liga:</p><ul>${copias
+            .map(
+              ({ persona, liga }) =>
+                `<li>${escapar(persona.name)} · <a href="${liga}">tu liga</a></li>`
+            )
+            .join('')}</ul>`
+        : '') +
+      `<p style="color:#666;font-size:12px">Cada liga es personal y solo abre este pendiente; no hace falta usuario ni código. Sirve hasta el final del día de hoy: no hay que terminar la tarea hoy, pero sí conviene dejar una línea de en qué va. Después llega otra liga con la solicitud de estatus.</p>`
+    );
+  };
+
+  /**
+   * Responsable principal y quienes dan seguimiento, de una vez y con un
+   * solo correo: el principal de destinatario y los demas con copia. Si
+   * quien asigna se lo pone a si mismo y no hay nadie mas, no se avisa; si
+   * no cambio nada, ni se anota. Lo usan Mio, el selector y "Varios..." del
+   * portal; /pendientes/anotar sigue valiendo para /mio y el barrido.
+   */
+  router.post('/pendientes/responsables', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const cuerpo = (contexto.cuerpo ?? {}) as {
+      id?: string;
+      /** Id o correo del equipo; vacio = sin responsable. */
+      principal?: string;
+      /** Ids o correos del equipo; reemplazan a los que daban seguimiento. */
+      seguidores?: string[];
+      tarea?: Partial<TaskItem>;
+    };
+    const id = (cuerpo.id ?? '').trim();
+    if (!id) {
+      throw new ErrorPuente('Falta el identificador del pendiente.', 400);
+    }
+    const sesion = acceso.sesionDe(tokenDe(contexto));
+    const quienEscribe = sesion?.correo ?? 'administración';
+    const tarea = cuerpo.tarea ?? {};
+    const principal =
+      typeof cuerpo.principal === 'string' && cuerpo.principal.trim()
+        ? await personaDelEquipo(cuerpo.principal)
+        : undefined;
+    const pedidos = Array.isArray(cuerpo.seguidores)
+      ? cuerpo.seguidores.filter(
+          (q): q is string => typeof q === 'string' && !!q.trim()
+        )
+      : [];
+    const seguidores = depurarSeguidores(
+      principal,
+      await Promise.all(pedidos.map((q) => personaDelEquipo(q)))
+    );
+    const todas = datos.anotaciones.leer();
+    const nota0: Anotacion = todas[id] ?? {
+      comentarios: [],
+      actualizadoEn: ''
+    };
+    const previo = {
+      principal: nota0.asignado ?? tarea.assignee,
+      seguidores: nota0.seguidores ?? tarea.followers ?? []
+    };
+    const decision = decidirAviso({
+      principal,
+      seguidores,
+      sesionCorreo: sesion?.correo,
+      previo
+    });
+    // La tarea que se devuelve: la que mando el portal con las anotaciones
+    // encima, para que la tarjeta cambie al instante.
+    const tareaConNotas = () =>
+      anotar([{ ...tarea, id } as TaskItem], datos.anotaciones.leer())[0];
+    if (decision.motivo === 'sin-cambios') {
+      return {
+        ok: true,
+        tarea: tareaConNotas(),
+        aviso: textoAviso(decision, 'enviado')
+      };
+    }
+    const ahora = new Date().toISOString();
+    // Alguien decidio: la sugerencia de la IA ya no aplica.
+    const nota = conEvento(
+      {
+        ...(principal ? sinSugerencia(nota0, ahora) : nota0),
+        asignado: principal,
+        seguidores: seguidores.length > 0 ? seguidores : undefined,
+        actualizadoEn: ahora
+      },
+      {
+        at: ahora,
+        by: quienEscribe,
+        kind: 'asignacion',
+        text: textoEventoResponsables(principal, seguidores)
+      }
+    );
+    await datos.anotaciones.escribir({ ...todas, [id]: nota });
+    // Lo de este remitente se aprende (o se olvida si se lo quitaron).
+    const original = Object.values(datos.registroCorreo.leer())
+      .flat()
+      .find((t) => t.id === id);
+    if (original && (principal || previo.principal)) {
+      await datos.aprendido.escribir(
+        aprender(
+          datos.aprendido.leer(),
+          original,
+          {},
+          new Date(),
+          principal ?? null
+        )
+      );
+    }
+    cache.olvidar();
+    const titulo = tarea.title ?? id;
+    if (!decision.enviar || !decision.para?.email) {
+      console.log(
+        `[puente] responsables de "${titulo}": ${textoEventoResponsables(principal, seguidores)} · no se avisó por correo (${decision.motivo ?? 'sin destinatario'}${decision.motivo === 'eres-tu' ? ': eres tú' : ''}).`
+      );
+      return {
+        ok: true,
+        tarea: tareaConNotas(),
+        aviso: textoAviso(decision, 'enviado')
+      };
+    }
+    const para = decision.para as Person & { email: string };
+    for (const persona of [para, ...decision.cc]) {
+      if (!persona.email) {
+        continue;
+      }
+      const responsable = !!principal && mismaPersona(principal, persona);
+      void push.avisar(
+        {
+          titulo: `${responsable ? 'Te asignaron' : 'Te agregaron para dar seguimiento'}: ${titulo}`,
+          cuerpo: [
+            tarea.priority ? `Prioridad ${tarea.priority}` : undefined,
+            sesion ? `de ${sesion.correo}` : undefined
+          ]
+            .filter((x) => x)
+            .join(' · '),
+          url: '/pendientes',
+          etiqueta: `asignado:${id}`
+        },
+        persona.email
+      );
+    }
+    const copiaLog =
+      decision.cc.length > 0
+        ? ` con copia a ${decision.cc.map((p) => p.email).join(', ')}`
+        : '';
+    const config = cfg();
+    if (!config.acceso) {
+      console.log(
+        `[puente] responsables de "${titulo}": sin EmailJS; se habría avisado a ${para.email}${copiaLog}.`
+      );
+      return {
+        ok: true,
+        tarea: tareaConNotas(),
+        aviso: textoAviso(decision, 'sin-acceso')
+      };
+    }
+    let aviso: string;
+    try {
+      const html = await correoResponsables(
+        para,
+        decision.cc,
+        principal,
+        id,
+        tarea,
+        sesion,
+        nota0.comentarios
+      );
+      await enviarPorEmailJs(config.acceso, para.email, '', false, {
+        titulo: `Pendiente asignado: ${titulo}`,
+        html,
+        cc: decision.cc.map((p) => p.email).filter((c): c is string => !!c)
+      });
+      console.log(
+        `[puente] responsables de "${titulo}": se avisó a ${para.email}${copiaLog}.`
+      );
+      aviso = textoAviso(decision, 'enviado');
+    } catch (error) {
+      aviso = textoAviso(decision, {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+    return { ok: true, tarea: tareaConNotas(), aviso };
   });
 
   // Alguien abrio el pendiente en el portal: la novedad por correo ya se vio.

@@ -95,6 +95,12 @@ export class ShellComponent {
     if (empresas.error()) {
       empresas.cargar();
     }
+    // Con un token guardado, el correo de quien entró se pide al puente: el
+    // portal lo usa para "Míos" y para el botón "Mío" de las tarjetas, y al
+    // recargar solo se tenía el token.
+    if (this.sesion.token() && this.sesion.disponible) {
+      this.sesion.estado().subscribe({ error: () => undefined });
+    }
   }
 
   /** Menu lateral en pantallas chicas. En escritorio siempre esta visible. */

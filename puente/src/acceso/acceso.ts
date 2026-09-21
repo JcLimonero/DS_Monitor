@@ -153,23 +153,45 @@ function iguales(a: string, b: string): boolean {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
+/** Lo que va a la plantilla de EmailJS. */
+export interface ParametrosEmailJs {
+  title: string;
+  subject: string;
+  html_content: string;
+  to_email: string;
+  email: string;
+  reply_to: string;
+  /** Con copia: varias direcciones separadas por coma; vacio si no hay. */
+  cc_email: string;
+  name: string;
+  from_name: string;
+  origen: string;
+  area_interes: string;
+  comentarios: string;
+  message: string;
+  code: string;
+}
+
+/** Otro correo por la misma via: titulo y cuerpo propios, y con copia si hay. */
+export interface CorreoPropio {
+  titulo: string;
+  html: string;
+  /** Quienes van con copia (cc_email de la plantilla). */
+  cc?: string[];
+}
+
 /**
- * El correo con el codigo, por la API de EmailJS.
- *
- * Desde un servidor EmailJS exige la llave privada ademas de la publica. Los
- * parametros de la plantilla van con varios nombres a la vez (title, subject,
- * message, code, to_email, email...) para que la plantilla que ya existe los
- * tome sin tener que editarla.
+ * Arma los parametros de la plantilla. Van con varios nombres a la vez
+ * (title, subject, message, code, to_email, email...) para que la plantilla
+ * que ya existe los tome sin tener que editarla. Las copias van en
+ * `cc_email` separadas por coma, sin repetir al destinatario.
  */
-export async function enviarPorEmailJs(
-  config: ConfiguracionAcceso,
+export function parametrosEmailJs(
   correo: string,
   codigo: string,
-  /** True para el correo de prueba de Ajustes: no lleva codigo. */
   prueba = false,
-  /** Otro correo por la misma via: titulo y cuerpo propios. */
-  propio?: { titulo: string; html: string }
-): Promise<void> {
+  propio?: CorreoPropio
+): ParametrosEmailJs {
   const mensaje = prueba
     ? 'Correo de prueba: el envío de códigos de acceso a DS Monitor funciona. Los códigos reales son seis dígitos al azar y llegan al pedir acceso.'
     : `Tu código de acceso a DS Monitor es ${codigo}. Vence en ${CODIGO_MINUTOS} minutos.`;
@@ -180,6 +202,53 @@ export async function enviarPorEmailJs(
       : `<p>Tu código de acceso a <strong>DS Monitor</strong> es</p>` +
         `<p style="font-size:28px;letter-spacing:6px;font-family:monospace"><strong>${codigo}</strong></p>` +
         `<p>Vence en ${CODIGO_MINUTOS} minutos. Si no pediste entrar, ignora este correo.</p>`;
+  const principal = correo.trim().toLowerCase();
+  const copias = [
+    ...new Set(
+      (propio?.cc ?? [])
+        .map((c) => c.trim())
+        .filter((c) => c.includes('@') && c.toLowerCase() !== principal)
+    )
+  ];
+  return {
+    // La plantilla "General_Contact Us" de Total One: {{title}} es el
+    // asunto, {{{html_content}}} el cuerpo, {{to_email}} el destinatario,
+    // {{cc_email}} las copias, {{name}} el remitente y {{email}} el
+    // Responder a. Los demas nombres van por si la plantilla cambia a la de
+    // las landings.
+    // El asunto se queda en "Access Monitor" para todos los correos, como
+    // hasta ahora; el titulo propio no llega a la plantilla.
+    title: 'Access Monitor',
+    subject: 'Access Monitor',
+    html_content: cuerpo,
+    to_email: correo,
+    email: correo,
+    reply_to: correo,
+    cc_email: copias.join(','),
+    name: 'DS Monitor',
+    from_name: 'DS Monitor',
+    origen: 'Access Monitor',
+    area_interes: 'Access Monitor',
+    comentarios: propio ? propio.html.replace(/<[^>]+>/g, ' ') : mensaje,
+    message: propio ? propio.html.replace(/<[^>]+>/g, ' ') : mensaje,
+    code: codigo
+  };
+}
+
+/**
+ * El correo con el codigo, por la API de EmailJS.
+ *
+ * Desde un servidor EmailJS exige la llave privada ademas de la publica.
+ */
+export async function enviarPorEmailJs(
+  config: ConfiguracionAcceso,
+  correo: string,
+  codigo: string,
+  /** True para el correo de prueba de Ajustes: no lleva codigo. */
+  prueba = false,
+  /** Otro correo por la misma via: titulo y cuerpo propios. */
+  propio?: CorreoPropio
+): Promise<void> {
   const respuesta = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -188,26 +257,7 @@ export async function enviarPorEmailJs(
       template_id: config.templateId,
       user_id: config.publicKey,
       accessToken: config.privateKey,
-      template_params: {
-        // La plantilla "General_Contact Us" de Total One: {{title}} es el
-        // asunto, {{{html_content}}} el cuerpo, {{to_email}} el destinatario,
-        // {{name}} el remitente y {{email}} el Responder a. Los demas nombres
-        // van por si la plantilla cambia a la de las landings.
-        title: 'Access Monitor',
-        subject: 'Access Monitor',
-        html_content: cuerpo,
-        to_email: correo,
-        email: correo,
-        reply_to: correo,
-        cc_email: '',
-        name: 'DS Monitor',
-        from_name: 'DS Monitor',
-        origen: 'Access Monitor',
-        area_interes: 'Access Monitor',
-        comentarios: propio ? propio.html.replace(/<[^>]+>/g, ' ') : mensaje,
-        message: propio ? propio.html.replace(/<[^>]+>/g, ' ') : mensaje,
-        code: codigo
-      }
+      template_params: parametrosEmailJs(correo, codigo, prueba, propio)
     })
   });
   if (!respuesta.ok) {
