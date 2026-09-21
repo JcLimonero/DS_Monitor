@@ -138,6 +138,7 @@ export type CambiosPendiente = Partial<
     TaskItem,
     | 'title'
     | 'description'
+    | 'imagenes'
     | 'priority'
     | 'dueDate'
     | 'dueHasTime'

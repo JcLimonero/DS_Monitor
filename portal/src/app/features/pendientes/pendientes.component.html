@@ -82,7 +82,7 @@
           : "Nuevo pendiente"
       }}
     </h2>
-    <!-- Titulo a todo lo ancho; fecha, hora y empresa en la segunda fila. -->
+    <!-- Título, detalle con fotos, responsables, fecha/hora y empresa. -->
     <form class="mt-3 space-y-3" (ngSubmit)="addTask()">
       <label class="block">
         <span class="mb-1 block text-xs font-medium text-ink-muted"
@@ -97,6 +97,129 @@
           (ngModelChange)="newTitle.set($event)"
           name="titulo" />
       </label>
+      <pt-detalle-editor
+        name="detalle"
+        [texto]="newDescription()"
+        (textoChange)="newDescription.set($event)"
+        [imagenes]="newImagenes()"
+        (imagenesChange)="newImagenes.set($event)" />
+      @if (ia.disponible && ia.equipo().length > 0) {
+        <div>
+          <span class="mb-1 block text-xs font-medium text-ink-muted"
+            >Responsable</span
+          >
+          <span class="inline-flex flex-wrap items-center gap-1">
+            <pt-icon name="equipo" class="h-3.5 w-3.5 text-ink-muted" />
+            @if (yo()) {
+              <button
+                type="button"
+                class="btn h-10 gap-1 px-2 text-xs lg:h-8"
+                [class.btn-activo]="esMioAlta()"
+                [disabled]="esMioAlta()"
+                title="Asignármelo"
+                aria-label="Asignármelo"
+                (click)="asignarmeloAlta()">
+                <pt-icon name="usuario" class="h-3.5 w-3.5" />
+                Mío
+              </button>
+            }
+            <select
+              class="field h-10 max-w-48 py-1 text-xs lg:h-8"
+              [class.text-ink-subtle]="!newPrincipal()"
+              [ngModel]="newPrincipal()"
+              (ngModelChange)="cambiarPrincipalAlta($event)"
+              name="resp-alta">
+              <option value="">Sin asignar</option>
+              @for (p of ia.equipo(); track p.id) {
+                <option [value]="p.email ?? p.id">{{ p.name }}</option>
+              }
+            </select>
+            @if (vista() === "negocio") {
+              <button
+                type="button"
+                class="btn h-10 gap-1 px-2 text-xs lg:h-8"
+                [class.btn-activo]="
+                  !!variosAlta() || newSeguidores().length > 0
+                "
+                title="Elegir responsable principal y quiénes dan seguimiento; un solo correo con copia"
+                aria-label="Varios responsables"
+                (click)="abrirVariosAlta()">
+                <pt-icon name="equipo" class="h-3.5 w-3.5" />
+                Varios…
+              </button>
+            }
+          </span>
+          @if (newSeguidores().length > 0 && !variosAlta()) {
+            <p class="mt-1 text-xs text-ink-subtle">
+              También: {{ nombresSeguidoresAlta() }}
+            </p>
+          }
+        </div>
+        @if (variosAlta(); as v) {
+          <div class="space-y-3 rounded-lg bg-surface-muted p-3">
+            <label>
+              <span class="mb-1 block text-xs font-medium text-ink-muted"
+                >Responsable principal</span
+              >
+              <select
+                class="field"
+                [ngModel]="v.principal"
+                (ngModelChange)="patchVariosAlta({ principal: $event })"
+                name="varios-principal-alta">
+                <option value="">Sin asignar</option>
+                @for (p of ia.equipo(); track p.id) {
+                  <option [value]="p.email ?? p.id">{{ p.name }}</option>
+                }
+              </select>
+            </label>
+            <div>
+              <span class="mb-1 block text-xs font-medium text-ink-muted"
+                >También dan seguimiento</span
+              >
+              <div class="flex flex-wrap gap-1.5">
+                @for (p of ia.equipo(); track p.id) {
+                  @if ((p.email ?? p.id) !== v.principal) {
+                    <button
+                      type="button"
+                      class="inline-flex min-h-10 items-center rounded-full border px-3 font-medium transition lg:min-h-8"
+                      [class]="
+                        sigueAlta(v, p)
+                          ? 'border-brand bg-brand/10 text-ink'
+                          : 'border-line bg-surface text-ink-muted hover:text-ink'
+                      "
+                      [attr.aria-pressed]="sigueAlta(v, p)"
+                      (click)="toggleSeguidorAlta(p)">
+                      {{ sigueAlta(v, p) ? "✓ " : "" }}{{ p.name }}
+                    </button>
+                  }
+                }
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="btn btn-primary"
+                (click)="guardarVariosAlta()">
+                Listo
+              </button>
+              <button
+                type="button"
+                class="btn"
+                (click)="variosAlta.set(undefined)">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        }
+      } @else if (ia.disponible) {
+        <a
+          routerLink="/integraciones"
+          [queryParams]="{ tab: 'equipo' }"
+          class="inline-flex items-center gap-1 text-sm text-brand hover:underline">
+          <pt-icon name="equipo" class="h-3.5 w-3.5" />
+          Captura tu equipo para asignar desde el alta
+        </a>
+      }
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
         @if (vista() === "negocio") {
           <label>
@@ -164,7 +287,7 @@
         <button type="submit" class="btn btn-primary" [disabled]="!canAdd()">
           Guardar
         </button>
-        <button type="button" class="btn" (click)="mostrarAlta.set(false)">
+        <button type="button" class="btn" (click)="cancelarAlta()">
           Cancelar
         </button>
       </div>

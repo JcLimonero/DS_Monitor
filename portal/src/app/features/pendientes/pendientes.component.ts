@@ -15,6 +15,7 @@ import {
   SenderKind,
   TASK_PRIORITY_LABEL,
   TASK_STATUS_LABEL,
+  Person,
   TaskItem,
   TaskOrigin,
   TaskPriority,
@@ -44,6 +45,7 @@ import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 import { TaskCardComponent } from '../../ui/task-card.component';
+import { DetalleEditorComponent } from '../../ui/detalle-editor.component';
 
 /** Quien filtra la lista: yo, alguien del equipo, o todos. */
 type OwnerFilter = 'todos' | 'mios' | string;
@@ -67,7 +69,8 @@ const ORIGIN_LABEL: Record<TaskOrigin, string> = {
     FormsModule,
     IconComponent,
     PageHeaderComponent,
-    TaskCardComponent
+    TaskCardComponent,
+    DetalleEditorComponent
   ],
   templateUrl: './pendientes.component.html',
   // En escritorio la pagina ocupa el alto disponible (cabecera del shell de
@@ -214,13 +217,22 @@ export class PendientesComponent {
   readonly avanceAutoasignacion = signal<number | undefined>(undefined);
   private sondeo: ReturnType<typeof setInterval> | undefined;
 
-  /** Alta rapida de un pendiente propio. */
+  /** Alta de un pendiente propio: título, detalle, responsables, fecha. */
   readonly newTitle = signal('');
+  readonly newDescription = signal('');
+  readonly newImagenes = signal<string[]>([]);
   readonly newPriority = signal<TaskPriority>('media');
   readonly newDueDate = signal('');
   /** "HH:mm" o vacío: sin hora el pendiente es "para ese día". */
   readonly newDueTime = signal('');
   readonly newCompany = signal('');
+  /** Clave del equipo (correo o id); vacío = sin responsable. */
+  readonly newPrincipal = signal('');
+  readonly newSeguidores = signal<string[]>([]);
+  /** Panel "Varios…" del alta: principal y seguimiento por elegir. */
+  readonly variosAlta = signal<
+    { principal: string; seguidores: string[] } | undefined
+  >(undefined);
 
   /** El equipo capturado mas quien aparezca como responsable en la lista. */
   readonly people = computed(() => {
@@ -237,6 +249,118 @@ export class PendientesComponent {
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
   });
+
+  /** Quien entró, si está en el equipo (para el botón Mío del alta). */
+  readonly yo = computed(() => {
+    const correo = this.sesion.correo()?.trim().toLowerCase();
+    return correo
+      ? this.ia.equipo().find((p) => p.email?.toLowerCase() === correo)
+      : undefined;
+  });
+
+  claveDe(p: Person): string {
+    return p.email ?? p.id;
+  }
+
+  esMioAlta(): boolean {
+    const yo = this.yo();
+    return !!yo && this.newPrincipal() === this.claveDe(yo);
+  }
+
+  asignarmeloAlta(): void {
+    const yo = this.yo();
+    if (!yo || this.esMioAlta()) {
+      return;
+    }
+    const k = this.claveDe(yo);
+    this.newPrincipal.set(k);
+    this.newSeguidores.update((s) => s.filter((x) => x !== k));
+  }
+
+  cambiarPrincipalAlta(quien: string): void {
+    this.newPrincipal.set(quien);
+    if (quien) {
+      this.newSeguidores.update((s) => s.filter((x) => x !== quien));
+    }
+  }
+
+  abrirVariosAlta(): void {
+    this.variosAlta.set({
+      principal: this.newPrincipal(),
+      seguidores: this.newSeguidores()
+    });
+  }
+
+  patchVariosAlta(cambio: { principal: string }): void {
+    this.variosAlta.update((v) =>
+      v
+        ? {
+            principal: cambio.principal,
+            seguidores: v.seguidores.filter((k) => k !== cambio.principal)
+          }
+        : v
+    );
+  }
+
+  sigueAlta(v: { seguidores: string[] }, p: Person): boolean {
+    return v.seguidores.includes(this.claveDe(p));
+  }
+
+  toggleSeguidorAlta(p: Person): void {
+    const k = this.claveDe(p);
+    this.variosAlta.update((v) =>
+      v
+        ? {
+            ...v,
+            seguidores: v.seguidores.includes(k)
+              ? v.seguidores.filter((x) => x !== k)
+              : [...v.seguidores, k]
+          }
+        : v
+    );
+  }
+
+  guardarVariosAlta(): void {
+    const v = this.variosAlta();
+    if (!v) {
+      return;
+    }
+    this.newPrincipal.set(v.principal);
+    this.newSeguidores.set(v.seguidores.filter((k) => k !== v.principal));
+    this.variosAlta.set(undefined);
+  }
+
+  cancelarAlta(): void {
+    this.mostrarAlta.set(false);
+    this.resetAlta();
+  }
+
+  private personaPorClave(clave: string): Person | undefined {
+    return this.ia.equipo().find((p) => this.claveDe(p) === clave);
+  }
+
+  personaNombre(clave: string): string {
+    return this.personaPorClave(clave)?.name ?? clave;
+  }
+
+  nombresSeguidoresAlta(): string {
+    return this.newSeguidores()
+      .map((k) => this.personaNombre(k))
+      .join(', ');
+  }
+
+  private resetAlta(): void {
+    this.newTitle.set('');
+    this.newDescription.set('');
+    this.newImagenes.set([]);
+    this.newDueDate.set('');
+    this.newDueTime.set('');
+    this.newCompany.set('');
+    this.newPriority.set('media');
+    this.newPrincipal.set('');
+    this.newSeguidores.set([]);
+    this.variosAlta.set(undefined);
+  }
 
   /** Lo que pasa los filtros, antes del recorte de los accesos. */
   private readonly filtradoSinFoco = computed<TaskItem[]>(() => {
@@ -379,8 +503,23 @@ export class PendientesComponent {
     const due = this.newDueDate();
     const hora = due ? this.newDueTime() : '';
     const personal = this.vista() === 'personales';
-    this.local.add({
+    if (this.variosAlta()) {
+      this.guardarVariosAlta();
+    }
+    const principalClave = this.newPrincipal();
+    const seguidoresClaves = this.newSeguidores().filter(
+      (k) => k && k !== principalClave
+    );
+    const principal = principalClave
+      ? this.personaPorClave(principalClave)
+      : undefined;
+    const seguidores = seguidoresClaves
+      .map((k) => this.personaPorClave(k))
+      .filter((p): p is Person => !!p);
+    const task = this.local.add({
       title: this.newTitle(),
+      description: this.newDescription(),
+      imagenes: this.newImagenes(),
       // Lo personal siempre es alta, y urgente si tiene fecha (el puente lo
       // vuelve a aplicar al guardar, por si viene de otro lado).
       priority: personal ? (due ? 'urgente' : 'alta') : this.newPriority(),
@@ -390,13 +529,29 @@ export class PendientesComponent {
         ? new Date(`${due}T${hora || '12:00'}:00`).toISOString()
         : undefined,
       dueHasTime: !!hora,
-      company: this.vista() === 'personales' ? undefined : this.newCompany(),
-      personal: this.vista() === 'personales'
+      company: personal ? undefined : this.newCompany(),
+      personal,
+      assignee: principal,
+      followers: seguidores.length ? seguidores : undefined
     });
+    const hayResponsables = !!principalClave || seguidoresClaves.length > 0;
     this.mostrarAlta.set(false);
-    this.newTitle.set('');
-    this.newDueDate.set('');
-    this.newDueTime.set('');
+    this.resetAlta();
+    if (this.ia.disponible && hayResponsables) {
+      this.ia
+        .responsables(task.id, principalClave, seguidoresClaves, task)
+        .subscribe({
+          next: () => {
+            this.local.invalidar();
+            this.store.refreshTasks();
+          },
+          error: () => {
+            this.local.invalidar();
+            this.store.refreshTasks();
+          }
+        });
+      return;
+    }
     this.store.refreshTasks();
   }
 

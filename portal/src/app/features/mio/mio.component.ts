@@ -17,6 +17,7 @@ import {
   TaskStatus
 } from '../../core/models';
 import { BrandLogoComponent } from '../../ui/brand-logo.component';
+import { FotosPendienteComponent } from '../../ui/fotos-pendiente.component';
 import { IconComponent } from '../../ui/icon.component';
 import { DayPipe, RelativePipe, TimePipe } from '../../ui/portal.pipes';
 import { sinPrefijosDeCorreo } from '../../core/util/text.util';
@@ -39,6 +40,7 @@ const LIGA_VENCIDA =
     DayPipe,
     TimePipe,
     FormsModule,
+    FotosPendienteComponent,
     IconComponent,
     RelativePipe
   ],
