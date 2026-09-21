@@ -126,7 +126,10 @@ opcional, el estado, los últimos comentarios y la liga personal de cada quien;
 deja "Solicitó actualización a X (cc Y)" en la trazabilidad y marca el pendiente
 con `updateRequested` (chip "Actualización pedida hace N"). Si el único
 involucrado es uno mismo contesta 400 ("Es tuyo; no hay a quién pedirle") y no
-se repite antes de dos horas (409 "Ya se pidió hace N min"). Cuando alguien del
+se repite antes de dos horas (409 "Ya se pidió hace N min"); si EmailJS falla, la
+marca se quita (queda el motivo en la trazabilidad) y se puede reintentar de
+inmediato. `GET /ia/estado` trae `correosDelDueno` para que el portal no ofrezca
+pedir actualización de lo que es del dueño o de sus buzones. Cuando alguien del
 equipo (no el dueño) contesta desde su liga —`/mio/:token/anotar`, comentario o
 estado—, el pendiente queda con una **novedad** `unread` de tipo `respuesta`
 ("Respondió a tu solicitud: Ana: …" si había solicitud, que se borra; si no,

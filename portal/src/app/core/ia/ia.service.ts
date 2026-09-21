@@ -42,6 +42,8 @@ export class IaService {
   readonly equipo = signal<Person[]>([]);
   /** Buzones donde se pueden crear juntas. */
   readonly calendarios = signal<{ id: string; usuario: string }[]>([]);
+  /** Correos del dueño del monitor (acceso y buzones), en minúsculas. */
+  readonly correosDelDueno = signal<string[]>([]);
   readonly fireflies = signal(false);
 
   get disponible(): boolean {
@@ -56,6 +58,9 @@ export class IaService {
       tap((e) => {
         this.activa.set(e.activa);
         this.calendarios.set(e.calendarios ?? []);
+        this.correosDelDueno.set(
+          (e.correosDelDueno ?? []).map((c) => c.trim().toLowerCase())
+        );
         this.fireflies.set(!!e.fireflies);
       })
     );

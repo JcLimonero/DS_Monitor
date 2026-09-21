@@ -33,6 +33,11 @@ export class AppComponent {
   private readonly store = inject(PortalStore);
 
   constructor() {
+    // La liga del equipo (/mio/<token>) no tiene sesión: cargar el tablero
+    // ahí solo produce 401 en cadena. Esa página pide lo suyo por su cuenta.
+    if (esLigaDelEquipo()) {
+      return;
+    }
     this.store.refreshAll();
 
     if (this.config.autoRefreshSeconds > 0) {
@@ -41,4 +46,11 @@ export class AppComponent {
         .subscribe(() => this.store.refreshAll());
     }
   }
+}
+
+/** El navegador abrió directo la liga personal de alguien del equipo. */
+function esLigaDelEquipo(): boolean {
+  return (
+    typeof location !== 'undefined' && location.pathname.startsWith('/mio/')
+  );
 }

@@ -3375,7 +3375,23 @@ export function construirRutas(
       );
       aviso = `Se pidió a ${para.email}${copiaTexto}.`;
     } catch (error) {
-      aviso = `Quedó registrada, pero no se pudo mandar el correo: ${error instanceof Error ? error.message : String(error)}`;
+      // Sin correo no se pidio nada: se quita la marca (asi el chip no
+      // miente y se puede reintentar de inmediato) y queda el motivo.
+      const detalle = error instanceof Error ? error.message : String(error);
+      const actuales = datos.anotaciones.leer();
+      const { solicitudActualizacion: _fallida, ...resto } =
+        actuales[id] ?? nota0;
+      await datos.anotaciones.escribir({
+        ...actuales,
+        [id]: conEvento(resto, {
+          at: new Date().toISOString(),
+          by: quienPide,
+          kind: 'solicitud',
+          text: `No se pudo mandar la solicitud de actualización: ${detalle}`
+        })
+      });
+      cache.olvidar();
+      aviso = `No se pudo mandar el correo: ${detalle}`;
     }
     return { ok: true, tarea: tareaConNotas(), aviso };
   });
@@ -3564,6 +3580,7 @@ export function construirRutas(
     ligaDe,
     push,
     iaPara,
+    correosDelDueno: () => [...correosDelDueno()],
     calendarios: () =>
       buzones_(cfg(), almacenCorreo)
         .filter((c) => metodoDe(c, cfg()) === 'graph')

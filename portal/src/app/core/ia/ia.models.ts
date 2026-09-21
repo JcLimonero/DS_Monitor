@@ -90,6 +90,8 @@ export interface EstadoIa {
   consumo: { llamadas: number; entrada: number; salida: number };
   /** Buzones donde se pueden crear juntas (Microsoft). */
   calendarios: { id: string; usuario: string }[];
+  /** Correos del dueño del monitor (acceso y buzones), en minúsculas. */
+  correosDelDueno?: string[];
   fireflies: boolean;
   telegram: boolean;
 }

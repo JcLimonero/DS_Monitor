@@ -150,6 +150,8 @@ export interface DependenciasIa {
   ligaDe: (persona: Person) => Promise<string>;
   /** Buzones donde se pueden crear juntas (conectados con Microsoft). */
   calendarios: () => { id: string; usuario: string }[];
+  /** Los correos del dueño del monitor (acceso y buzones), en minusculas. */
+  correosDelDueno: () => string[];
   /** Crea una junta en el calendario del buzon dado (Microsoft). */
   agendar: (
     cuentaId: string,
@@ -239,6 +241,9 @@ export function registrarRutasIa(
       consumo,
       // Donde se pueden crear juntas: buzones conectados con Microsoft.
       calendarios: d.calendarios(),
+      // Para que la tarjeta sepa que un pendiente es "propio" aunque el
+      // responsable sea uno de los buzones y no el correo de la sesion.
+      correosDelDueno: d.correosDelDueno(),
       fireflies: !!d.cfg().fireflies,
       telegram: !!d.cfg().telegram,
       usos: { ...USOS_POR_OMISION, ...d.datos.iaUsos.leer() }

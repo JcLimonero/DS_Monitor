@@ -5,6 +5,7 @@ import {
   inject,
   input,
   signal,
+  viewChild,
   DestroyRef
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -678,6 +679,7 @@ const ESPERA_BORRAR_MS = 5000;
                         >Nota para el responsable (opcional)</span
                       >
                       <input
+                        #campoNota
                         class="field"
                         type="text"
                         placeholder="Qué necesitas saber…"
@@ -1105,6 +1107,8 @@ export class TaskCardComponent {
   >(undefined);
   /** El campo "Nota para el responsable" abierto para pedir actualización. */
   readonly pidiendo = signal<{ nota: string } | undefined>(undefined);
+  private readonly campoNota =
+    viewChild<ElementRef<HTMLInputElement>>('campoNota');
   /**
    * La respuesta del equipo que se acaba de ver al abrir la tarjeta: se
    * deja a la vista en el detalle aunque el chip ya se haya quitado.
@@ -1112,12 +1116,15 @@ export class TaskCardComponent {
   readonly respuestaVista = signal<TaskUnread | undefined>(undefined);
   /**
    * Se puede pedir actualización cuando el pendiente es de alguien más:
-   * tiene responsable o seguidores y ninguno es quien entró. Lo hecho ya
-   * no se pregunta.
+   * tiene responsable o seguidores y ninguno es quien entró ni uno de los
+   * correos del dueño del monitor (sus buzones). Sin sesión (solo token de
+   * administración) no se sabe quién pide: no se ofrece. Lo hecho ya no se
+   * pregunta.
    */
   readonly puedePedirActualizacion = computed(() => {
     const t = this.task();
-    if (!this.ia.disponible || t.personal || this.done()) {
+    const correo = this.sesion.correo()?.trim().toLowerCase();
+    if (!this.ia.disponible || !correo || t.personal || this.done()) {
       return false;
     }
     const involucrados = [t.assignee, ...(t.followers ?? [])].filter(
@@ -1126,9 +1133,9 @@ export class TaskCardComponent {
     if (involucrados.length === 0) {
       return false;
     }
-    const correo = this.sesion.correo()?.trim().toLowerCase();
-    return (
-      !correo || !involucrados.some((p) => p.email?.toLowerCase() === correo)
+    const propios = new Set([correo, ...this.ia.correosDelDueno()]);
+    return !involucrados.some(
+      (p) => !!p.email && propios.has(p.email.trim().toLowerCase())
     );
   });
   readonly historial = computed(() =>
@@ -1497,13 +1504,9 @@ export class TaskCardComponent {
       return;
     }
     this.pidiendo.set({ nota: '' });
-    setTimeout(() => {
-      document
-        .querySelector<HTMLInputElement>(
-          `input[name="nota-act-${CSS.escape(this.task().id)}"]`
-        )
-        ?.focus();
-    });
+    // El campo se pinta en el siguiente ciclo; con ngModel el `name` no
+    // llega al DOM, asi que se busca por su id.
+    setTimeout(() => this.campoNota()?.nativeElement.focus());
   }
 
   /**
