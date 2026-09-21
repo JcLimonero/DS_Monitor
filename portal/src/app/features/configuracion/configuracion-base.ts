@@ -771,6 +771,9 @@ export class ConfiguracionBase {
       next: (personas) => {
         this.equipo.set(personas);
         this.equipoDraft.set(personas.map((p) => ({ ...p })));
+        // Lo que usan las tarjetas y los filtros para asignar: sin esperar
+        // a recargar la pagina.
+        this.iaSvc.equipo.set(personas);
         this.equipoMensaje.set({
           ok: true,
           mensaje: 'Equipo guardado.'
