@@ -23,6 +23,7 @@ import {
   TABLA_EMISORES,
   TABLA_EMPRESAS,
   TABLA_EQUIPO,
+  TABLA_PROVEEDORES,
   TABLA_LIGAS,
   TABLA_PERSONALES,
   TABLA_REGISTRO_CORREO,
@@ -52,6 +53,14 @@ import {
   validarCatalogo,
   type Empresa
 } from '../datos/empresas.js';
+import {
+  PROVEEDORES_INICIALES,
+  establecerCatalogoProveedores,
+  pendientesAbiertosDeProveedor,
+  renombrarProveedor,
+  validarCatalogoProveedores,
+  type Proveedor
+} from '../datos/proveedores.js';
 import type {
   HostedApp,
   LicenseUsage,
@@ -377,6 +386,8 @@ export interface Datos {
   equipo: AlmacenJson<Person[]>;
   /** Las empresas del grupo (Integraciones → Empresas). */
   empresas: AlmacenJson<Empresa[]>;
+  /** Proveedores y clientes externos (Integraciones → Proveedores). */
+  proveedores: AlmacenJson<Proveedor[]>;
   dominios: AlmacenJson<Dominio[]>;
   sesiones: AlmacenJson<Sesion[]>;
   /** Los pendientes personales: los que uno se apunta en el portal. */
@@ -466,6 +477,17 @@ export async function cargarDatos(
     }
   }
   await sembrarEmpresas(datos);
+  await sembrarProveedores(datos);
+}
+
+/** La primera vez, con la lista vacia, entran los tres proveedores de siempre. */
+async function sembrarProveedores(datos: Datos): Promise<void> {
+  if (datos.proveedores.leer().length === 0) {
+    await datos.proveedores.escribir(PROVEEDORES_INICIALES);
+    console.log(
+      `[puente] proveedores: sembrados ${PROVEEDORES_INICIALES.length} iniciales`
+    );
+  }
 }
 
 /** La primera vez, con la lista vacia, entran las cuatro empresas de siempre. */
@@ -482,6 +504,11 @@ export function abrirDatos(persistencia: Persistencia): Datos {
   return {
     equipo: new AlmacenTabla<Person[]>(persistencia, TABLA_EQUIPO, []),
     empresas: new AlmacenTabla<Empresa[]>(persistencia, TABLA_EMPRESAS, []),
+    proveedores: new AlmacenTabla<Proveedor[]>(
+      persistencia,
+      TABLA_PROVEEDORES,
+      []
+    ),
     dominios: new AlmacenTabla<Dominio[]>(persistencia, TABLA_DOMINIOS, []),
     sesiones: new AlmacenTabla<Sesion[]>(persistencia, TABLA_SESIONES, []),
     personales: new AlmacenTabla<TaskItem[]>(
@@ -751,6 +778,11 @@ export function construirRutas(
       ? datos.empresas.leer()
       : EMPRESAS_INICIALES
   );
+  establecerCatalogoProveedores(() =>
+    datos.proveedores.leer().length > 0
+      ? datos.proveedores.leer()
+      : PROVEEDORES_INICIALES
+  );
   // Cada llamada al modelo queda en la bitacora (las ultimas 300).
   establecerBitacora((entrada) => {
     void datos.iaBitacora.escribir(
@@ -996,6 +1028,91 @@ export function construirRutas(
       }
     }
     await datos.empresas.escribir(limpias);
+    return limpias;
+  });
+
+  // --- Proveedores: clientes y proveedores externos ---
+  //
+  // Se lee sin token (el portal lo necesita al arrancar para sus selectores)
+  // y se guarda completo, como las empresas. Renombrar reetiqueta `project`;
+  // borrar solo se permite si no hay pendientes abiertos con ese proveedor.
+
+  router.get('/proveedores', async () => {
+    await sembrarProveedores(datos);
+    return datos.proveedores.leer();
+  });
+
+  router.post('/proveedores/guardar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { proveedores } = (contexto.cuerpo ?? {}) as {
+      proveedores?: unknown;
+    };
+    if (!Array.isArray(proveedores)) {
+      throw new ErrorPuente('"proveedores" debe ser una lista.', 400);
+    }
+    const previas = datos.proveedores.leer();
+    let limpias: Proveedor[];
+    try {
+      limpias = validarCatalogoProveedores(
+        proveedores,
+        previas,
+        new Date().toISOString()
+      );
+    } catch (error) {
+      throw new ErrorPuente(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
+    }
+    const abiertos = anotar(
+      [
+        ...Object.values(datos.registroCorreo.leer()).flat(),
+        ...datos.personales.leer()
+      ],
+      datos.anotaciones.leer()
+    );
+    for (const previa of previas) {
+      if (limpias.some((p) => p.id === previa.id)) {
+        continue;
+      }
+      const usados = pendientesAbiertosDeProveedor(previa.nombre, abiertos);
+      if (usados > 0) {
+        throw new ErrorPuente(
+          `"${previa.nombre}" tiene ${usados} ${usados === 1 ? 'pendiente abierto' : 'pendientes abiertos'}; desactívalo en vez de borrarlo.`,
+          400
+        );
+      }
+    }
+    for (const previa of previas) {
+      const nueva = limpias.find((p) => p.id === previa.id);
+      if (!nueva || nueva.nombre === previa.nombre) {
+        continue;
+      }
+      const { datos: cambiados, tocados } = renombrarProveedor(
+        {
+          registroCorreo: datos.registroCorreo.leer(),
+          anotaciones: datos.anotaciones.leer(),
+          personales: datos.personales.leer()
+        },
+        previa.nombre,
+        nueva.nombre
+      );
+      if (tocados > 0) {
+        if (cambiados.registroCorreo !== datos.registroCorreo.leer()) {
+          await datos.registroCorreo.escribir(cambiados.registroCorreo);
+        }
+        if (cambiados.anotaciones !== datos.anotaciones.leer()) {
+          await datos.anotaciones.escribir(cambiados.anotaciones);
+        }
+        if (cambiados.personales !== datos.personales.leer()) {
+          await datos.personales.escribir(cambiados.personales);
+        }
+        console.log(
+          `[puente] proveedores: "${previa.nombre}" ahora es "${nueva.nombre}" (${tocados} registros reetiquetados)`
+        );
+      }
+    }
+    await datos.proveedores.escribir(limpias);
     return limpias;
   });
 

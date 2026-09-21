@@ -9,6 +9,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { Borrador, Propuesta } from '../../core/ia/ia.models';
 import { EmpresasService } from '../../core/empresas/empresas.service';
+import { ProveedoresService } from '../../core/proveedores/proveedores.service';
 import { IaService, describirError } from '../../core/ia/ia.service';
 import { TASK_PRIORITY_LABEL, TaskPriority } from '../../core/models';
 import { PortalStore } from '../../core/state/portal.store';
@@ -66,6 +67,15 @@ export class DictadoComponent implements OnDestroy {
   readonly priorityLabel = TASK_PRIORITY_LABEL;
   readonly priorities: TaskPriority[] = ['urgente', 'alta', 'media', 'baja'];
   readonly empresas = inject(EmpresasService).nombres;
+  readonly proveedores = inject(ProveedoresService).nombres;
+
+  /** El catálogo y, si la propuesta trae uno que ya no está, también ese. */
+  proveedoresPara(p: Propuesta): string[] {
+    const lista = this.proveedores();
+    return p.proyecto && !lista.includes(p.proyecto)
+      ? [...lista, p.proyecto]
+      : lista;
+  }
   readonly hayVoz = !!(
     (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition ||
     (window as unknown as { webkitSpeechRecognition?: unknown })

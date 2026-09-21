@@ -7,6 +7,12 @@ import {
   empresaValida,
   opcionesEmpresa
 } from '../datos/empresas.js';
+import {
+  contextoProveedores,
+  opcionesProveedor,
+  proveedorPorPalabra,
+  proveedorValido
+} from '../datos/proveedores.js';
 import { comoJson, fechaDe, preguntar, texto1 } from './modelo.js';
 import { diaLocal } from './tablero.js';
 
@@ -59,7 +65,7 @@ export async function interpretarDictado(
   }
   const salida = await preguntar(config, {
     uso: 'dictado',
-    sistema: `${contextoEmpresas()}\nQuien te habla dicta pendientes, juntas y recordatorios en lenguaje natural, a veces varios de corrido. Conviértelos en elementos del sistema. Responde SOLO JSON: {"elementos":[{"titulo":"verbo + objeto o 'Junta · lugar', máx. 90 caracteres","descripcion":"el detalle que dictó, sin el 'con <persona del equipo>', o null","personal":false,"empresa":"${opcionesEmpresa()}","prioridad":"baja|media|alta|urgente","venceEn":"YYYY-MM-DDTHH:mm en hora de México o YYYY-MM-DD o null","responsable":"nombre o correo de quien lo hace, o null","proyecto":"cliente o proyecto mencionado (Vanguardia, Birdom…) o null","esJunta":false,"lugar":"lugar físico o 'Teams' si lo dice, o null"}]}. "esJunta" es true cuando es una reunión, cita o llamada con alguien a una hora. "personal" es true solo cuando claramente no es del trabajo (médico, familia, casa). Resuelve fechas relativas con la fecha de hoy; 'el martes' es el próximo martes. Si dice 'para mí' o no dice quién, responsable null. Si dice "con <alguien del equipo>" (el arreglo de equipo que te paso), ESA persona es el responsable: no la dejes en el título ni en la descripción. Si "con X" no coincide con nadie del equipo, déjalo como está (es un cliente o un tercero). No inventes datos que no dijo.`,
+    sistema: `${contextoEmpresas()}\n${contextoProveedores()}\nQuien te habla dicta pendientes, juntas y recordatorios en lenguaje natural, a veces varios de corrido. Conviértelos en elementos del sistema. Responde SOLO JSON: {"elementos":[{"titulo":"verbo + objeto o 'Junta · lugar', máx. 90 caracteres","descripcion":"el detalle que dictó, sin el 'con <persona del equipo>', o null","personal":false,"empresa":"${opcionesEmpresa()}","prioridad":"baja|media|alta|urgente","venceEn":"YYYY-MM-DDTHH:mm en hora de México o YYYY-MM-DD o null","responsable":"nombre o correo de quien lo hace, o null","proyecto":"${opcionesProveedor()}","esJunta":false,"lugar":"lugar físico o 'Teams' si lo dice, o null"}]}. "esJunta" es true cuando es una reunión, cita o llamada con alguien a una hora. "personal" es true solo cuando claramente no es del trabajo (médico, familia, casa). Resuelve fechas relativas con la fecha de hoy; 'el martes' es el próximo martes. Si dice 'para mí' o no dice quién, responsable null. Si dice "con <alguien del equipo>" (el arreglo de equipo que te paso), ESA persona es el responsable: no la dejes en el título ni en la descripción. Si "con X" no coincide con nadie del equipo, déjalo como está (es un cliente o un tercero). No inventes datos que no dijo.`,
     usuario: JSON.stringify({
       hoy: diaLocal(ahora),
       diaSemana: new Date(ahora).toLocaleDateString('es-MX', {
@@ -94,7 +100,7 @@ export async function interpretarDictado(
           conHora: tieneHora(e.venceEn),
           responsable,
           persona: responsable ? personaDe(responsable, equipo) : undefined,
-          proyecto: texto1(e.proyecto),
+          proyecto: proveedorValido(e.proyecto),
           esJunta: e.esJunta === true,
           lugar: texto1(e.lugar),
           origen: 'ia'
@@ -135,8 +141,6 @@ const DIAS = [
   'viernes',
   'sabado'
 ];
-
-const CLIENTES = ['Vanguardia', 'Birdom', 'AutoDeal'];
 
 export function interpretarPorReglas(
   texto: string,
@@ -187,7 +191,7 @@ export function interpretarPorReglas(
         conHora: HORA_EN_FRASE.test(sinAcentos),
         responsable: persona?.name,
         persona,
-        proyecto: CLIENTES.find((c) => sinAcentos.includes(c.toLowerCase())),
+        proyecto: personal ? undefined : proveedorPorPalabra(frase),
         esJunta: /\b(junta|reunion|cita|llamada|call)\b/.test(sinAcentos),
         lugar: /\ben (el |la |los |las )?([A-Z][^,.]{2,40})/
           .exec(frase)?.[2]

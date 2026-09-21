@@ -22,6 +22,7 @@ import {
   TaskStatus
 } from '../../core/models';
 import { EmpresasService } from '../../core/empresas/empresas.service';
+import { ProveedoresService } from '../../core/proveedores/proveedores.service';
 import { IaService, describirError } from '../../core/ia/ia.service';
 import {
   EstadoBarrido,
@@ -151,6 +152,7 @@ export class PendientesComponent {
   readonly origin = signal<TaskOrigin | 'todos'>('todos');
   readonly priority = signal<TaskPriority | 'todas'>('todas');
   readonly company = signal<string>('todas');
+  readonly project = signal<string>('todos');
   /** De quién viene (solo aplica a los de correo). */
   readonly sender = signal<SenderKind | 'todos'>('todos');
   readonly senderLabel = SENDER_KIND_LABEL;
@@ -164,6 +166,7 @@ export class PendientesComponent {
         ).length
   );
   readonly empresas = inject(EmpresasService).nombres;
+  readonly proveedores = inject(ProveedoresService).nombres;
   /**
    * Los hechos no se muestran por omision; el interruptor se recuerda en este
    * navegador. Lo que se marco hecho en esta sesion y el pendiente que se
@@ -188,6 +191,7 @@ export class PendientesComponent {
         this.origin() !== 'todos',
         this.priority() !== 'todas',
         this.company() !== 'todas',
+        this.project() !== 'todos',
         this.sender() !== 'todos',
         this.foco() !== 'todos'
       ].filter(Boolean).length
@@ -226,6 +230,7 @@ export class PendientesComponent {
   /** "HH:mm" o vacío: sin hora el pendiente es "para ese día". */
   readonly newDueTime = signal('');
   readonly newCompany = signal('');
+  readonly newProject = signal('');
   /** Clave del equipo (correo o id); vacío = sin responsable. */
   readonly newPrincipal = signal('');
   readonly newSeguidores = signal<string[]>([]);
@@ -356,6 +361,7 @@ export class PendientesComponent {
     this.newDueDate.set('');
     this.newDueTime.set('');
     this.newCompany.set('');
+    this.newProject.set('');
     this.newPriority.set('media');
     this.newPrincipal.set('');
     this.newSeguidores.set([]);
@@ -369,6 +375,7 @@ export class PendientesComponent {
     const origin = this.origin();
     const priority = this.priority();
     const company = this.company();
+    const project = this.project();
     const sender = this.sender();
     const vista = this.vista();
     const includeDone = this.includeDone();
@@ -418,6 +425,13 @@ export class PendientesComponent {
         company === 'ninguna'
           ? !!task.company
           : company !== 'todas' && task.company !== company
+      ) {
+        return false;
+      }
+      if (
+        project === 'ninguno'
+          ? !!task.project
+          : project !== 'todos' && task.project !== project
       ) {
         return false;
       }
@@ -530,6 +544,7 @@ export class PendientesComponent {
         : undefined,
       dueHasTime: !!hora,
       company: personal ? undefined : this.newCompany(),
+      project: personal ? undefined : this.newProject() || undefined,
       personal,
       assignee: principal,
       followers: seguidores.length ? seguidores : undefined
@@ -644,6 +659,7 @@ export class PendientesComponent {
     this.origin.set('todos');
     this.priority.set('todas');
     this.company.set('todas');
+    this.project.set('todos');
     this.sender.set('todos');
   }
 
@@ -653,6 +669,7 @@ export class PendientesComponent {
     this.origin.set('todos');
     this.priority.set('todas');
     this.company.set('todas');
+    this.project.set('todos');
     this.sender.set('todos');
     this.foco.set('todos');
   }

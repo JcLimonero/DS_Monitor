@@ -3,7 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import { SesionService } from '../../acceso/sesion.service';
 import { PORTAL_CONFIG } from '../../config/portal-config.token';
-import { Empresa, Person, SourceKind, TaskItem } from '../../models';
+import { Empresa, Person, Proveedor, SourceKind, TaskItem } from '../../models';
 
 /** Un dominio registrado, tal como lo guarda el puente. */
 export interface Dominio {
@@ -414,6 +414,24 @@ export class PuenteAdminService {
     return this.http.post<Empresa[]>(
       this.url('/empresas/guardar'),
       { empresas },
+      { headers: this.headers() }
+    );
+  }
+
+  /** El catálogo de proveedores y clientes externos, activos e inactivos. */
+  proveedores(): Observable<Proveedor[]> {
+    return this.http.get<Proveedor[]>(this.url('/proveedores'));
+  }
+
+  /** Guarda el catálogo completo; renombrar reetiqueta lo ya guardado. */
+  guardarProveedores(
+    proveedores: (Omit<Proveedor, 'id' | 'orden' | 'actualizadoEn'> & {
+      id?: string;
+    })[]
+  ): Observable<Proveedor[]> {
+    return this.http.post<Proveedor[]>(
+      this.url('/proveedores/guardar'),
+      { proveedores },
       { headers: this.headers() }
     );
   }

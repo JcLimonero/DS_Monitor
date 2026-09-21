@@ -164,4 +164,5 @@ export function enHorario(iso: string, conHora = true): string {
 }
 
 // El "quienes somos" de cada prompt sale del catalogo de empresas
-// (datos/empresas.ts: contextoEmpresas, opcionesEmpresa, empresaValida).
+// (datos/empresas.ts). Los clientes/proveedores externos salen de
+// datos/proveedores.ts (contextoProveedores, opcionesProveedor, proveedorValido).

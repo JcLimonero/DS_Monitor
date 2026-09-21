@@ -126,6 +126,10 @@ export interface TaskItem {
   updateRequested?: UpdateRequest;
   accountId: string;
   origin: TaskOrigin;
+  /**
+   * Cliente o proveedor externo: el nombre de uno del catalogo
+   * (Integraciones → Proveedores).
+   */
   project?: string;
   url?: string;
   tags: string[];
@@ -150,6 +154,26 @@ export interface Empresa {
   /** Ids de los buzones o fuentes (`accountId`) que le pertenecen. */
   cuentas: string[];
   /** Inactiva: no se ofrece en selectores ni al modelo, pero conserva lo etiquetado. */
+  activa: boolean;
+  orden: number;
+  actualizadoEn: string;
+}
+
+// --- Proveedores ---
+
+/**
+ * Un proveedor o cliente externo, del catalogo que se edita en
+ * Integraciones → Proveedores. El nombre es la etiqueta con la que se
+ * marcan los pendientes (`TaskItem.project`).
+ */
+export interface Proveedor {
+  id: string;
+  nombre: string;
+  /** Que es, en una frase: es lo que se le cuenta al modelo. */
+  descripcion?: string;
+  /** Color de la etiqueta, en nombre de Tailwind (por ejemplo "sky"). */
+  color?: string;
+  /** Inactivo: no se ofrece en selectores ni al modelo, pero conserva lo etiquetado. */
   activa: boolean;
   orden: number;
   actualizadoEn: string;

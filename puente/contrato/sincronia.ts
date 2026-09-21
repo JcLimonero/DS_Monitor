@@ -18,6 +18,7 @@ type Igual<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 type _Person = Igual<Portal.Person, Puente.Person>;
 type _TaskItem = Igual<Portal.TaskItem, Puente.TaskItem>;
 type _Empresa = Igual<Portal.Empresa, Puente.Empresa>;
+type _Proveedor = Igual<Portal.Proveedor, Puente.Proveedor>;
 type _TaskComment = Igual<Portal.TaskComment, Puente.TaskComment>;
 type _TaskEvent = Igual<Portal.TaskEvent, Puente.TaskEvent>;
 type _TaskUnread = Igual<Portal.TaskUnread, Puente.TaskUnread>;
@@ -46,6 +47,7 @@ const comprobado: [
   _Person,
   _TaskItem,
   _Empresa,
+  _Proveedor,
   _TaskComment,
   _TaskEvent,
   _TaskUnread,
@@ -63,6 +65,7 @@ const comprobado: [
   _RepoPullRequest,
   _RepoCommit
 ] = [
+  true,
   true,
   true,
   true,

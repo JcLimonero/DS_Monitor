@@ -17,6 +17,7 @@ import { AvisosService } from '../core/avisos/avisos.service';
 import { ElementRef, effect } from '@angular/core';
 import { Borrador } from '../core/ia/ia.models';
 import { EmpresasService } from '../core/empresas/empresas.service';
+import { ProveedoresService } from '../core/proveedores/proveedores.service';
 import { ACCOUNT_CHIP_CLASS } from './account-colors';
 import {
   SENDER_KIND_LABEL,
@@ -373,7 +374,7 @@ const ESPERA_BORRAR_MS = 5000;
               </button>
             }
             @if (task().project; as project) {
-              <span class="text-ink-subtle">{{ project }}</span>
+              <span class="chip" [class]="projectClass()">{{ project }}</span>
             }
           </div>
 
@@ -851,14 +852,18 @@ const ESPERA_BORRAR_MS = 5000;
                   </label>
                   <label>
                     <span class="mb-1 block text-xs font-medium text-ink-muted"
-                      >Proyecto / cliente</span
+                      >Proveedor / cliente</span
                     >
-                    <input
+                    <select
                       class="field"
-                      type="text"
                       name="e-proy-{{ task().id }}"
                       [ngModel]="e.project"
-                      (ngModelChange)="patchEdit({ project: $event })" />
+                      (ngModelChange)="patchEdit({ project: $event })">
+                      <option value="">Sin proveedor</option>
+                      @for (p of proveedoresParaElegir(); track p) {
+                        <option [value]="p">{{ p }}</option>
+                      }
+                    </select>
                   </label>
                   @if (task().origin === 'correo') {
                     <label>
@@ -1064,6 +1069,7 @@ export class TaskCardComponent {
   readonly notaDecision = signal('');
   readonly borrador = signal<Borrador | undefined>(undefined);
   private readonly catalogo = inject(EmpresasService);
+  private readonly catalogoProveedores = inject(ProveedoresService);
   /**
    * Las empresas activas del catálogo y, si el pendiente trae una que ya no
    * está (inactiva o renombrada afuera), también esa, para no perderla al
@@ -1072,6 +1078,12 @@ export class TaskCardComponent {
   readonly empresasParaElegir = computed(() => {
     const lista = this.catalogo.nombres();
     const actual = this.task().company;
+    return actual && !lista.includes(actual) ? [...lista, actual] : lista;
+  });
+  /** Igual que empresas, para el selector de proveedor. */
+  readonly proveedoresParaElegir = computed(() => {
+    const lista = this.catalogoProveedores.nombres();
+    const actual = this.task().project;
     return actual && !lista.includes(actual) ? [...lista, actual] : lista;
   });
   readonly senderLabel = SENDER_KIND_LABEL;
@@ -1196,6 +1208,12 @@ export class TaskCardComponent {
     const company = this.task().company;
     return company
       ? ACCOUNT_CHIP_CLASS[this.catalogo.colorDe(company)]
+      : 'bg-surface-muted text-ink-muted';
+  });
+  readonly projectClass = computed(() => {
+    const project = this.task().project;
+    return project
+      ? ACCOUNT_CHIP_CLASS[this.catalogoProveedores.colorDe(project)]
       : 'bg-surface-muted text-ink-muted';
   });
   readonly statusLabel = computed(() => TASK_STATUS_LABEL[this.task().status]);

@@ -222,7 +222,7 @@
           Captura tu equipo para asignar desde el alta
         </a>
       }
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         @if (vista() === "negocio") {
           <label>
             <span class="mb-1 block text-xs font-medium text-ink-muted"
@@ -283,6 +283,21 @@
               }
             </select>
           </label>
+          <label>
+            <span class="mb-1 block text-xs font-medium text-ink-muted"
+              >Proveedor</span
+            >
+            <select
+              class="field"
+              [ngModel]="newProject()"
+              (ngModelChange)="newProject.set($event)"
+              name="proveedor">
+              <option value="">Sin proveedor</option>
+              @for (p of proveedores(); track p) {
+                <option [value]="p">{{ p }}</option>
+              }
+            </select>
+          </label>
         }
       </div>
       <div class="flex gap-2">
@@ -302,7 +317,7 @@
   <section
     class="card card-pad mt-4 lg:block"
     [class.hidden]="!filtrosAbiertos()">
-    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
       <label>
         <span class="mb-1 block text-xs font-medium text-ink-muted"
           >Responsable</span
@@ -364,6 +379,22 @@
             <option [value]="empresa">{{ empresa }}</option>
           }
           <option value="ninguna">Sin empresa</option>
+        </select>
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Proveedor</span
+        >
+        <select
+          class="field"
+          [ngModel]="project()"
+          (ngModelChange)="project.set($event)"
+          name="filtro-proveedor">
+          <option value="todos">Todos</option>
+          @for (p of proveedores(); track p) {
+            <option [value]="p">{{ p }}</option>
+          }
+          <option value="ninguno">Sin proveedor</option>
         </select>
       </label>
       <label>

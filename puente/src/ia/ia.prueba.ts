@@ -471,6 +471,37 @@ describe('dictado por reglas', () => {
     assert.equal(/\bcon marco ramos\b/i.test(p?.titulo ?? ''), false);
   });
 
+  it('el proyecto sale del catalogo de proveedores, no de una lista fija', async () => {
+    const { establecerCatalogoProveedores, PROVEEDORES_INICIALES } =
+      await import('../datos/proveedores.js');
+    const { interpretarPorReglas } = await import('./dictado.js');
+    try {
+      establecerCatalogoProveedores(() => [
+        {
+          id: 'total-one',
+          nombre: 'Total One',
+          activa: true,
+          orden: 0,
+          actualizadoEn: AHORA.toISOString()
+        }
+      ]);
+      const [p] = interpretarPorReglas(
+        'Revisar el CRM de Total One',
+        [],
+        AHORA
+      );
+      assert.equal(p?.proyecto, 'Total One');
+      const [q] = interpretarPorReglas(
+        'Revisar el alta de Vanguardia',
+        [],
+        AHORA
+      );
+      assert.equal(q?.proyecto, undefined);
+    } finally {
+      establecerCatalogoProveedores(() => PROVEEDORES_INICIALES);
+    }
+  });
+
   it('el mismo dia de la semana apunta a la proxima semana, y "mañana a las 5 pm" a la tarde', async () => {
     const { fechaDeFrase } = await import('./dictado.js');
     const jueves = new Date('2026-09-17T15:00:00Z');

@@ -1,7 +1,12 @@
 import type { Sesion } from '../acceso/acceso.js';
 import type { ClienteIngesta } from '../config/entorno.js';
 import type { Ejecucion, Ejecuciones } from '../ingesta/ejecuciones.js';
-import type { Empresa, Person, TaskItem } from '../nucleo/contrato.js';
+import type {
+  Empresa,
+  Person,
+  Proveedor,
+  TaskItem
+} from '../nucleo/contrato.js';
 import type { Anotacion, Anotaciones } from '../pendientes/anotaciones.js';
 import type { Registro } from '../pendientes/registro.js';
 import type { Dominio } from './dominios.js';
@@ -614,4 +619,39 @@ export const TABLA_EMPRESAS: DefinicionTabla<Empresa[]> = {
     sub: {}
   }),
   deFilas: (filas) => filas.map((f) => objeto<Empresa>(f['datos']))
+};
+
+// --- Proveedores y clientes externos ------------------------------------
+
+export const TABLA_PROVEEDORES: DefinicionTabla<Proveedor[]> = {
+  clave: 'proveedores',
+  tabla: 'proveedores',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS proveedores (
+      id text PRIMARY KEY,
+      orden integer NOT NULL DEFAULT 0,
+      nombre text NOT NULL,
+      descripcion text,
+      color text,
+      activa boolean NOT NULL DEFAULT true,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+  `,
+  id: 'id',
+  orden: 'orden',
+  aFilas: (lista) => ({
+    principal: lista.map((p, i) => ({
+      id: p.id,
+      orden: i,
+      nombre: p.nombre,
+      descripcion: p.descripcion ?? null,
+      color: p.color ?? null,
+      activa: p.activa,
+      actualizado_en: p.actualizadoEn,
+      datos: { ...p, orden: i }
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<Proveedor>(f['datos']))
 };
