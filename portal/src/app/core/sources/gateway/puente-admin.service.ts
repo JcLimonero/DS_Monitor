@@ -133,6 +133,25 @@ export interface Emisor {
   ultimoEnvio?: string;
 }
 
+/** Un pendiente que el barrido dejó con responsable o con propuesta. */
+export interface PendienteAtendido {
+  id: string;
+  titulo: string;
+  responsable: string;
+}
+
+/** Lo que dejó un barrido de autoasignación (`POST /pendientes/autoasignar`). */
+export interface ResumenAutoasignacion {
+  revisados: number;
+  asignadosPorRegla: PendienteAtendido[];
+  asignadosPorIa: PendienteAtendido[];
+  sugeridos: PendienteAtendido[];
+  sinPropuesta: number;
+  /** Quedaron para otra vez: sin IA o se acabaron las consultas. */
+  omitidos: number;
+  consultas: number;
+}
+
 const TOKEN_KEY = 'ds-monitor.puente-token';
 
 /**
@@ -328,6 +347,23 @@ export class PuenteAdminService {
     return this.http.post<{ ok: boolean; aviso?: string }>(
       this.url('/pendientes/reasignacion'),
       datos,
+      { headers: this.headers() }
+    );
+  }
+
+  /**
+   * Barrido de autoasignación: el puente recorre todos los pendientes de
+   * correo sin responsable e intenta asignarlos (regla aprendida o IA).
+   * Tarda lo que tarden las consultas a la IA (hasta `maximoConsultas`).
+   */
+  autoasignar(opciones: {
+    maximoConsultas?: number;
+    reintentar?: boolean;
+    soloCuenta?: string;
+  }): Observable<ResumenAutoasignacion> {
+    return this.http.post<ResumenAutoasignacion>(
+      this.url('/pendientes/autoasignar'),
+      opciones,
       { headers: this.headers() }
     );
   }
