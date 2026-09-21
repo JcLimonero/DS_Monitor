@@ -104,6 +104,15 @@ const CLASE_DIALOGO = 'con-dialogo';
                         {{ tarea.company }} ·
                       }
                       {{ tarea.assignee?.name ?? 'Sin asignar' }}
+                      @if (tarea.unread; as u) {
+                        <!-- Llegó un correo del hilo y nadie lo ha abierto. -->
+                        <span
+                          class="ml-1 inline-flex items-center gap-1 rounded bg-sky-100 px-1.5 text-xs font-bold uppercase tracking-wide text-sky-800 dark:bg-sky-500/20 dark:text-sky-200"
+                          [title]="u.text">
+                          <pt-icon name="bandeja" class="h-3 w-3" />
+                          correo
+                        </span>
+                      }
                     </span>
                   </span>
                   <span class="shrink-0 text-right">

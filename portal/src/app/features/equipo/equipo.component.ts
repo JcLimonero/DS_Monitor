@@ -138,6 +138,7 @@ export class EquipoComponent {
         overdue: 0,
         dueToday: 0,
         blocked: 0,
+        following: 0,
         tasks: []
       };
     });

@@ -8,6 +8,7 @@ import {
   texto1
 } from '../ia/modelo.js';
 import type { TaskItem, TaskPriority } from '../nucleo/contrato.js';
+import type { PendienteAbierto } from '../pendientes/relacionar.js';
 import type { CandidatoIa } from './correo.js';
 import { descripcionDeCorreo } from './correo.js';
 
@@ -19,8 +20,10 @@ import { descripcionDeCorreo } from './correo.js';
  * proveedor que espera respuesta, un colega que delega— lo lee el modelo y
  * decide si es un pendiente, para que empresa, con que prioridad y para
  * cuando; y si el correo parece un prospecto o una queja de un cliente, lo
- * propone para el CRM. Cada correo se analiza una sola vez: el resultado se
- * guarda por identificador y solo se mandan los nuevos.
+ * propone para el CRM. Si el correo es la respuesta o el seguimiento de un
+ * pendiente que ya esta abierto, en vez de otro pendiente se anota en ese
+ * (ver `pendientes/relacionar.ts`). Cada correo se analiza una sola vez: el
+ * resultado se guarda por identificador y solo se mandan los nuevos.
  */
 
 export { EMPRESAS };
@@ -46,6 +49,8 @@ export interface Clasificacion {
   empresa?: string;
   /** Por que lo considero pendiente, en una frase. */
   motivo?: string;
+  /** El pendiente abierto del que este correo es respuesta o seguimiento. */
+  relacionadoCon?: string;
   crm?: SugerenciaCrm;
   analizadoEn: string;
 }
@@ -54,13 +59,15 @@ const PROMPT = `${CONTEXTO_EMPRESAS}
 
 Te doy correos recibidos (remitente, destinatarios, asunto, fecha y un extracto). Para cada uno decide si genera un PENDIENTE para quien recibe el correo: algo que hay que hacer, responder, pagar, revisar, aprobar o entregar. NO son pendientes: publicidad, boletines, notificaciones automáticas informativas, confirmaciones de algo ya hecho, conversaciones que no piden nada.
 
+Te doy también los pendientes que ya están abiertos (id, título y remitente). Si un correo es la respuesta, el seguimiento o más información de uno de esos pendientes, pon su id en "relacionadoCon", da el "resumen" del correo y NO lo marques como pendiente nuevo. Si no tiene que ver con ninguno, "relacionadoCon" es null.
+
 Además, si el correo lo escribe un cliente o prospecto (no un proveedor ni un colega) y pide una cotización, información de un producto, una demostración, o se queja de un servicio, propón un registro para el CRM.
 
 Responde SOLO con JSON válido, sin texto alrededor, con esta forma:
-{"correos":[{"id":"...","esPendiente":true,"titulo":"verbo + objeto, máx. 80 caracteres","resumen":"1 o 2 frases: qué piden, quién y contexto","prioridad":"baja|media|alta|urgente","venceEn":"YYYY-MM-DD o null","empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null","motivo":"por qué es pendiente","crm":null}]}
+{"correos":[{"id":"...","esPendiente":true,"titulo":"verbo + objeto, máx. 80 caracteres","resumen":"1 o 2 frases: qué piden, quién y contexto","prioridad":"baja|media|alta|urgente","venceEn":"YYYY-MM-DD o null","empresa":"Itech Dev|Dealer Solutions|NexusQTech|OperativAI|null","motivo":"por qué es pendiente","relacionadoCon":null,"crm":null}]}
 
 "crm" es null casi siempre; cuando aplica: {"tipo":"oportunidad|queja","nombre":"máx. 60 caracteres","contacto":"quién escribe","correo":"su dirección","resumen":"1 frase"}.
-Para los que NO son pendientes basta {"id":"...","esPendiente":false,"crm":null}. Deduce la empresa por el dominio del remitente o destinatario, el proyecto o los productos mencionados; si no está claro, null. La prioridad es urgente si hay dinero o servicio en riesgo o vence en menos de 2 días; alta si piden respuesta esta semana; media por omisión; baja si es opcional.`;
+Para los que NO son pendientes ni se relacionan con uno basta {"id":"...","esPendiente":false,"relacionadoCon":null,"crm":null}; para los relacionados: {"id":"...","esPendiente":false,"relacionadoCon":"id del pendiente","resumen":"1 o 2 frases de qué dice el correo","crm":null}. Deduce la empresa por el dominio del remitente o destinatario, el proyecto o los productos mencionados; si no está claro, null. La prioridad es urgente si hay dinero o servicio en riesgo o vence en menos de 2 días; alta si piden respuesta esta semana; media por omisión; baja si es opcional.`;
 
 /** Clasifica un lote de correos. Devuelve una entrada por cada id enviado. */
 export async function clasificarCorreos(
@@ -68,11 +75,14 @@ export async function clasificarCorreos(
   correos: CandidatoIa[],
   ahora = new Date(),
   /** Lo aprendido de correcciones: "remitente: empresa X: prioridad Y". */
-  pistas: string[] = []
+  pistas: string[] = [],
+  /** Los pendientes abiertos, para reconocer respuestas y seguimientos. */
+  pendientesAbiertos: PendienteAbierto[] = []
 ): Promise<Clasificacion[]> {
   if (correos.length === 0) {
     return [];
   }
+  const idsAbiertos = new Set(pendientesAbiertos.map((p) => p.id));
   const entrada = correos.map((c) => ({
     id: c.clave,
     de: c.encabezado.remitente,
@@ -89,6 +99,9 @@ export async function clasificarCorreos(
       (pistas.length
         ? ` Lo que ya se sabe de algunos remitentes (respétalo):\n${pistas.join('\n')}\n`
         : '') +
+      (pendientesAbiertos.length
+        ? `Pendientes abiertos:\n${JSON.stringify(pendientesAbiertos)}\n`
+        : '') +
       `Correos:\n${JSON.stringify(entrada)}`,
     json: true,
     maxTokens: 4000
@@ -102,9 +115,13 @@ export async function clasificarCorreos(
   );
   return correos.map((c) => {
     const r = porId.get(c.clave);
+    const relacionadoCon = texto1(r?.relacionadoCon);
+    const relacionado = !!relacionadoCon && idsAbiertos.has(relacionadoCon);
     return {
       id: c.clave,
-      esPendiente: r?.esPendiente === true,
+      // Lo que es seguimiento de un pendiente no es otro pendiente.
+      esPendiente: r?.esPendiente === true && !relacionado,
+      relacionadoCon: relacionado ? relacionadoCon : undefined,
       titulo: texto1(r?.titulo),
       resumen: texto1(r?.resumen),
       prioridad: (['baja', 'media', 'alta', 'urgente'] as const).find(

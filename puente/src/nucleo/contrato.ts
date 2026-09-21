@@ -59,6 +59,19 @@ export interface ReassignRequest {
   at: string;
 }
 
+/** Llego algo nuevo al pendiente (un correo relacionado) y nadie lo ha visto. */
+export interface TaskUnread {
+  at: string;
+  /** Resumen corto de lo que llego. */
+  text: string;
+}
+
+/** La IA propone responsable; alguien decide si se asigna. */
+export interface SuggestedAssignee {
+  person: Person;
+  reason: string;
+}
+
 export interface TaskItem {
   id: string;
   title: string;
@@ -84,6 +97,12 @@ export interface TaskItem {
   /** La fecha lleva hora concreta; si no, es "para ese dia". */
   dueHasTime?: boolean;
   assignee?: Person;
+  /** Quienes tambien le dan seguimiento, ademas del responsable. */
+  followers?: Person[];
+  /** Responsable que propone la IA, todavia sin asignar. */
+  suggestedAssignee?: SuggestedAssignee;
+  /** Novedad por correo que nadie ha abierto todavia. */
+  unread?: TaskUnread;
   /** El responsable pidio que se lo reasignen; pendiente de decidir. */
   reassignRequest?: ReassignRequest;
   accountId: string;

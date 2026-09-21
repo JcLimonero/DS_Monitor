@@ -207,6 +207,16 @@ export class PortalStore {
     );
   }
 
+  /**
+   * Cambia un pendiente en memoria sin esperar al puente: para que lo que ya
+   * se guardó (p. ej. la novedad vista) se refleje al instante.
+   */
+  actualizarTarea(id: string, cambio: Partial<TaskItem>): void {
+    this.tasksSignal.update((tasks) =>
+      tasks.map((task) => (task.id === id ? { ...task, ...cambio } : task))
+    );
+  }
+
   refreshMeetings(): void {
     const today = startOfDay(new Date());
     const range = {

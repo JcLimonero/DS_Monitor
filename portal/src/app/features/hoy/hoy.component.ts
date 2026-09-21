@@ -194,7 +194,9 @@ export class HoyComponent {
       .filter(
         (t) =>
           t.status !== 'hecho' &&
-          t.assignee?.email?.toLowerCase() === yo &&
+          // A mi nombre o donde doy seguimiento, como "Míos" en Pendientes.
+          (t.assignee?.email?.toLowerCase() === yo ||
+            (t.followers ?? []).some((p) => p.email?.toLowerCase() === yo)) &&
           !this.vencidos().includes(t) &&
           !this.paraHoy().includes(t)
       )

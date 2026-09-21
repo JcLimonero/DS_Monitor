@@ -4,7 +4,8 @@ import type {
   TaskComment,
   TaskEvent,
   TaskItem,
-  TaskStatus
+  TaskStatus,
+  TaskUnread
 } from '../nucleo/contrato.js';
 
 /**
@@ -30,9 +31,25 @@ export interface Anotacion {
   cambios?: CambiosPendiente;
   comentarios: TaskComment[];
   asignado?: Person;
+  /** Quienes tambien le dan seguimiento, ademas del responsable. */
+  seguidores?: Person[];
+  /** Lo que la IA propuso como responsable y nadie ha decidido. */
+  sugerencia?: SugerenciaResponsable;
+  /** Llego un correo relacionado y nadie ha abierto el pendiente. */
+  novedad?: TaskUnread;
+  /** Claves de los correos ya anotados, para no repetir la nota. */
+  correosAnotados?: string[];
+  /** Ya se intento asignar solo (regla o IA); no se vuelve a gastar en eso. */
+  autoAsignacionIntentada?: boolean;
   /** El responsable pidio que se lo quiten; se borra al decidir. */
   solicitudReasignacion?: ReassignRequest;
   actualizadoEn: string;
+}
+
+export interface SugerenciaResponsable {
+  responsable: Person;
+  motivo: string;
+  at: string;
 }
 
 export type CambiosPendiente = Partial<
@@ -73,6 +90,15 @@ export function anotar(
               ? 'pendiente'
               : tarea.status)),
         assignee: nota.asignado ?? tarea.assignee,
+        followers: nota.seguidores?.length ? nota.seguidores : undefined,
+        suggestedAssignee:
+          nota.sugerencia && !nota.asignado
+            ? {
+                person: nota.sugerencia.responsable,
+                reason: nota.sugerencia.motivo
+              }
+            : undefined,
+        unread: nota.novedad,
         reassignRequest: nota.solicitudReasignacion,
         history: nota.historial?.length ? nota.historial : tarea.history,
         comments:
@@ -134,6 +160,115 @@ export function limpiarCambios(
         : undefined;
   }
   return salida;
+}
+
+/** La persona, por id o por correo (sin importar mayusculas). */
+export function mismaPersona(a: Person, b: Person): boolean {
+  const correoA = a.email?.toLowerCase();
+  return a.id === b.id || (!!correoA && correoA === b.email?.toLowerCase());
+}
+
+/**
+ * Agrega a alguien que da seguimiento, con su movimiento en el historial.
+ * Si ya estaba (o es el responsable) devuelve la misma nota.
+ */
+export function conSeguidor(
+  nota: Anotacion,
+  persona: Person,
+  ahora: string,
+  por?: string
+): Anotacion {
+  if (
+    (nota.asignado && mismaPersona(nota.asignado, persona)) ||
+    nota.seguidores?.some((p) => mismaPersona(p, persona))
+  ) {
+    return nota;
+  }
+  return conEvento(
+    {
+      ...nota,
+      seguidores: [...(nota.seguidores ?? []), persona],
+      actualizadoEn: ahora
+    },
+    {
+      at: ahora,
+      by: por,
+      kind: 'asignacion',
+      text: `Da seguimiento: ${persona.name}`
+    }
+  );
+}
+
+/** Quita a alguien del seguimiento; si no estaba, la misma nota. */
+export function sinSeguidor(
+  nota: Anotacion,
+  persona: Person,
+  ahora: string,
+  por?: string
+): Anotacion {
+  const quitado = nota.seguidores?.find((p) => mismaPersona(p, persona));
+  if (!quitado) {
+    return nota;
+  }
+  const seguidores = (nota.seguidores ?? []).filter((p) => p !== quitado);
+  return conEvento(
+    {
+      ...nota,
+      seguidores: seguidores.length > 0 ? seguidores : undefined,
+      actualizadoEn: ahora
+    },
+    {
+      at: ahora,
+      by: por,
+      kind: 'asignacion',
+      text: `Deja de dar seguimiento: ${quitado.name}`
+    }
+  );
+}
+
+/** Guarda la propuesta de la IA para que alguien la acepte o la descarte. */
+export function conSugerencia(
+  nota: Anotacion,
+  responsable: Person,
+  motivo: string,
+  ahora: string
+): Anotacion {
+  return conEvento(
+    {
+      ...nota,
+      sugerencia: { responsable, motivo, at: ahora },
+      autoAsignacionIntentada: true,
+      actualizadoEn: ahora
+    },
+    {
+      at: ahora,
+      by: 'IA',
+      kind: 'asignacion',
+      text: `Sugiere a ${responsable.name}: ${motivo}`
+    }
+  );
+}
+
+/** Borra la propuesta (se descarto o ya se asigno a alguien). */
+export function sinSugerencia(
+  nota: Anotacion,
+  ahora: string,
+  por?: string,
+  descartada = false
+): Anotacion {
+  if (!nota.sugerencia) {
+    return nota;
+  }
+  const { sugerencia, ...resto } = nota;
+  const limpia: Anotacion = { ...resto, actualizadoEn: ahora };
+  return descartada
+    ? conEvento(limpia, {
+        at: ahora,
+        by: por,
+        kind: 'asignacion',
+        text: `Sugerencia descartada: ${sugerencia.responsable.name}`
+      })
+    : limpia;
 }
 
 /** Agrega un movimiento al historial de la anotacion (las ultimas 200). */

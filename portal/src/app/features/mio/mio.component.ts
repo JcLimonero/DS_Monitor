@@ -57,6 +57,8 @@ export class MioComponent {
   readonly pendientes = signal<TaskItem[]>([]);
   /** "tarea": la liga del correo de asignación (un solo pendiente); "todos": la de estatus. */
   readonly alcance = signal<'tarea' | 'todos'>('todos');
+  /** Los que ve por dar seguimiento, no por ser el responsable. */
+  readonly seguimiento = signal<ReadonlySet<string>>(new Set());
   readonly error = signal<string | undefined>(undefined);
   readonly cargando = signal(true);
   readonly verHechos = signal(false);
@@ -89,6 +91,11 @@ export class MioComponent {
     return sinPrefijosDeCorreo(t.title);
   }
 
+  /** Lo sigue, pero el responsable es otro. */
+  soloSigue(t: TaskItem): boolean {
+    return this.seguimiento().has(t.id);
+  }
+
   vencido(t: TaskItem): boolean {
     return (
       !!t.dueDate && t.status !== 'hecho' && Date.parse(t.dueDate) < Date.now()
@@ -101,12 +108,14 @@ export class MioComponent {
         persona: { name: string; role?: string };
         alcance?: 'tarea' | 'todos';
         pendientes: TaskItem[];
+        seguimiento?: string[];
       }>(`${this.config.gatewayUrl}/mio/${this.token}/tasks`)
       .subscribe({
         next: (r) => {
           this.persona.set(r.persona);
           this.alcance.set(r.alcance ?? 'todos');
           this.pendientes.set(r.pendientes);
+          this.seguimiento.set(new Set(r.seguimiento ?? []));
           this.cargando.set(false);
         },
         error: (e: unknown) => {

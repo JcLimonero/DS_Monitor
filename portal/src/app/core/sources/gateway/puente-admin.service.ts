@@ -332,6 +332,15 @@ export class PuenteAdminService {
     );
   }
 
+  /** Alguien abrió el pendiente: la novedad por correo ya se vio. */
+  marcarVisto(id: string): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(
+      this.url('/pendientes/visto'),
+      { id },
+      { headers: this.headers() }
+    );
+  }
+
   /** Los servidores (VPS) vigilados, sin secretos. */
   servidores(): Observable<ServidorVps[]> {
     return this.http.get<ServidorVps[]>(this.url('/vps/servidores'));

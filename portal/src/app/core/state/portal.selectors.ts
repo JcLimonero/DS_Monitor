@@ -186,44 +186,66 @@ export function weightedPipeline(
 
 export interface TeamLoad {
   person: Person;
+  /** Abiertos a su nombre (responsable). */
   open: number;
   overdue: number;
   dueToday: number;
   blocked: number;
+  /** Abiertos donde solo da seguimiento; no cuentan en `open`. */
+  following: number;
+  /** Los suyos y los que sigue. */
   tasks: TaskItem[];
 }
 
+/**
+ * La carga por persona: lo que tiene a su nombre cuenta; lo que solo sigue
+ * se lista aparte ("+M seguimiento") para no inflar la carga.
+ */
 export function teamWorkload(
   tasks: readonly TaskItem[],
   now = new Date()
 ): TeamLoad[] {
   const byPerson = new Map<string, TeamLoad>();
-  for (const task of tasks) {
-    if (!task.assignee) {
-      continue;
-    }
-    const current = byPerson.get(task.assignee.id) ?? {
-      person: task.assignee,
+  const loadOf = (person: Person): TeamLoad => {
+    const current = byPerson.get(person.id) ?? {
+      person,
       open: 0,
       overdue: 0,
       dueToday: 0,
       blocked: 0,
+      following: 0,
       tasks: []
     };
-    current.tasks.push(task);
-    if (isOpen(task)) {
-      current.open++;
-      if (isOverdue(task.dueDate, now)) {
-        current.overdue++;
-      }
-      if (dueBucket(task.dueDate, now) === 'hoy') {
-        current.dueToday++;
-      }
-      if (task.status === 'bloqueado') {
-        current.blocked++;
+    byPerson.set(person.id, current);
+    return current;
+  };
+  for (const task of tasks) {
+    if (task.assignee) {
+      const current = loadOf(task.assignee);
+      current.tasks.push(task);
+      if (isOpen(task)) {
+        current.open++;
+        if (isOverdue(task.dueDate, now)) {
+          current.overdue++;
+        }
+        if (dueBucket(task.dueDate, now) === 'hoy') {
+          current.dueToday++;
+        }
+        if (task.status === 'bloqueado') {
+          current.blocked++;
+        }
       }
     }
-    byPerson.set(task.assignee.id, current);
+    for (const follower of task.followers ?? []) {
+      if (follower.id === task.assignee?.id) {
+        continue;
+      }
+      const current = loadOf(follower);
+      current.tasks.push(task);
+      if (isOpen(task)) {
+        current.following++;
+      }
+    }
   }
   return [...byPerson.values()]
     .map((load) => ({

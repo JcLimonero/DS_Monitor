@@ -209,8 +209,11 @@ export class PendientesComponent {
         return false;
       }
       if (owner === 'mios') {
+        // Lo mío: a mi nombre o donde doy seguimiento.
         const yo = this.sesion.correo()?.toLowerCase();
-        if (!task.assignee || task.assignee.email?.toLowerCase() !== yo) {
+        const mio = (p?: { email?: string }) =>
+          !!yo && p?.email?.toLowerCase() === yo;
+        if (!mio(task.assignee) && !(task.followers ?? []).some(mio)) {
           return false;
         }
       }
