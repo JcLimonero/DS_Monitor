@@ -98,9 +98,10 @@ export class PendientesComponent {
     const abrir = params.get('abrir');
     if (abrir) {
       this.avisos.abrir.set(abrir);
-      this.includeDone.set(true);
+      this.abrirId.set(abrir);
       this.clearFiltersSuave();
     }
+    effect(() => guardarMostrarHechos(this.includeDone()));
   }
 
   readonly bucketLabel = DUE_BUCKET_LABEL;
@@ -134,7 +135,14 @@ export class PendientesComponent {
         ).length
   );
   readonly empresas = EMPRESAS;
-  readonly includeDone = signal(false);
+  /**
+   * Los hechos no se muestran por omision; el interruptor se recuerda en este
+   * navegador. Lo que se marco hecho en esta sesion y el pendiente que se
+   * abrio desde una liga se ven aunque el interruptor este apagado.
+   */
+  readonly includeDone = signal(leerMostrarHechos());
+  /** El pendiente que se pidio abrir por liga (`?abrir=`), aunque este hecho. */
+  private readonly abrirId = signal<string | undefined>(undefined);
   /** Vencidos o de hoy, desde los accesos; "todos" no recorta. */
   readonly foco = signal<Foco>('todos');
   /** Del negocio (lo normal) o personales (lo que no es del negocio). */
@@ -152,7 +160,6 @@ export class PendientesComponent {
         this.priority() !== 'todas',
         this.company() !== 'todas',
         this.sender() !== 'todos',
-        this.includeDone(),
         this.foco() !== 'todos'
       ].filter(Boolean).length
   );
@@ -194,6 +201,7 @@ export class PendientesComponent {
     const sender = this.sender();
     const vista = this.vista();
     const includeDone = this.includeDone();
+    this.abrirId();
 
     const base =
       vista === 'personales' ? this.local.tasks() : this.store.tasks();
@@ -201,7 +209,8 @@ export class PendientesComponent {
       if (
         !includeDone &&
         task.status === 'hecho' &&
-        !this.store.recienHechos().has(task.id)
+        !this.store.recienHechos().has(task.id) &&
+        task.id !== this.abrirId()
       ) {
         return false;
       }
@@ -357,7 +366,6 @@ export class PendientesComponent {
     this.priority.set('todas');
     this.company.set('todas');
     this.sender.set('todos');
-    this.includeDone.set(false);
     this.foco.set('todos');
   }
 }
@@ -369,4 +377,27 @@ export class PendientesComponent {
 function fechaDeAlta(t: TaskItem): string {
   const ms = /^local-(?:\w+-)?(\d{13})/.exec(t.id)?.[1];
   return ms ? new Date(Number(ms)).toISOString() : t.updatedAt;
+}
+
+/** Preferencia de este navegador: si se ven o no los pendientes hechos. */
+const CLAVE_MOSTRAR_HECHOS = 'ds-monitor.pendientes.mostrar-hechos';
+
+function leerMostrarHechos(): boolean {
+  try {
+    return localStorage.getItem(CLAVE_MOSTRAR_HECHOS) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function guardarMostrarHechos(mostrar: boolean): void {
+  try {
+    if (mostrar) {
+      localStorage.setItem(CLAVE_MOSTRAR_HECHOS, '1');
+    } else {
+      localStorage.removeItem(CLAVE_MOSTRAR_HECHOS);
+    }
+  } catch {
+    // Sin almacenamiento (modo privado): se queda solo en la sesion.
+  }
 }
