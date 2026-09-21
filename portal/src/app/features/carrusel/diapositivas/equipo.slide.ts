@@ -7,6 +7,7 @@ import {
 import { teamWorkload } from '../../../core/state/portal.selectors';
 import { PortalStore } from '../../../core/state/portal.store';
 import { plural } from '../../../core/util/text.util';
+import { RelativePipe } from '../../../ui/portal.pipes';
 
 /** Cuantas personas caben antes de que los renglones se aprieten. */
 const RENGLONES = 6;
@@ -15,8 +16,14 @@ const RENGLONES = 6;
 @Component({
   selector: 'pt-slide-equipo',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RelativePipe],
   host: { class: 'flex h-full flex-col gap-3' },
   template: `
+    @if (conAsignados() > 0) {
+      <p class="shrink-0 text-center tv-row text-ink-muted">
+        {{ textoConAsignados() }}
+      </p>
+    }
     @if (cargas().length > 0) {
       <ul
         class="flex min-h-0 flex-1 flex-col justify-center gap-3 overflow-y-auto">
@@ -34,6 +41,13 @@ const RENGLONES = 6;
               <span class="block truncate text-lg text-ink-muted 2xl:text-xl">
                 {{ carga.person.role ?? 'Sin rol' }}
               </span>
+              @if (carga.oldestOpen; as viejo) {
+                <span
+                  class="mt-1 block truncate text-base text-ink-muted 2xl:text-lg">
+                  Más antiguo: {{ viejo.title }} ·
+                  {{ viejo.updatedAt | relativo }}
+                </span>
+              }
               <span
                 class="mt-2 block h-2 w-full max-w-md overflow-hidden rounded-full bg-surface-muted">
                 <span
@@ -94,6 +108,15 @@ export class EquipoSlideComponent {
   readonly cargas = computed(() =>
     teamWorkload(this.store.tasks()).slice(0, RENGLONES)
   );
+
+  readonly conAsignados = computed(
+    () => this.cargas().filter((carga) => carga.open > 0).length
+  );
+
+  readonly textoConAsignados = computed(() => {
+    const n = this.conAsignados();
+    return `${plural(n, 'persona')} con pendientes asignados`;
+  });
 
   readonly sinAsignar = computed(
     () =>
