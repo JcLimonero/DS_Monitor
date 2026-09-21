@@ -110,3 +110,71 @@ export function describirResumen(resumen: ResumenAutoasignacion): string {
     (resumen.omitidos > 0 ? ` · Pendientes de revisar ${resumen.omitidos}` : '')
   );
 }
+
+/**
+ * El barrido corre en segundo plano (puede tardar minutos y los proxys
+ * cortan respuestas largas): la ruta lo arranca y contesta al instante, y
+ * el portal pregunta por este estado hasta que termina. Vive en memoria del
+ * proceso; si el puente reinicia, se pierde y se ve "sin barridos recientes".
+ */
+export interface EstadoBarrido {
+  enCurso: boolean;
+  iniciadoEn?: string;
+  terminadoEn?: string;
+  /** Parcial mientras corre; final al terminar. */
+  resumen?: ResumenAutoasignacion;
+  error?: string;
+}
+
+export function estadoInicialDelBarrido(): EstadoBarrido {
+  return { enCurso: false };
+}
+
+/** Arranca uno nuevo; si ya hay uno en curso, devuelve el mismo sin tocarlo. */
+export function iniciarBarrido(
+  estado: EstadoBarrido,
+  ahora = new Date()
+): EstadoBarrido {
+  if (estado.enCurso) {
+    return estado;
+  }
+  return {
+    enCurso: true,
+    iniciadoEn: ahora.toISOString(),
+    resumen: resumenVacio()
+  };
+}
+
+/** El resumen parcial conforme avanza; sin barrido en curso no cambia nada. */
+export function avanzarBarrido(
+  estado: EstadoBarrido,
+  resumen: ResumenAutoasignacion
+): EstadoBarrido {
+  return estado.enCurso ? { ...estado, resumen: copiaDe(resumen) } : estado;
+}
+
+/** Termino, bien (con resumen) o mal (con el error); queda como el ultimo. */
+export function terminarBarrido(
+  estado: EstadoBarrido,
+  resultado: { resumen: ResumenAutoasignacion } | { error: string },
+  ahora = new Date()
+): EstadoBarrido {
+  return {
+    enCurso: false,
+    iniciadoEn: estado.iniciadoEn,
+    terminadoEn: ahora.toISOString(),
+    resumen:
+      'resumen' in resultado ? copiaDe(resultado.resumen) : estado.resumen,
+    error: 'error' in resultado ? resultado.error : undefined
+  };
+}
+
+/** Una copia del resumen, para que lo que se enseña no cambie por debajo. */
+export function copiaDe(resumen: ResumenAutoasignacion): ResumenAutoasignacion {
+  return {
+    ...resumen,
+    asignadosPorRegla: [...resumen.asignadosPorRegla],
+    asignadosPorIa: [...resumen.asignadosPorIa],
+    sugeridos: [...resumen.sugeridos]
+  };
+}

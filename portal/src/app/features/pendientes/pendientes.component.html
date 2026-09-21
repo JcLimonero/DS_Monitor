@@ -329,7 +329,15 @@
           [attr.aria-busy]="autoasignando()"
           (click)="pedirAutoasignar()">
           <pt-icon name="equipo" class="h-3.5 w-3.5" />
-          {{ autoasignando() ? "Revisando…" : "Autoasignar" }}
+          {{
+            !autoasignando()
+              ? "Autoasignar"
+              : avanceAutoasignacion() !== undefined
+                ? "Revisando… (" +
+                  avanceAutoasignacion() +
+                  " asignados hasta ahora)"
+                : "Revisando…"
+          }}
         </button>
       }
       @if (resultadoAutoasignacion(); as r) {

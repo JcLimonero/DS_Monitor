@@ -23,6 +23,14 @@ export class Redireccion {
   constructor(readonly url: string) {}
 }
 
+/**
+ * Lo que devuelve un manejador cuando acepto el trabajo pero lo hara en
+ * segundo plano (202): el JSON dice como seguirle la pista.
+ */
+export class Aceptado {
+  constructor(readonly datos: unknown) {}
+}
+
 export type Metodo = 'GET' | 'POST';
 
 export interface Contexto {
@@ -240,6 +248,10 @@ export function manejar(
             'cache-control': 'no-store'
           });
           respuesta.end();
+          return;
+        }
+        if (datos instanceof Aceptado) {
+          responder(respuesta, 202, datos.datos);
           return;
         }
         responder(respuesta, 200, datos);
