@@ -1508,8 +1508,9 @@ export function construirRutas(
         !nota?.asignado &&
         !nota?.autoAsignacionIntentada &&
         // Con movimientos ya alguien decidio algo (por ejemplo quitarle el
-        // responsable): no se le pone otro solo.
-        !nota?.historial?.length
+        // responsable): no se le pone otro solo. Las notas que deja el
+        // propio correo relacionado no cuentan como decision de nadie.
+        !nota?.historial?.some((e) => e.by !== 'Correo')
       );
     });
     if (pendientes.length === 0) {
