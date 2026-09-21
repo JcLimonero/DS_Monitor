@@ -107,6 +107,12 @@ import {
   textoAviso,
   textoEventoResponsables
 } from '../pendientes/responsables.js';
+import {
+  claveDeAviso,
+  registrarAviso,
+  yaAvisado,
+  type RegistroAvisos
+} from '../pendientes/avisos-asignacion.js';
 import { enviarPorEmailJs } from '../acceso/acceso.js';
 import type {
   ClienteIngesta,
@@ -426,6 +432,11 @@ export interface Datos {
   firefliesProcesadas: AlmacenJson<
     Record<string, { en: string; titulo: string; pendientes: number }>
   >;
+  /**
+   * Correos de asignacion/seguimiento ya mandados (persona + titulo → cuando),
+   * para no repetir el aviso cuando el mismo correo llego a varios buzones.
+   */
+  avisosAsignacion: AlmacenJson<RegistroAvisos>;
 }
 
 /** Lee todos los almacenes (una sola lectura de la coleccion); al arrancar. */
@@ -553,6 +564,11 @@ export function abrirDatos(persistencia: Persistencia): Datos {
     firefliesProcesadas: new AlmacenJson(
       persistencia,
       'fireflies-procesadas',
+      {}
+    ),
+    avisosAsignacion: new AlmacenJson<RegistroAvisos>(
+      persistencia,
+      'avisos-asignacion',
       {}
     )
   };
@@ -1739,6 +1755,11 @@ export function construirRutas(
             (t.accountId === tarea.accountId ||
               (tarea.company && t.company === tarea.company))
         );
+        // El dueño del buzón por el que llegó: ser el destinatario no es
+        // evidencia, y proponerlo queda como sugerencia (nunca se asigna).
+        const buzonDe = buzones_(cfg(), almacenCorreo).find(
+          (c) => c.id === tarea.accountId || c.accountId === tarea.accountId
+        );
         const sugerencia = await sugerirResponsable(
           ia,
           tarea,
@@ -1749,7 +1770,8 @@ export function construirRutas(
             email: p.email
           })),
           parecidos.slice(0, 12),
-          pistasParaModelo(aprendido)
+          pistasParaModelo(aprendido),
+          buzonDe ? { correo: buzonDe.usuario } : undefined
         );
         const propuesto = equipo.find((p) => p.id === sugerencia.responsable);
         // Que todos los correos vayan dirigidos al dueño no es evidencia:
@@ -2555,6 +2577,40 @@ export function construirRutas(
       modo === 'seguimiento'
         ? 'Te agregaron para dar seguimiento'
         : 'Te asignaron';
+    const hecho = modo === 'seguimiento' ? 'Agregado' : 'Asignado';
+    // El mismo correo llega a varios buzones y cada uno crea su pendiente:
+    // a la misma persona, por el mismo asunto, se le avisa una sola vez al
+    // dia. Queda en la trazabilidad que el aviso ya habia salido.
+    const claveAviso = persona.email
+      ? claveDeAviso(persona.email, tarea.title, id)
+      : undefined;
+    if (claveAviso && yaAvisado(datos.avisosAsignacion.leer(), claveAviso)) {
+      const actual = datos.anotaciones.leer();
+      const ahora = new Date().toISOString();
+      await datos.anotaciones.escribir({
+        ...actual,
+        [id]: conEvento(
+          actual[id] ?? { comentarios: [], actualizadoEn: ahora },
+          {
+            at: ahora,
+            by: sesion?.correo ?? 'automático',
+            kind: 'asignacion',
+            text: `Sin correo a ${persona.name} (aviso ya mandado por otro buzón)`
+          }
+        )
+      });
+      console.log(
+        `[puente] "${tarea.title ?? id}": no se repite el aviso a ${persona.email} (ya mandado por otro buzón).`
+      );
+      return `${hecho}; el aviso a ${persona.email} ya se había mandado por otro buzón.`;
+    }
+    const anotarAviso = async () => {
+      if (claveAviso) {
+        await datos.avisosAsignacion.escribir(
+          registrarAviso(datos.avisosAsignacion.leer(), claveAviso)
+        );
+      }
+    };
     if (persona.email) {
       void push.avisar(
         {
@@ -2575,11 +2631,12 @@ export function construirRutas(
       );
     }
     const config = cfg();
-    const hecho = modo === 'seguimiento' ? 'Agregado' : 'Asignado';
     if (!persona.email) {
       return `${hecho}; esa persona no tiene correo en el equipo, no se le avisó.`;
     }
     if (!config.acceso) {
+      // Salio el push; el correo no. Cuenta como aviso para no repetir el push.
+      await anotarAviso();
       return `${hecho}; para avisar por correo configura el acceso (EmailJS) en Equipo.`;
     }
     if (esDelDueno(persona)) {
@@ -2619,6 +2676,7 @@ export function construirRutas(
             : `Pendiente asignado: ${t.title ?? id}`,
         html
       });
+      await anotarAviso();
       return `Se avisó por correo a ${persona.email}.`;
     } catch (error) {
       return `${hecho}, pero no se pudo mandar el correo: ${error instanceof Error ? error.message : String(error)}`;

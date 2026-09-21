@@ -108,7 +108,14 @@ quien asigna se lo pone a sí mismo y nadie más sigue, no se manda correo
 selector de responsable (avisa de inmediato) y **Varios…** (principal y chips de
 seguimiento; "Guardar y avisar"). `/pendientes/anotar` con `asignarA` /
 `agregarSeguidor` sigue valiendo (lo usan `/mio` y el barrido) y tampoco avisa
-cuando la persona es quien está en sesión.
+cuando la persona es quien está en sesión. Como el mismo correo llega a varios
+buzones y cada uno crea su pendiente, el correo de asignación/seguimiento a la
+misma persona por el mismo asunto (título sin RE:/RV:) se manda una sola vez al
+día (`datos/avisos-asignacion.json`, `src/pendientes/avisos-asignacion.ts`); las
+demás copias dejan "(aviso ya mandado por otro buzón)" en la trazabilidad. Y al
+sugerir responsable, ser el dueño del buzón (el "Para:" del correo) no cuenta
+como evidencia: proponerlo queda como sugerencia, nunca asignación automática
+(`acotarConfianza` en `src/ia/pendientes.ts`, además de decírselo al modelo).
 
 Cada buzón es una conexión del portal con ruta `/correo/<id>`, y se configuran
 en `CORREO_CUENTAS` con la contraseña de cada uno en `CORREO_CONTRASENA_<ID>`
