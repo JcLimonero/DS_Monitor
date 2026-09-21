@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { ErrorNoEncontrado } from '../nucleo/errores.js';
-import { Router } from './router.js';
+import { Aceptado, Router } from './router.js';
 
 const sinParametros = new URLSearchParams();
 
@@ -27,6 +27,16 @@ describe('router', () => {
       () => router.resolver('/vercel/deployments/extra', sinParametros),
       (error: unknown) => error instanceof ErrorNoEncontrado
     );
+  });
+
+  it('un manejador puede aceptar el trabajo para segundo plano (202)', async () => {
+    const router = new Router().post(
+      '/barrido',
+      async () => new Aceptado({ enCurso: true })
+    );
+    const salida = await router.resolver('/barrido', sinParametros, 'POST', {});
+    assert.ok(salida instanceof Aceptado);
+    assert.deepEqual(salida.datos, { enCurso: true });
   });
 
   it('ignora las diagonales de sobra', async () => {

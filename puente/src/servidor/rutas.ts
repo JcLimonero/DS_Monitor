@@ -155,8 +155,13 @@ import {
 } from '../nucleo/vigilancia.js';
 import { conPrioridadPersonal } from '../pendientes/prioridad.js';
 import {
+  avanzarBarrido,
   candidatosDeAutoasignacion,
+  estadoInicialDelBarrido,
+  iniciarBarrido,
   resumenVacio,
+  terminarBarrido,
+  type EstadoBarrido,
   type ResumenAutoasignacion
 } from '../pendientes/autoasignar.js';
 import { semanaIso } from '../ia/repos.js';
@@ -201,7 +206,7 @@ import {
   estadoPlataformaVercel,
   licenciasVercel
 } from '../proveedores/vercel.js';
-import { Redireccion, Router, type Contexto } from './router.js';
+import { Aceptado, Redireccion, Router, type Contexto } from './router.js';
 import { Push, type ColaPush, type Suscripcion } from '../push/push.js';
 import { USOS_POR_OMISION, type UsoIa, type UsosIa } from '../ia/usos.js';
 import { establecerBitacora, type EntradaBitacora } from '../ia/modelo.js';
@@ -1510,6 +1515,8 @@ export function construirRutas(
       reintentar?: boolean;
       /** De donde viene la corrida, para la bitacora y la trazabilidad. */
       origen: string;
+      /** Se llama tras cada pendiente con el resumen hasta ahi (parcial). */
+      alAvanzar?: (resumen: ResumenAutoasignacion) => void;
     }
   ): Promise<ResumenAutoasignacion> => {
     const resumen = resumenVacio();
@@ -1547,6 +1554,12 @@ export function construirRutas(
     };
     const ia = iaPara('asistente');
     for (const tarea of pendientes) {
+      await atenderUno(tarea);
+      opciones.alAvanzar?.(resumen);
+    }
+    return resumen;
+
+    async function atenderUno(tarea: TaskItem): Promise<void> {
       const porRegla = responsableAprendido(tarea, aprendido);
       const persona = porRegla && enEquipo(porRegla);
       if (persona) {
@@ -1571,11 +1584,11 @@ export function construirRutas(
             `[puente] no se pudo asignar "${tarea.title}" (${opciones.origen}) por regla aprendida: ${error instanceof Error ? error.message : String(error)}`
           );
         }
-        continue;
+        return;
       }
       if (!ia || resumen.consultas >= opciones.maximoConsultas) {
         resumen.omitidos++;
-        continue;
+        return;
       }
       resumen.revisados++;
       resumen.consultas++;
@@ -1618,7 +1631,7 @@ export function construirRutas(
             [tarea.id]: { ...nota, autoAsignacionIntentada: true }
           });
           resumen.sinPropuesta++;
-          continue;
+          return;
         }
         if (sugerencia.confianza === 'alta') {
           await datos.anotaciones.escribir({
@@ -1659,7 +1672,6 @@ export function construirRutas(
         );
       }
     }
-    return resumen;
   };
 
   /**
@@ -1671,6 +1683,7 @@ export function construirRutas(
     maximoConsultas?: number;
     reintentar?: boolean;
     soloCuenta?: string;
+    alAvanzar?: (resumen: ResumenAutoasignacion) => void;
   }): Promise<ResumenAutoasignacion> => {
     const registro = datos.registroCorreo.leer();
     const cuentas = opciones.soloCuenta
@@ -1690,8 +1703,44 @@ export function construirRutas(
     return autoasignarPendientes(tareas, {
       maximoConsultas,
       reintentar: opciones.reintentar === true,
-      origen: 'barrido'
+      origen: 'barrido',
+      alAvanzar: opciones.alAvanzar
     });
+  };
+
+  /**
+   * El barrido corre en segundo plano y aqui queda su estado (en memoria):
+   * la ruta y Telegram lo arrancan, el portal pregunta como va. Con uno en
+   * curso no se arranca otro. Devuelve la promesa del que corre (o
+   * `undefined` si ya habia uno) por si quien lo lanzo quiere esperarlo.
+   */
+  let estadoBarrido: EstadoBarrido = estadoInicialDelBarrido();
+  const lanzarBarrido = (opciones: {
+    maximoConsultas?: number;
+    reintentar?: boolean;
+    soloCuenta?: string;
+  }): { estado: EstadoBarrido; corrida?: Promise<ResumenAutoasignacion> } => {
+    if (estadoBarrido.enCurso) {
+      return { estado: estadoBarrido };
+    }
+    estadoBarrido = iniciarBarrido(estadoBarrido);
+    const corrida = barridoDeAutoasignacion({
+      ...opciones,
+      alAvanzar: (parcial) => {
+        estadoBarrido = avanzarBarrido(estadoBarrido, parcial);
+      }
+    });
+    corrida.then(
+      (resumen) => {
+        estadoBarrido = terminarBarrido(estadoBarrido, { resumen });
+      },
+      (error: unknown) => {
+        const mensaje = error instanceof Error ? error.message : String(error);
+        console.warn(`[puente] el barrido de autoasignación falló: ${mensaje}`);
+        estadoBarrido = terminarBarrido(estadoBarrido, { error: mensaje });
+      }
+    );
+    return { estado: estadoBarrido, corrida };
   };
 
   const leido = (cuenta: ConfiguracionCorreo) =>
@@ -2707,8 +2756,12 @@ export function construirRutas(
   /**
    * Barrido de autoasignacion a demanda: recorre todos los pendientes de
    * correo registrados (sin limite de dias) e intenta ponerles responsable
-   * por regla aprendida o por la IA. Puede tardar: hasta `maximoConsultas`
-   * consultas al modelo (40 por omision, tope 100).
+   * por regla aprendida o por la IA. Puede tardar minutos (hasta
+   * `maximoConsultas` consultas al modelo: 40 por omision, tope 100), asi
+   * que corre en segundo plano: aqui se contesta 202 con `enCurso` e
+   * `iniciadoEn` y el portal pregunta por `/pendientes/autoasignar/estado`.
+   * Si ya hay uno en curso, se contesta lo mismo sin arrancar otro. Las
+   * anotaciones se ponen encima al servir: no hay cache que tirar.
    */
   router.post('/pendientes/autoasignar', async (contexto) => {
     exigirAdmin(contexto, cfg(), acceso);
@@ -2717,13 +2770,18 @@ export function construirRutas(
       reintentar?: boolean;
       soloCuenta?: string;
     };
-    const resumen = await barridoDeAutoasignacion({
+    const { estado } = lanzarBarrido({
       maximoConsultas: cuerpo.maximoConsultas,
       reintentar: cuerpo.reintentar === true,
       soloCuenta: cuerpo.soloCuenta?.trim() || undefined
     });
-    // Las anotaciones se ponen encima al servir: no hay cache que tirar.
-    return resumen;
+    return new Aceptado({ enCurso: true, iniciadoEn: estado.iniciadoEn });
+  });
+
+  /** Como va (o como quedo) el ultimo barrido; sin ninguno, `enCurso: false`. */
+  router.get('/pendientes/autoasignar/estado', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    return estadoBarrido;
   });
 
   // --- Inteligencia artificial: fuentes del tablero y rutas /ia ---
@@ -3110,14 +3168,25 @@ export function construirRutas(
             textoPendientes(await armarTablero(fuentes, ahora), ahora)
           );
         } else if (comando.tipo === 'autoasignar') {
-          await contestar('Revisando los pendientes sin responsable…');
-          await contestar(
-            textoAutoasignacion(
-              await barridoDeAutoasignacion({
-                maximoConsultas: CONSULTAS_POR_BARRIDO
-              })
-            )
-          );
+          const { corrida } = lanzarBarrido({
+            maximoConsultas: CONSULTAS_POR_BARRIDO
+          });
+          if (!corrida) {
+            await contestar(
+              'Ya hay un barrido en curso; te mando el resumen cuando termine el que va.'
+            );
+          } else {
+            await contestar('Revisando los pendientes sin responsable…');
+            // El resumen llega cuando termine; Telegram no espera la respuesta.
+            corrida
+              .then((resumen) => contestar(textoAutoasignacion(resumen)))
+              .catch((error: unknown) =>
+                contestar(
+                  `El barrido falló: ${escapar(error instanceof Error ? error.message : String(error))}`
+                )
+              )
+              .catch(() => undefined);
+          }
         } else if (comando.tipo === 'servicios') {
           await contestar(
             textoServicios(

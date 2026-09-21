@@ -3,9 +3,13 @@ import { describe, it } from 'node:test';
 import type { TaskItem } from '../nucleo/contrato.js';
 import type { Anotaciones } from './anotaciones.js';
 import {
+  avanzarBarrido,
   candidatosDeAutoasignacion,
   describirResumen,
-  resumenVacio
+  estadoInicialDelBarrido,
+  iniciarBarrido,
+  resumenVacio,
+  terminarBarrido
 } from './autoasignar.js';
 
 const ahora = new Date('2026-09-20T12:00:00Z');
@@ -167,5 +171,61 @@ describe('resumen de la corrida', () => {
       describirResumen(r),
       'Asignados 2 (regla 1, IA 1) · Sugeridos 1 · Sin propuesta 2 · Pendientes de revisar 3'
     );
+  });
+});
+
+describe('estado del barrido en segundo plano', () => {
+  it('arranca una vez, avanza con el parcial y termina con el final', () => {
+    const t0 = new Date('2026-09-20T12:00:00Z');
+    const inicial = estadoInicialDelBarrido();
+    assert.deepEqual(inicial, { enCurso: false });
+    const enCurso = iniciarBarrido(inicial, t0);
+    assert.equal(enCurso.enCurso, true);
+    assert.equal(enCurso.iniciadoEn, t0.toISOString());
+    assert.equal(enCurso.resumen?.revisados, 0);
+    // Con uno en curso no se arranca otro: es el mismo estado.
+    assert.equal(iniciarBarrido(enCurso, new Date()), enCurso);
+
+    const parcial = resumenVacio();
+    parcial.revisados = 1;
+    parcial.asignadosPorRegla.push({
+      id: 'a',
+      titulo: 'A',
+      responsable: 'Ana'
+    });
+    const avanzado = avanzarBarrido(enCurso, parcial);
+    assert.equal(avanzado.enCurso, true);
+    assert.equal(avanzado.resumen?.asignadosPorRegla.length, 1);
+    // Lo que se enseña es una copia: seguir mutando el parcial no lo mueve.
+    parcial.asignadosPorRegla.push({
+      id: 'b',
+      titulo: 'B',
+      responsable: 'Ana'
+    });
+    assert.equal(avanzado.resumen?.asignadosPorRegla.length, 1);
+
+    const t1 = new Date('2026-09-20T12:05:00Z');
+    const final = terminarBarrido(avanzado, { resumen: parcial }, t1);
+    assert.deepEqual(final, {
+      enCurso: false,
+      iniciadoEn: t0.toISOString(),
+      terminadoEn: t1.toISOString(),
+      resumen: parcial,
+      error: undefined
+    });
+    // Sin barrido en curso, avanzar no cambia nada.
+    assert.equal(avanzarBarrido(final, resumenVacio()), final);
+  });
+
+  it('si falla, guarda el error y conserva lo que llevaba', () => {
+    const enCurso = iniciarBarrido(estadoInicialDelBarrido());
+    const parcial = resumenVacio();
+    parcial.revisados = 2;
+    const roto = terminarBarrido(avanzarBarrido(enCurso, parcial), {
+      error: 'se cayó la IA'
+    });
+    assert.equal(roto.enCurso, false);
+    assert.equal(roto.error, 'se cayó la IA');
+    assert.equal(roto.resumen?.revisados, 2);
   });
 });
