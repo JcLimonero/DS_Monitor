@@ -59,8 +59,9 @@ export class IaService {
     );
   }
 
-  cargarEquipo(): void {
-    if (!this.disponible || this.equipo().length > 0) {
+  /** Carga el equipo una vez; con `forzar` lo vuelve a pedir. */
+  cargarEquipo(forzar = false): void {
+    if (!this.disponible || (!forzar && this.equipo().length > 0)) {
       return;
     }
     this.http

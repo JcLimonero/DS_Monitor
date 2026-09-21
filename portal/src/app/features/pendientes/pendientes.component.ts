@@ -20,6 +20,7 @@ import {
   TaskStatus
 } from '../../core/models';
 import { EMPRESAS } from '../../core/ia/ia.models';
+import { IaService } from '../../core/ia/ia.service';
 import { AvisosService } from '../../core/avisos/avisos.service';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { SesionService } from '../../core/acceso/sesion.service';
@@ -73,12 +74,14 @@ export class PendientesComponent {
   private readonly local = inject(LocalTaskStore);
   private readonly avisos = inject(AvisosService);
   private readonly sesion = inject(SesionService);
+  private readonly ia = inject(IaService);
 
   /** El campo de titulo del alta; recibe el foco al abrir el formulario. */
   private readonly tituloNuevo =
     viewChild<ElementRef<HTMLInputElement>>('tituloNuevo');
 
   constructor() {
+    this.ia.cargarEquipo();
     effect(() => {
       const campo = this.tituloNuevo();
       if (this.mostrarAlta() && campo) {
@@ -172,8 +175,12 @@ export class PendientesComponent {
   readonly newDueTime = signal('');
   readonly newCompany = signal('');
 
+  /** El equipo capturado mas quien aparezca como responsable en la lista. */
   readonly people = computed(() => {
     const byId = new Map<string, string>();
+    for (const persona of this.ia.equipo()) {
+      byId.set(persona.id, persona.name);
+    }
     for (const task of this.store.tasks()) {
       if (task.assignee) {
         byId.set(task.assignee.id, task.assignee.name);
