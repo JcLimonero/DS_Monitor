@@ -81,6 +81,7 @@ import { conRemitente, correoDelRemitente } from '../pendientes/remitente.js';
 import {
   abiertosParaModelo,
   agregarNovedad,
+  asuntoNormalizado,
   candidatosDeRelacion,
   marcarVisto,
   relacionarPorAsunto
@@ -1632,6 +1633,15 @@ export function construirRutas(
           pistasParaModelo(aprendido)
         );
         const propuesto = equipo.find((p) => p.id === sugerencia.responsable);
+        // Que todos los correos vayan dirigidos al dueño no es evidencia:
+        // a el solo se le sugiere, nunca se le asigna solo.
+        if (
+          propuesto &&
+          esDelDueno(propuesto) &&
+          sugerencia.confianza === 'alta'
+        ) {
+          sugerencia.confianza = 'media';
+        }
         const actuales = datos.anotaciones.leer();
         const nota = actuales[tarea.id] ?? {
           comentarios: [],
@@ -2371,6 +2381,43 @@ export function construirRutas(
    * para darle seguimiento): push y correo con su liga personal. Devuelve el
    * aviso (que se mando, o por que no) para enseñarlo en el portal.
    */
+  /**
+   * Los correos del dueño del monitor: los que entran al portal y los de
+   * los buzones que se leen. Asignarle algo a el no merece correo (ya lo ve
+   * en el portal), y la IA no debe "decidir" que es suyo solo porque todos
+   * los correos van dirigidos a el.
+   */
+  const correosDelDueno = (): Set<string> =>
+    new Set(
+      [...(cfg().acceso?.correos ?? []), ...cfg().correos.map((c) => c.usuario)]
+        .filter((c) => c && c.includes('@'))
+        .map((c) => c.trim().toLowerCase())
+    );
+  const esDelDueno = (persona: Pick<Person, 'email'>): boolean =>
+    !!persona.email &&
+    correosDelDueno().has(persona.email.trim().toLowerCase());
+
+  /**
+   * El mismo correo llega a varios buzones y cada uno crea su pendiente: el
+   * aviso a la misma persona por el mismo titulo no se repite en 24 h.
+   */
+  const avisosMandados = new Map<string, number>();
+  const AVISO_REPETIDO_MS = 24 * 3600_000;
+  const avisoRepetido = (persona: Person, titulo: string): boolean => {
+    const clave = `${(persona.email ?? persona.id).toLowerCase()}|${asuntoNormalizado(titulo)}`;
+    const ahora = Date.now();
+    for (const [k, en] of avisosMandados) {
+      if (ahora - en > AVISO_REPETIDO_MS) {
+        avisosMandados.delete(k);
+      }
+    }
+    if (avisosMandados.has(clave)) {
+      return true;
+    }
+    avisosMandados.set(clave, ahora);
+    return false;
+  };
+
   const avisarConLiga = async (
     persona: Person,
     id: string,
@@ -2409,6 +2456,12 @@ export function construirRutas(
     }
     if (!config.acceso) {
       return `${hecho}; para avisar por correo configura el acceso (EmailJS) en Equipo.`;
+    }
+    if (esDelDueno(persona)) {
+      return `${hecho} sin aviso: es tu propio correo.`;
+    }
+    if (avisoRepetido(persona, tarea.title ?? id)) {
+      return `${hecho}; el aviso ya se mando hoy por otro buzon.`;
     }
     const t = tarea;
     const encabezado =
