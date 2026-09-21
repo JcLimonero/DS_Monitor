@@ -384,7 +384,8 @@ export function candidatosParaIa(
         !reconocidos.has(e.uid) &&
         !PUBLICIDAD.test(e.asunto) &&
         !SIN_RESPUESTA.test(e.remitente) &&
-        !DEL_MONITOR.test(e.asunto)
+        !DEL_MONITOR.test(e.asunto) &&
+        !esCorreoDeTotalOne(e.asunto)
     )
     .sort((a, b) => b.fecha.localeCompare(a.fecha))
     .map((encabezado) => ({
@@ -401,6 +402,35 @@ export function candidatosParaIa(
  * pendiente se volveria otro pendiente.
  */
 const DEL_MONITOR = /^\s*(re:\s*)?access monitor\b/i;
+
+/**
+ * Lo que manda Total One (avisos de leads, apartados, citas, recibos, altas
+ * de cuenta): sale por EmailJS con el remitente de Carlos, asi que se
+ * reconoce por sus marcas fijas, no por el remitente. El asunto del buzon de
+ * pruebas ("[PRUEBA · para …]") se ve en la cabecera; el pie de la plantilla
+ * ("Enviado con Total One", "Aviso automático de Total One") solo en el
+ * cuerpo. Ninguno es un pendiente de Carlos: son cosas que su propio
+ * producto le avisa a sus clientes.
+ */
+const ASUNTO_TOTAL_ONE = /^\s*(re:\s*|rv:\s*|fwd?:\s*)*\[PRUEBA · para /i;
+const CUERPO_TOTAL_ONE =
+  /Enviado con Total One|Aviso autom[aá]tico de Total One/i;
+/** En la descripcion de un pendiente ya registrado, el asunto va como "Asunto: …". */
+const ASUNTO_EN_DESCRIPCION =
+  /^Asunto:\s*(re:\s*|rv:\s*|fwd?:\s*)*\[PRUEBA · para /im;
+
+/**
+ * Un correo (asunto y, si se tiene, cuerpo) que manda Total One. Sirve
+ * tambien para un pendiente ya registrado: titulo + descripcion, donde el
+ * asunto original va como "Asunto: …" aunque la IA le haya puesto otro titulo.
+ */
+export function esCorreoDeTotalOne(asunto: string, texto = ''): boolean {
+  return (
+    ASUNTO_TOTAL_ONE.test(asunto) ||
+    CUERPO_TOTAL_ONE.test(texto) ||
+    ASUNTO_EN_DESCRIPCION.test(texto)
+  );
+}
 
 /** Remitentes automaticos que nunca piden nada. */
 const SIN_RESPUESTA =

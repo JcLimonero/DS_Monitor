@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   candidatosParaIa,
   detectarLicencias,
+  esCorreoDeTotalOne,
   detectarLicenciasConEvidencia,
   detectarPendientes,
   montoDelRecibo,
@@ -384,6 +385,75 @@ describe('candidatosParaIa', () => {
     assert.deepEqual(
       candidatos.map((c) => c.encabezado.asunto),
       ['Formulario de Javier']
+    );
+  });
+});
+
+describe('esCorreoDeTotalOne', () => {
+  it('reconoce el asunto del buzon de pruebas y el pie de la plantilla', () => {
+    assert.ok(
+      esCorreoDeTotalOne(
+        '[PRUEBA · para admin@demo.local] Quieren apartar: Toyota Corolla 2024'
+      )
+    );
+    assert.ok(
+      esCorreoDeTotalOne(
+        'RE: [PRUEBA · para admin@demo.local] Nuevo lead',
+        'Cualquier cosa'
+      )
+    );
+    assert.ok(
+      esCorreoDeTotalOne(
+        'Quieren apartar: Mazda 3 2023',
+        'Comprador Juan · desde el marketplace.\nEste correo te lo envía Demo.\nEnviado con Total One · 2026'
+      )
+    );
+    assert.ok(
+      esCorreoDeTotalOne(
+        'Nueva cuenta: Taller Limon',
+        'Aviso automático de Total One · Total Dealer · 2026'
+      )
+    );
+  });
+
+  it('reconoce un pendiente ya registrado por el "Asunto:" de su descripcion', () => {
+    assert.ok(
+      esCorreoDeTotalOne(
+        'Llamar a comprador para apartado Toyota Corolla 2024',
+        'El comprador quiere apartar.\n\nDe: Carlos <c@x.mx>\nAsunto: [PRUEBA · para admin@demo.local] Quieren apartar: Toyota Corolla 2024\n\nQuieren apartar'
+      )
+    );
+  });
+
+  it('deja pasar el correo normal, aunque mencione Total One', () => {
+    assert.equal(
+      esCorreoDeTotalOne(
+        'Cotización de Total One para Grupo Andrade',
+        'Hola Carlos, ¿nos mandas la propuesta de Total One esta semana?'
+      ),
+      false
+    );
+    assert.equal(esCorreoDeTotalOne('Access Monitor'), false);
+  });
+
+  it('candidatosParaIa lo deja fuera por el asunto', () => {
+    const lista = candidatosParaIa(
+      [
+        correo(
+          'Carlos Limon <carlos.limon@nexusqtech.com>',
+          '[PRUEBA · para admin@demo.local] Quieren apartar: Nissan Versa 2023',
+          '2026-09-16T10:00:00Z'
+        ),
+        correo('Ken <ken@cliente.com>', 'Propuesta', '2026-09-16T11:00:00Z')
+      ],
+      new Set(),
+      'correo-itech',
+      { dias: 7, maximo: 10, yaAnalizado: () => false },
+      new Date('2026-09-17T00:00:00Z')
+    );
+    assert.deepEqual(
+      lista.map((c) => c.encabezado.asunto),
+      ['Propuesta']
     );
   });
 });
