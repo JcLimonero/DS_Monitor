@@ -1,355 +1,168 @@
 <section class="card card-pad mt-4">
-  <h2 class="text-sm font-semibold text-ink">Dominios registrados</h2>
-  <p class="mt-1 max-w-3xl text-sm text-ink-muted">
-    Cuándo vence cada dominio y cuánto cuesta renovarlo. Se guardan en el
-    aplicación y salen en Licencias como renovaciones anuales, con aviso cuando
-    se acerca la fecha.
-  </p>
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h2 class="text-sm font-semibold text-ink">Dominios registrados</h2>
+      <p class="mt-1 max-w-3xl text-sm text-ink-muted">
+        Cuándo vence cada dominio y cuánto cuesta renovarlo. Se guardan en el
+        aplicación y salen en Licencias como renovaciones anuales, con aviso
+        cuando se acerca la fecha.
+      </p>
+    </div>
+    @if (admin.disponible) {
+      <button type="button" class="btn" (click)="abrirAlta()">
+        <pt-icon name="mas" class="h-4 w-4" />
+        Agregar dominio
+      </button>
+    }
+  </div>
   @if (!admin.disponible) {
     <p class="mt-3 text-xs text-ink-muted">
       Los dominios se editan en la aplicación publicada.
     </p>
   } @else {
-    <!-- En el celular, una tarjeta por dominio; la tabla es para pantallas anchas -->
-    <div class="mt-3 space-y-3 md:hidden">
-      @for (d of dominiosDraft(); track $index) {
-        <div class="rounded-lg border border-line p-3">
-          <div class="flex items-center justify-between gap-2">
-            <input
-              class="field font-mono"
-              type="text"
-              [name]="'dm-nombre-' + $index"
-              [ngModel]="d.nombre"
-              (ngModelChange)="updateDominio($index, { nombre: $event })" />
+    @if (dominiosDraft().length === 0) {
+      <p class="mt-4 text-sm text-ink-muted">
+        Todavía no hay dominios. Agrega el primero.
+      </p>
+    }
+    <ul class="mt-3 divide-y divide-line">
+      @for (d of dominiosDraft(); track d.nombre + $index; let i = $index) {
+        <li class="flex flex-wrap items-center justify-between gap-3 py-3">
+          <div class="min-w-0">
+            <p class="font-mono text-sm font-semibold text-ink">
+              {{ d.nombre }}
+            </p>
+            <p class="mt-0.5 text-xs text-ink-muted">
+              {{ resumen(d) }}
+              @if (etiquetaDias(d); as dias) {
+                <span class="font-semibold tabular-nums" [class]="claseDias(d)">
+                  · {{ dias }}</span
+                >
+              }
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" class="btn" (click)="abrirEdicion(i)">
+              Editar
+            </button>
             <button
               type="button"
-              class="btn shrink-0 px-2"
+              class="btn btn-danger"
               title="Quitar"
-              (click)="removeDominio($index)">
+              (click)="quitarDominio(i)">
               <pt-icon name="basura" class="h-4 w-4" />
+              Quitar
             </button>
           </div>
-          <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
-            <label>
-              <span class="mb-1 block text-ink-subtle">Vence</span>
-              <input
-                class="field"
-                type="date"
-                [name]="'dm-vence-' + $index"
-                [ngModel]="fechaCorta(d.venceEn)"
-                (ngModelChange)="updateDominio($index, { venceEn: $event })" />
-            </label>
-            <label>
-              <span class="mb-1 block text-ink-subtle">Registrador</span>
-              <input
-                class="field"
-                type="text"
-                [name]="'dm-reg-' + $index"
-                [ngModel]="d.registrador"
-                (ngModelChange)="
-                  updateDominio($index, { registrador: $event })
-                " />
-            </label>
-            <label>
-              <span class="mb-1 block text-ink-subtle">Costo</span>
-              <input
-                class="field"
-                type="number"
-                step="0.01"
-                [name]="'dm-costo-' + $index"
-                [ngModel]="d.costo"
-                (ngModelChange)="updateDominio($index, { costo: $event })" />
-            </label>
-            <label>
-              <span class="mb-1 block text-ink-subtle">Moneda</span>
-              <input
-                class="field"
-                type="text"
-                [name]="'dm-moneda-' + $index"
-                [ngModel]="d.moneda"
-                (ngModelChange)="updateDominio($index, { moneda: $event })" />
-            </label>
-            <label class="col-span-2">
-              <span class="mb-1 block text-ink-subtle">Notas</span>
-              <input
-                class="field"
-                type="text"
-                [name]="'dm-notas-' + $index"
-                [ngModel]="d.notas"
-                (ngModelChange)="updateDominio($index, { notas: $event })" />
-            </label>
-            <label class="col-span-2 flex items-center gap-2">
-              <input
-                type="checkbox"
-                [checked]="d.automatico"
-                (change)="
-                  updateDominio($index, { automatico: !d.automatico })
-                " />
-              <span>Renovación automática</span>
-              <span
-                class="ml-auto font-semibold tabular-nums"
-                [class.text-rose-600]="diasPara(d.venceEn) < 0"
-                [class.text-amber-600]="
-                  diasPara(d.venceEn) >= 0 && diasPara(d.venceEn) <= 45
-                "
-                [class.text-emerald-600]="diasPara(d.venceEn) > 45">
-                {{
-                  d.venceEn
-                    ? diasPara(d.venceEn) < 0
-                      ? "vencido hace " +
-                        -diasPara(d.venceEn) +
-                        (diasPara(d.venceEn) === -1 ? " día" : " días")
-                      : diasPara(d.venceEn) + " días"
-                    : ""
-                }}
-              </span>
-            </label>
-          </div>
-        </div>
+        </li>
       }
-      <div
-        class="rounded-lg border border-dashed border-line bg-surface-muted p-3">
-        <p class="text-xs font-medium text-ink-muted">Nuevo dominio</p>
-        <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
-          <input
-            class="field col-span-2 font-mono"
-            type="text"
-            name="dm-nuevo-nombre"
-            placeholder="nuevo.com.mx"
-            [ngModel]="nuevoDominio().nombre"
-            (ngModelChange)="updateNuevoDominio({ nombre: $event })" />
-          <input
-            class="field"
-            type="date"
-            name="dm-nuevo-vence"
-            [ngModel]="nuevoDominio().venceEn"
-            (ngModelChange)="updateNuevoDominio({ venceEn: $event })" />
-          <input
-            class="field"
-            type="text"
-            name="dm-nuevo-reg"
-            placeholder="Registrador"
-            [ngModel]="nuevoDominio().registrador"
-            (ngModelChange)="updateNuevoDominio({ registrador: $event })" />
-          <input
-            class="field"
-            type="number"
-            step="0.01"
-            name="dm-nuevo-costo"
-            placeholder="Costo"
-            [ngModel]="nuevoDominio().costo"
-            (ngModelChange)="updateNuevoDominio({ costo: $event })" />
-          <input
-            class="field"
-            type="text"
-            name="dm-nuevo-moneda"
-            placeholder="MXN"
-            [ngModel]="nuevoDominio().moneda"
-            (ngModelChange)="updateNuevoDominio({ moneda: $event })" />
-          <button type="button" class="btn col-span-2" (click)="addDominio()">
-            <pt-icon name="mas" class="h-4 w-4" />
-            Agregar
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div class="mt-3 hidden overflow-x-auto md:block">
-      <table class="w-full min-w-[900px] text-xs">
-        <thead class="text-left text-ink-subtle">
-          <tr>
-            <th class="py-1 pr-2 font-medium">Dominio</th>
-            <th class="py-1 pr-2 font-medium">Registrador</th>
-            <th class="py-1 pr-2 font-medium">Vence</th>
-            <th class="py-1 pr-2 font-medium">Días</th>
-            <th class="py-1 pr-2 font-medium">Costo</th>
-            <th class="py-1 pr-2 font-medium">Moneda</th>
-            <th class="py-1 pr-2 font-medium">Auto</th>
-            <th class="py-1 pr-2 font-medium">Notas</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (d of dominiosDraft(); track $index) {
-            <tr class="border-t border-line">
-              <td class="py-1 pr-2">
-                <input
-                  class="field w-56 font-mono"
-                  type="text"
-                  [name]="'dom-nombre-' + $index"
-                  [ngModel]="d.nombre"
-                  (ngModelChange)="updateDominio($index, { nombre: $event })" />
-              </td>
-              <td class="py-1 pr-2">
-                <input
-                  class="field w-28"
-                  type="text"
-                  [name]="'dom-reg-' + $index"
-                  [ngModel]="d.registrador"
-                  (ngModelChange)="
-                    updateDominio($index, { registrador: $event })
-                  " />
-              </td>
-              <td class="py-1 pr-2">
-                <input
-                  class="field w-36"
-                  type="date"
-                  [name]="'dom-vence-' + $index"
-                  [ngModel]="fechaCorta(d.venceEn)"
-                  (ngModelChange)="
-                    updateDominio($index, { venceEn: $event })
-                  " />
-              </td>
-              <td
-                class="py-1 pr-2 whitespace-nowrap font-semibold tabular-nums"
-                [class.text-rose-600]="diasPara(d.venceEn) < 0"
-                [class.text-amber-600]="
-                  diasPara(d.venceEn) >= 0 && diasPara(d.venceEn) <= 45
-                "
-                [class.text-emerald-600]="diasPara(d.venceEn) > 45">
-                {{
-                  d.venceEn
-                    ? diasPara(d.venceEn) < 0
-                      ? "vencido hace " + -diasPara(d.venceEn)
-                      : diasPara(d.venceEn)
-                    : ""
-                }}
-              </td>
-              <td class="py-1 pr-2">
-                <input
-                  class="field w-24"
-                  type="number"
-                  step="0.01"
-                  [name]="'dom-costo-' + $index"
-                  [ngModel]="d.costo"
-                  (ngModelChange)="updateDominio($index, { costo: $event })" />
-              </td>
-              <td class="py-1 pr-2">
-                <input
-                  class="field w-16"
-                  type="text"
-                  [name]="'dom-moneda-' + $index"
-                  [ngModel]="d.moneda"
-                  (ngModelChange)="updateDominio($index, { moneda: $event })" />
-              </td>
-              <td class="py-1 pr-2 text-center">
-                <input
-                  type="checkbox"
-                  [checked]="d.automatico"
-                  (change)="
-                    updateDominio($index, { automatico: !d.automatico })
-                  " />
-              </td>
-              <td class="py-1 pr-2">
-                <input
-                  class="field"
-                  type="text"
-                  [name]="'dom-notas-' + $index"
-                  [ngModel]="d.notas"
-                  (ngModelChange)="updateDominio($index, { notas: $event })" />
-              </td>
-              <td class="py-1">
-                <button
-                  type="button"
-                  class="btn px-2 py-1"
-                  title="Quitar"
-                  (click)="removeDominio($index)">
-                  <pt-icon name="basura" class="h-4 w-4" />
-                </button>
-              </td>
-            </tr>
-          }
-          <tr class="border-t border-line bg-surface-muted">
-            <td class="py-1 pr-2">
-              <input
-                class="field font-mono"
-                type="text"
-                name="dom-nuevo-nombre"
-                placeholder="nuevo.com.mx"
-                [ngModel]="nuevoDominio().nombre"
-                (ngModelChange)="updateNuevoDominio({ nombre: $event })" />
-            </td>
-            <td class="py-1 pr-2">
-              <input
-                class="field w-28"
-                type="text"
-                name="dom-nuevo-reg"
-                [ngModel]="nuevoDominio().registrador"
-                (ngModelChange)="updateNuevoDominio({ registrador: $event })" />
-            </td>
-            <td class="py-1 pr-2">
-              <input
-                class="field w-36"
-                type="date"
-                name="dom-nuevo-vence"
-                [ngModel]="nuevoDominio().venceEn"
-                (ngModelChange)="updateNuevoDominio({ venceEn: $event })" />
-            </td>
-            <td></td>
-            <td class="py-1 pr-2">
-              <input
-                class="field w-24"
-                type="number"
-                step="0.01"
-                name="dom-nuevo-costo"
-                [ngModel]="nuevoDominio().costo"
-                (ngModelChange)="updateNuevoDominio({ costo: $event })" />
-            </td>
-            <td class="py-1 pr-2">
-              <input
-                class="field w-16"
-                type="text"
-                name="dom-nuevo-moneda"
-                [ngModel]="nuevoDominio().moneda"
-                (ngModelChange)="updateNuevoDominio({ moneda: $event })" />
-            </td>
-            <td class="py-1 pr-2 text-center">
-              <input
-                type="checkbox"
-                [checked]="nuevoDominio().automatico"
-                (change)="
-                  updateNuevoDominio({
-                    automatico: !nuevoDominio().automatico
-                  })
-                " />
-            </td>
-            <td class="py-1 pr-2">
-              <input
-                class="field"
-                type="text"
-                name="dom-nuevo-notas"
-                [ngModel]="nuevoDominio().notas"
-                (ngModelChange)="updateNuevoDominio({ notas: $event })" />
-            </td>
-            <td class="py-1">
-              <button
-                type="button"
-                class="btn px-2 py-1"
-                title="Agregar"
-                (click)="addDominio()">
-                <pt-icon name="mas" class="h-4 w-4" />
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="mt-3 flex flex-wrap items-center gap-3">
-      <button
-        type="button"
-        class="btn btn-primary"
-        [disabled]="ocupado() === 'dominios'"
-        (click)="saveDominios()">
-        Guardar dominios
-      </button>
-      @if (dominiosMensaje(); as m) {
-        <span
-          class="text-xs"
-          [class.text-emerald-700]="m.ok"
-          [class.text-rose-700]="!m.ok"
-          >{{ m.mensaje }}</span
-        >
-      }
-    </div>
+    </ul>
+    @if (dominiosMensaje(); as m) {
+      <p
+        class="mt-3 text-xs"
+        [class.text-emerald-700]="m.ok"
+        [class.text-rose-700]="!m.ok">
+        {{ m.mensaje }}
+      </p>
+    }
   }
 </section>
+
+@if (dialogo()) {
+  <pt-dialogo [titulo]="tituloDialogo()" (cerrar)="cerrarDialogo()">
+    <form
+      id="dominio-form"
+      class="grid gap-3 sm:grid-cols-2"
+      (ngSubmit)="confirmarDialogo()">
+      <label class="sm:col-span-2">
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Dominio</span
+        >
+        <input
+          class="field font-mono"
+          type="text"
+          name="dominio-nombre"
+          placeholder="nuevo.com.mx"
+          [ngModel]="borrador().nombre"
+          (ngModelChange)="cambiarBorrador({ nombre: $event })" />
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Registrador</span
+        >
+        <input
+          class="field"
+          type="text"
+          name="dominio-reg"
+          [ngModel]="borrador().registrador"
+          (ngModelChange)="cambiarBorrador({ registrador: $event })" />
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted">Vence</span>
+        <input
+          class="field"
+          type="date"
+          name="dominio-vence"
+          [ngModel]="fechaCorta(borrador().venceEn)"
+          (ngModelChange)="cambiarBorrador({ venceEn: $event })" />
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted">Costo</span>
+        <input
+          class="field"
+          type="number"
+          step="0.01"
+          name="dominio-costo"
+          [ngModel]="borrador().costo"
+          (ngModelChange)="cambiarBorrador({ costo: $event })" />
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Moneda</span
+        >
+        <input
+          class="field"
+          type="text"
+          name="dominio-moneda"
+          placeholder="MXN"
+          [ngModel]="borrador().moneda"
+          (ngModelChange)="cambiarBorrador({ moneda: $event })" />
+      </label>
+      <label class="sm:col-span-2">
+        <span class="mb-1 block text-xs font-medium text-ink-muted">Notas</span>
+        <input
+          class="field"
+          type="text"
+          name="dominio-notas"
+          [ngModel]="borrador().notas"
+          (ngModelChange)="cambiarBorrador({ notas: $event })" />
+      </label>
+      <label
+        class="inline-flex min-h-11 items-center gap-2 text-sm text-ink sm:col-span-2">
+        <input
+          type="checkbox"
+          class="h-4 w-4 rounded border-line accent-brand"
+          [checked]="borrador().automatico"
+          (change)="cambiarBorrador({ automatico: !borrador().automatico })" />
+        Renovación automática
+      </label>
+      @if (dominiosMensaje(); as m) {
+        @if (!m.ok) {
+          <p class="text-xs text-rose-700 sm:col-span-2">{{ m.mensaje }}</p>
+        }
+      }
+    </form>
+    <div class="dialogo-pie flex flex-wrap items-center gap-2">
+      <button
+        type="submit"
+        form="dominio-form"
+        class="btn btn-primary"
+        [disabled]="ocupado() === 'dominios'">
+        Guardar
+      </button>
+      <button type="button" class="btn" (click)="cerrarDialogo()">
+        Cancelar
+      </button>
+    </div>
+  </pt-dialogo>
+}

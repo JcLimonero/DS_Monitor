@@ -6,167 +6,123 @@
   <ng-container
     *ngTemplateOutlet="tarjetaIntegracion; context: { estado: app }" />
 }
+
 <section class="card card-pad mt-4">
-  <h2 class="text-sm font-semibold text-ink">Agregar un buzón</h2>
-  <p class="mt-1 max-w-3xl text-sm text-ink-muted">
-    De cada buzón salen las juntas (invitaciones con archivo de calendario), los
-    pendientes (correos que piden una acción) y las licencias (recibos de
-    suscripciones). Después de agregarlo, usa "Editar conexión" para poner su
-    servidor y contraseña (o conectarlo con Microsoft).
-  </p>
-  <form
-    class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
-    (ngSubmit)="addMail()">
-    <label>
-      <span class="mb-1 block text-xs font-medium text-ink-muted"
-        >Nombre corto</span
-      >
-      <input
-        class="field"
-        type="text"
-        name="nombre"
-        placeholder="Por ejemplo: Ventas"
-        [ngModel]="newMailLabel()"
-        (ngModelChange)="newMailLabel.set($event)" />
-    </label>
-    <label>
-      <span class="mb-1 block text-xs font-medium text-ink-muted">Correo</span>
-      <input
-        class="field"
-        type="email"
-        name="correo"
-        placeholder="alguien@empresa.com"
-        [ngModel]="newMailEmail()"
-        (ngModelChange)="newMailEmail.set($event)" />
-    </label>
-    <label>
-      <span class="mb-1 block text-xs font-medium text-ink-muted"
-        >Proveedor</span
-      >
-      <select
-        class="field"
-        name="proveedor"
-        [ngModel]="newMailKind()"
-        (ngModelChange)="newMailKind.set($event)">
-        @for (option of mailKinds; track option.kind) {
-          <option [value]="option.kind">{{ option.label }}</option>
-        }
-      </select>
-    </label>
-    <label>
-      <span class="mb-1 block text-xs font-medium text-ink-muted">Color</span>
-      <select
-        class="field"
-        name="color"
-        [ngModel]="newMailColor()"
-        (ngModelChange)="newMailColor.set($event)">
-        @for (color of colors; track color) {
-          <option [value]="color">{{ color }}</option>
-        }
-      </select>
-    </label>
-    <div class="flex items-end">
-      <button
-        type="submit"
-        class="btn btn-primary w-full"
-        [disabled]="!canAddMail()">
-        <pt-icon name="mas" class="h-4 w-4" />
-        Agregar buzón
-      </button>
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h2 class="text-sm font-semibold text-ink">Buzones</h2>
+      <p class="mt-1 max-w-3xl text-sm text-ink-muted">
+        De cada buzón salen las juntas (invitaciones con archivo de calendario),
+        los pendientes (correos que piden una acción) y las licencias (recibos
+        de suscripciones). Después de agregarlo, usa "Editar" para poner su
+        servidor y contraseña (o conectarlo con Microsoft).
+      </p>
     </div>
-  </form>
-</section>
+    <button type="button" class="btn" (click)="abrirAltaBuzon()">
+      <pt-icon name="mas" class="h-4 w-4" />
+      Agregar buzón
+    </button>
+  </div>
 
-<div class="mt-4 space-y-3">
-  @for (row of mailRows(); track row.connection.id) {
-    <section class="card card-pad" [class.opacity-60]="!row.enabled">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="min-w-0">
-          <h2 class="text-sm font-semibold text-ink">
-            {{ row.account?.label ?? row.connection.accountId }}
-            <span class="font-normal text-ink-muted"
-              >· {{ row.kindLabel }}</span
-            >
-          </h2>
-          <p class="mt-0.5 text-xs text-ink-muted">
-            {{ row.account?.detail }}
-          </p>
+  <div class="mt-4 space-y-3">
+    @for (row of mailRows(); track row.connection.id) {
+      <section class="card card-pad" [class.opacity-60]="!row.enabled">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h2 class="text-sm font-semibold text-ink">
+              {{ row.account?.label ?? row.connection.accountId }}
+              <span class="font-normal text-ink-muted"
+                >· {{ row.kindLabel }}</span
+              >
+            </h2>
+            <p class="mt-0.5 text-xs text-ink-muted">
+              {{ row.account?.detail }}
+              @if (row.sync?.lastSync) {
+                · última sync {{ row.sync?.lastSync | relativo }}
+              }
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            @if (admin.disponible) {
+              <span class="chip" [class]="conexionChip(row).clase">
+                {{ conexionChip(row).label }}
+              </span>
+            }
+            @if (row.enabled) {
+              <span class="chip" [class]="statusClass(row.sync?.status)">
+                {{ statusLabel(row.sync?.status) }}
+              </span>
+            } @else {
+              <span
+                class="chip bg-slate-200 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
+                Apagada
+              </span>
+            }
+            @if (row.sync?.demo) {
+              <span
+                class="chip bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+                Demostración
+              </span>
+            }
+          </div>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-          @for (capability of row.capabilities; track capability) {
-            <span class="chip bg-surface-muted text-ink-muted">{{
-              capability
-            }}</span>
-          }
-          @if (admin.disponible) {
-            <span class="chip" [class]="conexionChip(row).clase">
-              {{ conexionChip(row).label }}
-            </span>
-          }
-          @if (row.enabled) {
-            <span class="chip" [class]="statusClass(row.sync?.status)">
-              {{ statusLabel(row.sync?.status) }}
-            </span>
-          } @else {
-            <span
-              class="chip bg-slate-200 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
-              Apagada
-            </span>
-          }
-          @if (row.sync?.demo) {
-            <span
-              class="chip bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
-              Demostración
-            </span>
-          }
-        </div>
-      </div>
 
-      <dl class="mt-3 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
-        <div class="flex gap-2">
-          <dt class="text-ink-subtle">Última sincronización</dt>
-          <dd class="text-ink">
-            {{ row.sync?.lastSync ? (row.sync?.lastSync | relativo) : "nunca" }}
-          </dd>
-        </div>
-      </dl>
-
-      <!-- Conexión del buzón -->
-      @if (admin.disponible) {
-        <div class="mt-3 rounded-lg bg-surface-muted p-3 text-xs">
+        @if (admin.disponible) {
           @if (conexionDe(row.connection.accountId); as conexion) {
             @if ("cargando" in conexion) {
-              <p class="text-ink-muted">Consultando…</p>
+              <p class="mt-3 text-xs text-ink-muted">Consultando…</p>
             } @else if ("error" in conexion) {
-              <p class="text-rose-700 dark:text-rose-300">
+              <p class="mt-3 text-xs text-rose-700 dark:text-rose-300">
                 {{ conexion.error }}
               </p>
             } @else {
-              <div class="flex flex-wrap items-center justify-between gap-2">
-                <p class="text-ink">
-                  <span class="font-medium">{{
-                    metodoLabel[conexion.estado.metodo]
-                  }}</span>
-                  @if (conexion.estado.conectadaComo) {
-                    <span class="text-ink-muted">
-                      · como {{ conexion.estado.conectadaComo }}</span
-                    >
-                  }
-                  @if (conexion.estado.faltante) {
-                    <span class="text-ink-muted">
-                      · falta {{ conexion.estado.faltante }}</span
-                    >
-                  }
-                </p>
-                <div class="flex flex-wrap items-center gap-2">
-                  @if (conexionEditando() !== row.connection.accountId) {
-                    <button
-                      type="button"
-                      class="btn"
-                      (click)="startConnectionEdit(row)">
-                      Editar conexión
-                    </button>
-                  }
+              <p class="mt-3 text-xs text-ink-muted">
+                {{ metodoLabel[conexion.estado.metodo] }}
+                @if (conexion.estado.conectadaComo) {
+                  · como {{ conexion.estado.conectadaComo }}
+                }
+                @if (conexion.estado.faltante) {
+                  · falta {{ conexion.estado.faltante }}
+                }
+              </p>
+            }
+          }
+        } @else {
+          <p class="mt-3 text-xs text-ink-muted">
+            La conexión se edita en la aplicación publicada.
+          </p>
+        }
+
+        @if (pruebas()[row.connection.accountId]; as prueba) {
+          <p
+            class="mt-2 rounded px-2 py-1 text-xs"
+            [class.bg-emerald-100]="prueba.ok"
+            [class.text-emerald-800]="prueba.ok"
+            [class.bg-rose-100]="!prueba.ok"
+            [class.text-rose-800]="!prueba.ok">
+            {{ prueba.mensaje }}
+          </p>
+        }
+
+        @if (row.sync?.error; as error) {
+          <p
+            class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200">
+            {{ error }}
+          </p>
+        }
+
+        <div
+          class="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+          <div class="flex flex-wrap items-center gap-2">
+            @if (admin.disponible) {
+              @if (conexionDe(row.connection.accountId); as conexion) {
+                @if ("estado" in conexion) {
+                  <button
+                    type="button"
+                    class="btn"
+                    (click)="startConnectionEdit(row)">
+                    Editar
+                  </button>
                   @if (
                     row.connection.kind === "microsoft" ||
                     row.connection.kind === "google"
@@ -196,30 +152,39 @@
                     (click)="testConnection(row)">
                     Probar
                   </button>
-                </div>
-              </div>
+                }
+              }
             }
-          } @else {
-            <p class="text-ink-muted">Sin respuesta todavía.</p>
-          }
+            <label class="flex items-center gap-2 text-xs text-ink">
+              <input
+                type="checkbox"
+                [checked]="row.enabled"
+                (change)="
+                  setAccountEnabled(row.connection.accountId, !row.enabled)
+                " />
+              Encendida
+            </label>
+            <button
+              type="button"
+              class="btn btn-danger"
+              title="Quitar este buzón"
+              (click)="removeAccount(row.connection.accountId)">
+              <pt-icon name="basura" class="h-4 w-4" />
+              Quitar
+            </button>
+          </div>
+        </div>
 
-          @if (pruebas()[row.connection.accountId]; as prueba) {
-            <p
-              class="mt-2 rounded px-2 py-1"
-              [class.bg-emerald-100]="prueba.ok"
-              [class.text-emerald-800]="prueba.ok"
-              [class.bg-rose-100]="!prueba.ok"
-              [class.text-rose-800]="!prueba.ok">
-              {{ prueba.mensaje }}
-            </p>
-          }
-
-          @if (conexionEditando() === row.connection.accountId) {
+        @if (conexionEditando() === row.connection.accountId) {
+          <pt-dialogo
+            titulo="Editar conexión"
+            (cerrar)="cancelConnectionEdit()">
             <form
-              class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+              id="conexion-form"
+              class="grid gap-3 sm:grid-cols-2"
               (ngSubmit)="saveConnection(row)">
               <label>
-                <span class="mb-1 block font-medium text-ink-muted"
+                <span class="mb-1 block text-xs font-medium text-ink-muted"
                   >Usuario (correo)</span
                 >
                 <input
@@ -232,7 +197,7 @@
               </label>
               @if (row.connection.kind === "microsoft") {
                 <label>
-                  <span class="mb-1 block font-medium text-ink-muted"
+                  <span class="mb-1 block text-xs font-medium text-ink-muted"
                     >Tenant</span
                   >
                   <input
@@ -243,7 +208,7 @@
                     [ngModel]="credDraft().tenant"
                     (ngModelChange)="updateCred({ tenant: $event })" />
                 </label>
-                <p class="text-ink-muted sm:col-span-2 lg:col-span-4">
+                <p class="text-xs text-ink-muted sm:col-span-2">
                   La aplicación de Entra ID es una sola para todos los buzones
                   de Microsoft y se configura en Integraciones → Microsoft
                   (client ID, secret y tenant). Aquí solo va el correo del
@@ -256,7 +221,7 @@
                 </p>
               } @else {
                 <label>
-                  <span class="mb-1 block font-medium text-ink-muted"
+                  <span class="mb-1 block text-xs font-medium text-ink-muted"
                     >Servidor IMAP</span
                   >
                   <input
@@ -268,7 +233,7 @@
                     (ngModelChange)="updateCred({ host: $event })" />
                 </label>
                 <label>
-                  <span class="mb-1 block font-medium text-ink-muted"
+                  <span class="mb-1 block text-xs font-medium text-ink-muted"
                     >Puerto</span
                   >
                   <input
@@ -279,7 +244,7 @@
                     (ngModelChange)="updateCred({ puerto: $event })" />
                 </label>
                 <label>
-                  <span class="mb-1 block font-medium text-ink-muted"
+                  <span class="mb-1 block text-xs font-medium text-ink-muted"
                     >Contraseña</span
                   >
                   <input
@@ -291,67 +256,107 @@
                     [ngModel]="credDraft().contrasena"
                     (ngModelChange)="updateCred({ contrasena: $event })" />
                 </label>
-                <p class="text-ink-muted sm:col-span-2 lg:col-span-4">
+                <p class="text-xs text-ink-muted sm:col-span-2">
                   Gmail e iCloud piden una contraseña de aplicación, no la
                   normal. La contraseña se guarda en el servidor, nunca en este;
                   el portal no la guarda.
                 </p>
               }
-              <div class="flex items-end gap-2 sm:col-span-2 lg:col-span-4">
-                <button
-                  type="submit"
-                  class="btn btn-primary"
-                  [disabled]="ocupado() === row.connection.accountId">
-                  Guardar
-                </button>
-                <button
-                  type="button"
-                  class="btn"
-                  (click)="cancelConnectionEdit()">
-                  Cancelar
-                </button>
-              </div>
             </form>
+            <div class="dialogo-pie flex flex-wrap items-center gap-2">
+              <button
+                type="submit"
+                form="conexion-form"
+                class="btn btn-primary"
+                [disabled]="ocupado() === row.connection.accountId">
+                Guardar
+              </button>
+              <button
+                type="button"
+                class="btn"
+                (click)="cancelConnectionEdit()">
+                Cancelar
+              </button>
+            </div>
+          </pt-dialogo>
+        }
+      </section>
+    }
+  </div>
+</section>
+
+@if (altaBuzon()) {
+  <pt-dialogo titulo="Agregar un buzón" (cerrar)="cerrarAltaBuzon()">
+    <form
+      id="alta-buzon-form"
+      class="grid gap-3 sm:grid-cols-2"
+      (ngSubmit)="confirmarAltaBuzon()">
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Nombre corto</span
+        >
+        <input
+          class="field"
+          type="text"
+          name="nombre"
+          placeholder="Por ejemplo: Ventas"
+          [ngModel]="newMailLabel()"
+          (ngModelChange)="newMailLabel.set($event)" />
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Correo</span
+        >
+        <input
+          class="field"
+          type="email"
+          name="correo"
+          placeholder="alguien@empresa.com"
+          [ngModel]="newMailEmail()"
+          (ngModelChange)="newMailEmail.set($event)" />
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Proveedor</span
+        >
+        <select
+          class="field"
+          name="proveedor"
+          [ngModel]="newMailKind()"
+          (ngModelChange)="newMailKind.set($event)">
+          @for (option of mailKinds; track option.kind) {
+            <option [value]="option.kind">{{ option.label }}</option>
           }
-        </div>
-      } @else {
-        <p class="mt-3 text-xs text-ink-muted">
-          La conexión se edita en la aplicación publicada.
-        </p>
-      }
-
-      @if (row.sync?.error; as error) {
-        <p
-          class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200">
-          {{ error }}
-        </p>
-      }
-
-      <div
-        class="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-        <div class="flex shrink-0 items-center gap-2">
-          <label class="flex items-center gap-2 text-xs text-ink">
-            <input
-              type="checkbox"
-              [checked]="row.enabled"
-              (change)="
-                setAccountEnabled(row.connection.accountId, !row.enabled)
-              " />
-            Encendida
-          </label>
-          <button
-            type="button"
-            class="btn"
-            title="Quitar este buzón"
-            (click)="removeAccount(row.connection.accountId)">
-            <pt-icon name="basura" class="h-4 w-4" />
-            Quitar
-          </button>
-        </div>
-      </div>
-    </section>
-  }
-</div>
+        </select>
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted">Color</span>
+        <select
+          class="field"
+          name="color"
+          [ngModel]="newMailColor()"
+          (ngModelChange)="newMailColor.set($event)">
+          @for (color of colors; track color) {
+            <option [value]="color">{{ color }}</option>
+          }
+        </select>
+      </label>
+    </form>
+    <div class="dialogo-pie flex flex-wrap items-center gap-2">
+      <button
+        type="submit"
+        form="alta-buzon-form"
+        class="btn btn-primary"
+        [disabled]="!canAddMail()">
+        <pt-icon name="mas" class="h-4 w-4" />
+        Agregar buzón
+      </button>
+      <button type="button" class="btn" (click)="cerrarAltaBuzon()">
+        Cancelar
+      </button>
+    </div>
+  </pt-dialogo>
+}
 
 <ng-template #tarjetaIntegracion let-estado="estado">
   <section class="card card-pad mt-4">

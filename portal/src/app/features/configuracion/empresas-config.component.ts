@@ -19,6 +19,7 @@ import {
   ResultadoPrueba
 } from '../../core/sources/gateway/puente-admin.service';
 import { ACCOUNT_CHIP_CLASS } from '../../ui/account-colors';
+import { DialogoComponent } from '../../ui/dialogo.component';
 import { IconComponent } from '../../ui/icon.component';
 import { RelativePipe } from '../../ui/portal.pipes';
 
@@ -40,6 +41,8 @@ interface Buzon {
   detail?: string;
 }
 
+type DialogoEmpresa = { modo: 'alta' } | { modo: 'edicion'; indice: number };
+
 /**
  * Las empresas del grupo: nombre, descripción para la IA, color, buzones que
  * le pertenecen y si está activa. La lista completa se guarda en el puente;
@@ -47,11 +50,14 @@ interface Buzon {
  * "quiénes somos" de cada prompt y a qué empresa se etiqueta lo que llega
  * por cada buzón. Renombrar reetiqueta lo ya guardado; borrar solo se puede
  * si no hay pendientes abiertos con esa empresa (si no, se desactiva).
+ *
+ * Alta y edición van en un diálogo para que la lista se quede compacta y el
+ * menú de Integraciones no se salga de la vista.
  */
 @Component({
   selector: 'pt-empresas-config',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, RelativePipe],
+  imports: [DialogoComponent, FormsModule, IconComponent, RelativePipe],
   templateUrl: './empresas-config.component.html'
 })
 export class EmpresasConfigComponent {
@@ -65,6 +71,12 @@ export class EmpresasConfigComponent {
   readonly guardadas = signal<Empresa[]>([]);
   readonly mensaje = signal<ResultadoPrueba | undefined>(undefined);
   readonly ocupado = signal(false);
+  readonly dialogo = signal<DialogoEmpresa | undefined>(undefined);
+  readonly borrador = signal<Renglon>(renglonVacio());
+
+  readonly tituloDialogo = computed(() =>
+    this.dialogo()?.modo === 'alta' ? 'Agregar empresa' : 'Editar empresa'
+  );
 
   /** Los buzones del portal y, además, cualquier id que ya tenga una empresa. */
   readonly buzones = computed<Buzon[]>(() => {
@@ -122,43 +134,74 @@ export class EmpresasConfigComponent {
     });
   }
 
-  agregar(): void {
-    this.renglones.update((r) => [
-      ...(r ?? []),
-      {
-        nombre: '',
-        descripcion: '',
-        color: '',
-        cuentas: [],
-        activa: true,
-        nuevo: true
-      }
-    ]);
+  abrirAlta(): void {
+    this.borrador.set(renglonVacio());
+    this.dialogo.set({ modo: 'alta' });
   }
 
-  cambiar(i: number, cambio: Partial<Renglon>): void {
-    this.renglones.update((r) =>
-      (r ?? []).map((x, j) => (j === i ? { ...x, ...cambio } : x))
-    );
+  abrirEdicion(i: number): void {
+    const r = this.renglones()?.[i];
+    if (!r) {
+      return;
+    }
+    this.borrador.set({ ...r, cuentas: [...r.cuentas] });
+    this.dialogo.set({ modo: 'edicion', indice: i });
   }
 
-  /** Marca o desmarca un buzón; un buzón es de una sola empresa. */
-  marcarBuzon(i: number, id: string, marcado: boolean): void {
-    this.renglones.update((r) =>
-      (r ?? []).map((x, j) => {
-        if (j === i) {
-          const sin = x.cuentas.filter((c) => c !== id);
-          return { ...x, cuentas: marcado ? [...sin, id] : sin };
-        }
-        return marcado && x.cuentas.includes(id)
-          ? { ...x, cuentas: x.cuentas.filter((c) => c !== id) }
-          : x;
-      })
-    );
+  cerrarDialogo(): void {
+    this.dialogo.set(undefined);
+  }
+
+  cambiarBorrador(cambio: Partial<Renglon>): void {
+    this.borrador.update((x) => ({ ...x, ...cambio }));
+  }
+
+  marcarBuzonBorrador(id: string, marcado: boolean): void {
+    this.borrador.update((x) => {
+      const sin = x.cuentas.filter((c) => c !== id);
+      return { ...x, cuentas: marcado ? [...sin, id] : sin };
+    });
   }
 
   tieneBuzon(r: Renglon, id: string): boolean {
     return r.cuentas.includes(id);
+  }
+
+  confirmarDialogo(): void {
+    const b = this.borrador();
+    if (!b.nombre.trim()) {
+      this.mensaje.set({
+        ok: false,
+        mensaje: 'Cada empresa necesita un nombre.'
+      });
+      return;
+    }
+    const d = this.dialogo();
+    if (!d) {
+      return;
+    }
+    const fila: Renglon = {
+      ...b,
+      nombre: b.nombre.trim(),
+      descripcion: b.descripcion.trim()
+    };
+    this.renglones.update((lista) => {
+      const next = [...(lista ?? [])];
+      if (d.modo === 'alta') {
+        next.push({ ...fila, nuevo: true });
+      } else {
+        next[d.indice] = fila;
+      }
+      const idx = d.modo === 'alta' ? next.length - 1 : d.indice;
+      const tomadas = new Set(next[idx]?.cuentas ?? []);
+      return next.map((x, j) =>
+        j === idx
+          ? x
+          : { ...x, cuentas: x.cuentas.filter((c) => !tomadas.has(c)) }
+      );
+    });
+    this.dialogo.set(undefined);
+    this.guardar();
   }
 
   mover(i: number, delta: -1 | 1): void {
@@ -174,6 +217,7 @@ export class EmpresasConfigComponent {
       lista[j] = a;
       return lista;
     });
+    this.guardar();
   }
 
   quitar(i: number): void {
@@ -193,6 +237,7 @@ export class EmpresasConfigComponent {
       return;
     }
     this.renglones.update((l) => (l ?? []).filter((_, j) => j !== i));
+    this.guardar();
   }
 
   /** La clase del chip de muestra: el color elegido o el derivado del nombre. */
@@ -200,6 +245,16 @@ export class EmpresasConfigComponent {
     const color =
       r.color || (r.nombre.trim() ? colorDerivado(r.nombre) : 'slate');
     return ACCOUNT_CHIP_CLASS[color];
+  }
+
+  resumen(r: Renglon): string {
+    const partes: string[] = [];
+    if (r.descripcion.trim()) {
+      partes.push(r.descripcion.trim());
+    }
+    const n = r.cuentas.length;
+    partes.push(n === 1 ? '1 buzón' : `${n} buzones`);
+    return partes.join(' · ');
   }
 
   guardar(): void {
@@ -235,6 +290,17 @@ export class EmpresasConfigComponent {
       }
     });
   }
+}
+
+function renglonVacio(): Renglon {
+  return {
+    nombre: '',
+    descripcion: '',
+    color: '',
+    cuentas: [],
+    activa: true,
+    nuevo: true
+  };
 }
 
 function esColor(color: string | undefined): color is AccountColor {

@@ -19,7 +19,7 @@
           grupo.
         </p>
       </div>
-      <button type="button" class="btn" (click)="agregar()">
+      <button type="button" class="btn" (click)="abrirAlta()">
         <pt-icon name="mas" class="h-4 w-4" />
         Agregar empresa
       </button>
@@ -31,103 +31,32 @@
           Todavía no hay empresas. Agrega la primera.
         </p>
       }
-      <div class="mt-4 space-y-3">
-        @for (r of lista; track $index; let i = $index) {
-          <div
-            class="rounded-lg border border-line p-3"
+      <ul class="mt-4 divide-y divide-line">
+        @for (r of lista; track r.id ?? $index; let i = $index) {
+          <li
+            class="flex flex-wrap items-center justify-between gap-3 py-3"
             [class.opacity-60]="!r.activa">
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_2fr_10rem]">
-              <label class="min-w-0">
-                <span class="mb-1 block text-xs font-medium text-ink-muted"
-                  >Nombre (como se etiqueta)</span
-                >
-                <input
-                  class="field"
-                  type="text"
-                  placeholder="Total One"
-                  [ngModel]="r.nombre"
-                  (ngModelChange)="cambiar(i, { nombre: $event })"
-                  name="nombre-{{ i }}" />
-              </label>
-              <label class="min-w-0">
-                <span class="mb-1 block text-xs font-medium text-ink-muted"
-                  >Qué hace (para la IA)</span
-                >
-                <input
-                  class="field"
-                  type="text"
-                  placeholder="CRM para agencias automotrices"
-                  [ngModel]="r.descripcion"
-                  (ngModelChange)="cambiar(i, { descripcion: $event })"
-                  name="descripcion-{{ i }}" />
-              </label>
-              <label class="min-w-0">
-                <span class="mb-1 block text-xs font-medium text-ink-muted"
-                  >Color</span
-                >
-                <div class="flex items-center gap-2">
-                  <select
-                    class="field"
-                    [ngModel]="r.color"
-                    (ngModelChange)="cambiar(i, { color: $event })"
-                    name="color-{{ i }}">
-                    <option value="">Automático</option>
-                    @for (color of colores; track color) {
-                      <option [value]="color">{{ color }}</option>
-                    }
-                  </select>
-                  <span class="chip shrink-0" [class]="claseDe(r)">{{
-                    r.nombre.trim() || "Empresa"
-                  }}</span>
-                </div>
-              </label>
-            </div>
-
-            <fieldset class="mt-3">
-              <legend class="mb-1 text-xs font-medium text-ink-muted">
-                Buzones que le pertenecen
-              </legend>
-              <div class="flex flex-wrap gap-x-4 gap-y-2">
-                @for (b of buzones(); track b.id) {
-                  <label
-                    class="inline-flex min-h-11 items-center gap-2 text-sm text-ink"
-                    [title]="b.detail ?? b.id">
-                    <input
-                      type="checkbox"
-                      class="h-4 w-4 rounded border-line accent-brand"
-                      [checked]="tieneBuzon(r, b.id)"
-                      (change)="
-                        marcarBuzon(i, b.id, $any($event.target).checked)
-                      "
-                      name="buzon-{{ i }}-{{ b.id }}" />
-                    {{ b.label }}
-                  </label>
-                } @empty {
-                  <span class="text-xs text-ink-subtle"
-                    >No hay buzones configurados en el portal.</span
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="chip" [class]="claseDe(r)">{{
+                  r.nombre.trim() || "Empresa"
+                }}</span>
+                @if (!r.activa) {
+                  <span
+                    class="chip bg-slate-200 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"
+                    >Inactiva</span
                   >
                 }
               </div>
-            </fieldset>
-
-            <div class="mt-3 flex flex-wrap items-center gap-2">
-              <label
-                class="inline-flex min-h-11 items-center gap-2 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  class="h-4 w-4 rounded border-line accent-brand"
-                  [checked]="r.activa"
-                  (change)="cambiar(i, { activa: $any($event.target).checked })"
-                  name="activa-{{ i }}" />
-                Activa
-              </label>
-              <span class="grow"></span>
+              <p class="mt-0.5 text-xs text-ink-muted">{{ resumen(r) }}</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 class="btn px-3"
                 title="Subir"
                 aria-label="Subir"
-                [disabled]="i === 0"
+                [disabled]="i === 0 || ocupado()"
                 (click)="mover(i, -1)">
                 <pt-icon name="anterior" class="h-4 w-4 rotate-90" />
               </button>
@@ -136,9 +65,12 @@
                 class="btn px-3"
                 title="Bajar"
                 aria-label="Bajar"
-                [disabled]="i === lista.length - 1"
+                [disabled]="i === lista.length - 1 || ocupado()"
                 (click)="mover(i, 1)">
                 <pt-icon name="siguiente" class="h-4 w-4 rotate-90" />
+              </button>
+              <button type="button" class="btn" (click)="abrirEdicion(i)">
+                Editar
               </button>
               <button
                 type="button"
@@ -149,30 +81,21 @@
                 Quitar
               </button>
             </div>
-          </div>
+          </li>
         }
-      </div>
+      </ul>
 
-      <div class="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          class="btn btn-primary"
-          [disabled]="ocupado() || lista.length === 0"
-          (click)="guardar()">
-          Guardar
-        </button>
-        @if (mensaje(); as m) {
-          <span
-            class="rounded-lg px-3 py-1.5 text-xs"
-            [class]="
-              m.ok
-                ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200'
-                : 'bg-rose-50 text-rose-800 dark:bg-rose-500/10 dark:text-rose-200'
-            ">
-            {{ m.mensaje }}
-          </span>
-        }
-      </div>
+      @if (mensaje(); as m) {
+        <p
+          class="mt-3 rounded-lg px-3 py-1.5 text-xs"
+          [class]="
+            m.ok
+              ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200'
+              : 'bg-rose-50 text-rose-800 dark:bg-rose-500/10 dark:text-rose-200'
+          ">
+          {{ m.mensaje }}
+        </p>
+      }
     } @else {
       <p class="mt-4 text-sm text-ink-muted">Cargando…</p>
     }
@@ -182,5 +105,114 @@
     <p class="mt-3 text-xs text-ink-subtle">
       Última edición {{ fecha | relativo }}.
     </p>
+  }
+
+  @if (dialogo(); as d) {
+    <pt-dialogo [titulo]="tituloDialogo()" (cerrar)="cerrarDialogo()">
+      <form
+        id="empresa-form"
+        class="grid gap-3"
+        (ngSubmit)="confirmarDialogo()">
+        <label class="min-w-0">
+          <span class="mb-1 block text-xs font-medium text-ink-muted"
+            >Nombre (como se etiqueta)</span
+          >
+          <input
+            class="field"
+            type="text"
+            placeholder="Total One"
+            [ngModel]="borrador().nombre"
+            (ngModelChange)="cambiarBorrador({ nombre: $event })"
+            name="empresa-nombre" />
+        </label>
+        <label class="min-w-0">
+          <span class="mb-1 block text-xs font-medium text-ink-muted"
+            >Qué hace (para la IA)</span
+          >
+          <input
+            class="field"
+            type="text"
+            placeholder="CRM para agencias automotrices"
+            [ngModel]="borrador().descripcion"
+            (ngModelChange)="cambiarBorrador({ descripcion: $event })"
+            name="empresa-descripcion" />
+        </label>
+        <label class="min-w-0">
+          <span class="mb-1 block text-xs font-medium text-ink-muted"
+            >Color</span
+          >
+          <div class="flex items-center gap-2">
+            <select
+              class="field"
+              [ngModel]="borrador().color"
+              (ngModelChange)="cambiarBorrador({ color: $event })"
+              name="empresa-color">
+              <option value="">Automático</option>
+              @for (color of colores; track color) {
+                <option [value]="color">{{ color }}</option>
+              }
+            </select>
+            <span class="chip shrink-0" [class]="claseDe(borrador())">{{
+              borrador().nombre.trim() || "Empresa"
+            }}</span>
+          </div>
+        </label>
+        <fieldset>
+          <legend class="mb-1 text-xs font-medium text-ink-muted">
+            Buzones que le pertenecen
+          </legend>
+          <div class="flex flex-wrap gap-x-4 gap-y-2">
+            @for (b of buzones(); track b.id) {
+              <label
+                class="inline-flex min-h-11 items-center gap-2 text-sm text-ink"
+                [title]="b.detail ?? b.id">
+                <input
+                  type="checkbox"
+                  class="h-4 w-4 rounded border-line accent-brand"
+                  [checked]="tieneBuzon(borrador(), b.id)"
+                  (change)="
+                    marcarBuzonBorrador(b.id, $any($event.target).checked)
+                  "
+                  name="empresa-buzon-{{ b.id }}" />
+                {{ b.label }}
+              </label>
+            } @empty {
+              <span class="text-xs text-ink-subtle"
+                >No hay buzones configurados en el portal.</span
+              >
+            }
+          </div>
+        </fieldset>
+        <label class="inline-flex min-h-11 items-center gap-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            class="h-4 w-4 rounded border-line accent-brand"
+            [checked]="borrador().activa"
+            (change)="cambiarBorrador({ activa: $any($event.target).checked })"
+            name="empresa-activa" />
+          Activa
+        </label>
+        @if (mensaje(); as m) {
+          @if (!m.ok) {
+            <p
+              class="rounded-lg bg-rose-50 px-3 py-1.5 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200">
+              {{ m.mensaje }}
+            </p>
+          }
+        }
+      </form>
+      <div class="dialogo-pie flex flex-wrap items-center gap-2">
+        <button
+          type="submit"
+          form="empresa-form"
+          class="btn btn-primary"
+          [disabled]="ocupado()">
+          Guardar
+        </button>
+        <button type="button" class="btn" (click)="cerrarDialogo()">
+          Cancelar
+        </button>
+      </div>
+    </pt-dialogo>
   }
 }
