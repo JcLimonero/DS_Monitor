@@ -68,6 +68,41 @@ const HOLGURA_MINIMA_MS = 5 * 60_000;
  * le espera vez y media su frecuencia.
  */
 export const SILENCIO_MS = 60 * 60_000;
+const MINUTOS_DIA = 24 * 60;
+
+/** Identificador corto de una integración, igual que al registrar. */
+export function claveDeIntegracion(nombre: string): string {
+  return nombre
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
+/**
+ * Minutos a esperar entre corridas de verdad cuando el trabajo cae en
+ * ciertos días de la semana (0=dom … 6=sáb). El hueco más largo (jueves →
+ * martes = 5 días) es el que cuenta para no marcar "atrasada" en el medio.
+ */
+export function minutosEntreDias(dias: readonly number[]): number {
+  const u = [
+    ...new Set(dias.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))
+  ].sort((a, b) => a - b);
+  if (u.length <= 1) {
+    return 7 * MINUTOS_DIA;
+  }
+  let max = 0;
+  for (let i = 0; i < u.length; i++) {
+    const a = u[i]!;
+    const b = u[(i + 1) % u.length]!;
+    const hueco = (b - a + 7) % 7 || 7;
+    if (hueco > max) {
+      max = hueco;
+    }
+  }
+  return max * MINUTOS_DIA;
+}
 
 /** Registra (o reemplaza) la ultima corrida de una integracion. */
 export function registrarEjecucion(
@@ -76,12 +111,7 @@ export function registrarEjecucion(
   envio: EnvioEjecucion,
   ahora = new Date()
 ): { ejecuciones: Ejecuciones; ejecucion: Ejecucion } {
-  const integracion = (envio.integracion ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60);
+  const integracion = claveDeIntegracion(envio.integracion ?? '');
   if (!integracion) {
     throw new ErrorPuente(
       'Falta "integracion": un identificador corto de lo que corrió (odoo-sync, barrido-correo).',
@@ -135,6 +165,30 @@ export function registrarEjecucion(
       resultado === 'error' ? (previa?.erroresSeguidos ?? 0) + 1 : 0
   };
   return { ejecuciones: { ...previas, [clave]: ejecucion }, ejecucion };
+}
+
+/**
+ * Actualiza solo la frecuencia esperada, sin contar una corrida. Sirve
+ * cuando el cron mira el reloj cada 15 min pero el trabajo es semanal: la
+ * pantalla deja de decir "cada 15 min" y "atrasada" en cuanto arranca.
+ */
+export function actualizarEspera(
+  previas: Ejecuciones,
+  emisor: string,
+  nombre: string,
+  cadaMinutos: number
+): Ejecuciones | undefined {
+  const integracion = claveDeIntegracion(nombre);
+  if (!integracion) {
+    return undefined;
+  }
+  const clave = `${emisor}/${integracion}`;
+  const previa = previas[clave];
+  const espera = numeroPositivo(cadaMinutos);
+  if (!previa || !espera || previa.cadaMinutos === espera) {
+    return undefined;
+  }
+  return { ...previas, [clave]: { ...previa, cadaMinutos: espera } };
 }
 
 /** Cuanto puede callar una integracion antes de darse por atrasada. */

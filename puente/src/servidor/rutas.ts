@@ -171,8 +171,10 @@ import {
 } from '../ingesta/rutas-ingesta.js';
 import type { TipoIngesta } from '../ingesta/modelos.js';
 import {
+  actualizarEspera,
   avisosPendientes,
   listarEjecuciones,
+  minutosEntreDias,
   registrarEjecucion,
   type AvisosEjecuciones,
   type Ejecuciones
@@ -4393,6 +4395,7 @@ export function construirRutas(
   programables.push({
     nombre: 'solicitud de estatus',
     cadaMinutos: 15,
+    esperarMinutos: () => minutosEntreDias(datos.estatusConfig.leer().dias),
     correr: async () => {
       const ahora = new Date();
       const local = new Date(
@@ -4404,10 +4407,10 @@ export function construirRutas(
         !programa.dias.includes(local.getDay()) ||
         local.getHours() < programa.hora
       ) {
-        return;
+        return 'omitida';
       }
       if (datos.estatusPedido.leer().dia === dia || !cfg().acceso) {
-        return;
+        return 'omitida';
       }
       const marcados = (await equipoCompleto()).some(
         (p) => p.pedirEstatus && p.email
@@ -4420,6 +4423,7 @@ export function construirRutas(
       console.log(
         `[puente] estatus pedido a ${r.enviados.length}${r.errores.length ? `, ${r.errores.length} con error` : ''}`
       );
+      return;
     }
   });
 
@@ -4600,12 +4604,29 @@ export function construirRutas(
     correr: async () => {
       const inicio = Date.now();
       let error: unknown;
+      let omitida = false;
       try {
-        await tarea.correr();
+        omitida = (await tarea.correr()) === 'omitida';
       } catch (e) {
         error = e;
       }
+      const espera =
+        (typeof tarea.esperarMinutos === 'function'
+          ? tarea.esperarMinutos()
+          : tarea.esperarMinutos) ?? tarea.cadaMinutos;
       try {
+        if (omitida && !error) {
+          const actualizadas = actualizarEspera(
+            datos.ejecuciones.leer(),
+            'ds-monitor',
+            tarea.nombre,
+            espera
+          );
+          if (actualizadas) {
+            await datos.ejecuciones.escribir(actualizadas);
+          }
+          return;
+        }
         const { ejecuciones } = registrarEjecucion(
           datos.ejecuciones.leer(),
           'ds-monitor',
@@ -4621,7 +4642,7 @@ export function construirRutas(
               : undefined,
             detalle: error instanceof Error ? error.stack : undefined,
             duracionMs: Date.now() - inicio,
-            cadaMinutos: tarea.cadaMinutos
+            cadaMinutos: espera
           }
         );
         await datos.ejecuciones.escribir(ejecuciones);
@@ -4676,6 +4697,7 @@ export function construirRutas(
   programables.push({
     nombre: 'sin asignar',
     cadaMinutos: 15,
+    esperarMinutos: 7 * 24 * 60,
     correr: async () => {
       const ahora = new Date();
       const local = new Date(
@@ -4688,7 +4710,7 @@ export function construirRutas(
         local.getHours() < 8 ||
         previo.sinAsignar === semana
       ) {
-        return;
+        return 'omitida';
       }
       const abiertos = (await fuentes.pendientes()).filter(
         (t) => t.status !== 'hecho' && !t.personal
@@ -4728,6 +4750,7 @@ export function construirRutas(
       await mandarTelegram(
         `<b>DS Monitor · lunes</b>\n${texto}\n${cfg().urlPortal}/pendientes?owner=nadie`
       );
+      return;
     }
   });
 

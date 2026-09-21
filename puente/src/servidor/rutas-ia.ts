@@ -165,8 +165,15 @@ const MAXIMO_POR_LOTE = 40;
 
 export interface Programable {
   nombre: string;
+  /** Cada cuánto mira el reloj. No es la frecuencia de trabajo. */
   cadaMinutos: number;
-  correr: () => Promise<void>;
+  /**
+   * Cada cuánto se espera que haga el trabajo de verdad (lunes, martes y
+   * jueves…). Si no va, la pantalla toma `cadaMinutos` y marca atrasada.
+   */
+  esperarMinutos?: number | (() => number);
+  /** `omitida` = no era hora: no cuenta como corrida. */
+  correr: () => Promise<void | 'omitida'>;
 }
 
 export interface ServiciosIa {
@@ -963,12 +970,13 @@ export function registrarRutasIa(
       ultimo.semana === semanaIso(ahora) ||
       !d.cfg().acceso
     ) {
-      return;
+      return 'omitida';
     }
     const r = await enviarSemana(undefined, ahora);
     console.log(
       `[puente] correo semanal: ${r.enviados.length} enviados${r.errores.length ? `, ${r.errores.length} con error` : ''}`
     );
+    return;
   };
 
   // A las 8 de la mañana, un push con el arranque del dia: lo cerrado ayer,
@@ -981,7 +989,7 @@ export function registrarRutasIa(
     );
     const dia = local.toISOString().slice(0, 10);
     if (local.getHours() < 8 || ultimoInicio === dia) {
-      return;
+      return 'omitida';
     }
     ultimoInicio = dia;
     const tablero = await armarTablero(d.fuentes, ahora);
@@ -996,6 +1004,7 @@ export function registrarRutasIa(
       url: '/hoy',
       etiqueta: 'inicio-dia'
     });
+    return;
   };
 
   // A pedido, desde la tarjeta: a quién asignarlo y de qué empresa es. Los
@@ -1052,8 +1061,18 @@ export function registrarRutasIa(
   return {
     preguntar: preguntarSuelto,
     programables: [
-      { nombre: 'correo semanal', cadaMinutos: 15, correr: semanaSiToca },
-      { nombre: 'inicio del día', cadaMinutos: 15, correr: inicioDelDia }
+      {
+        nombre: 'correo semanal',
+        cadaMinutos: 15,
+        esperarMinutos: 7 * 24 * 60,
+        correr: semanaSiToca
+      },
+      {
+        nombre: 'inicio del día',
+        cadaMinutos: 15,
+        esperarMinutos: 24 * 60,
+        correr: inicioDelDia
+      }
     ],
     conVeredictos
   };
