@@ -80,6 +80,7 @@ const comprobado: [
   true,
   true,
   true,
+  true,
   true
 ];
 
