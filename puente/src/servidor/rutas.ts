@@ -210,6 +210,7 @@ import {
 } from '../nucleo/comandos-telegram.js';
 import { Cache } from '../nucleo/cache.js';
 import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
+import { REVISION_MINUTOS } from '../nucleo/programador.js';
 import { licenciasAnthropic } from '../proveedores/anthropic.js';
 import { consumoOpenRouter } from '../proveedores/openrouter.js';
 import {
@@ -3693,11 +3694,11 @@ export function construirRutas(
 
   programables.push({
     nombre: 'juntas de Fireflies',
-    cadaMinutos: 15,
+    cadaMinutos: REVISION_MINUTOS.juntas,
     correr: async () => {
       const fireflies = cfg().fireflies;
       if (!fireflies) {
-        return;
+        return 'omitida';
       }
       const procesadas = datos.firefliesProcesadas.leer();
       const recientes = await transcripcionesRecientes(fireflies, 3, 20);
@@ -3716,6 +3717,7 @@ export function construirRutas(
           );
         }
       }
+      return;
     }
   });
 
@@ -4394,7 +4396,7 @@ export function construirRutas(
   // Los dias y a la hora configurados, a quien tenga la marca "pedir estatus".
   programables.push({
     nombre: 'solicitud de estatus',
-    cadaMinutos: 15,
+    cadaMinutos: REVISION_MINUTOS.diario,
     esperarMinutos: () => minutosEntreDias(datos.estatusConfig.leer().dias),
     correr: async () => {
       const ahora = new Date();
@@ -4497,10 +4499,10 @@ export function construirRutas(
   // todos si no tiene) y sitios caidos (a todos). Cada cosa se avisa una vez.
   programables.push({
     nombre: 'avisos push',
-    cadaMinutos: 15,
+    cadaMinutos: REVISION_MINUTOS.avisos,
     correr: async () => {
       if (push.lista().length === 0) {
-        return;
+        return 'omitida';
       }
       const ahora = new Date();
       const avisados = { ...datos.pushAvisados.leer() };
@@ -4579,6 +4581,7 @@ export function construirRutas(
           )
         );
       }
+      return;
     }
   });
 
@@ -4696,7 +4699,7 @@ export function construirRutas(
   // semana.
   programables.push({
     nombre: 'sin asignar',
-    cadaMinutos: 15,
+    cadaMinutos: REVISION_MINUTOS.semanal,
     esperarMinutos: 7 * 24 * 60,
     correr: async () => {
       const ahora = new Date();
@@ -4756,7 +4759,7 @@ export function construirRutas(
 
   programables.push({
     nombre: 'vigilancia de servicios',
-    cadaMinutos: 5,
+    cadaMinutos: REVISION_MINUTOS.vigilancia,
     correr: async () => {
       const ahora = new Date();
       const sitios = cfg().monitoreo

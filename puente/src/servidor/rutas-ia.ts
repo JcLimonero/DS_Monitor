@@ -71,6 +71,7 @@ import type {
   TaskItem
 } from '../nucleo/contrato.js';
 import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
+import { REVISION_MINUTOS } from '../nucleo/programador.js';
 import type { AlmacenJson } from '../datos/almacen-json.js';
 import type { Anotaciones } from '../pendientes/anotaciones.js';
 import type { Clasificacion } from '../proveedores/ia.js';
@@ -1063,13 +1064,13 @@ export function registrarRutasIa(
     programables: [
       {
         nombre: 'correo semanal',
-        cadaMinutos: 15,
+        cadaMinutos: REVISION_MINUTOS.semanal,
         esperarMinutos: 7 * 24 * 60,
         correr: semanaSiToca
       },
       {
         nombre: 'inicio del día',
-        cadaMinutos: 15,
+        cadaMinutos: REVISION_MINUTOS.diario,
         esperarMinutos: 24 * 60,
         correr: inicioDelDia
       }

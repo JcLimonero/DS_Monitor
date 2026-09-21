@@ -1,6 +1,23 @@
 import type { Programable } from '../servidor/rutas-ia.js';
 
 /**
+ * Cada cuánto se despierta cada tipo de tarea. No es la frecuencia de
+ * trabajo: el lunes y el estatus corren una vez; esto solo mira el reloj.
+ */
+export const REVISION_MINUTOS = {
+  /** Sitios caídos y ejecuciones calladas. */
+  vigilancia: 5,
+  /** Transcripciones nuevas de juntas. */
+  juntas: 30,
+  /** Vence hoy y caídas al celular. */
+  avisos: 30,
+  /** Una vez al día a cierta hora. */
+  diario: 60,
+  /** Una vez a la semana (lunes). */
+  semanal: 180
+} as const;
+
+/**
  * Lo que el puente hace solo, sin que nadie abra el portal: releer los
  * buzones para registrar pendientes nuevos, mandar el correo del lunes,
  * tener listo el resumen del dia. Cada tarea corre a su intervalo, nunca dos
