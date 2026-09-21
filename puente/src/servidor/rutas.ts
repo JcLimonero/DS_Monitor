@@ -1560,6 +1560,20 @@ export function construirRutas(
     return resumen;
 
     async function atenderUno(tarea: TaskItem): Promise<void> {
+      // Un barrido largo convive con la lectura programada de buzones: si
+      // mientras tanto alguien (o esa lectura) ya lo asigno, lo sugirio o lo
+      // marco intentado, aqui ya no hay nada que hacer.
+      const fresca = datos.anotaciones.leer()[tarea.id];
+      if (
+        fresca?.asignado ||
+        fresca?.sugerencia ||
+        fresca?.eliminado ||
+        fresca?.hecho ||
+        (!opciones.reintentar && fresca?.autoAsignacionIntentada)
+      ) {
+        resumen.omitidos++;
+        return;
+      }
       const porRegla = responsableAprendido(tarea, aprendido);
       const persona = porRegla && enEquipo(porRegla);
       if (persona) {
