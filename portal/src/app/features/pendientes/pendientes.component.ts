@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   computed,
   effect,
@@ -20,7 +21,12 @@ import {
   TaskStatus
 } from '../../core/models';
 import { EMPRESAS } from '../../core/ia/ia.models';
-import { IaService } from '../../core/ia/ia.service';
+import { IaService, describirError } from '../../core/ia/ia.service';
+import {
+  EstadoBarrido,
+  PuenteAdminService,
+  ResumenAutoasignacion
+} from '../../core/sources/gateway/puente-admin.service';
 import { AvisosService } from '../../core/avisos/avisos.service';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { SesionService } from '../../core/acceso/sesion.service';
@@ -74,7 +80,9 @@ export class PendientesComponent {
   private readonly local = inject(LocalTaskStore);
   private readonly avisos = inject(AvisosService);
   private readonly sesion = inject(SesionService);
-  private readonly ia = inject(IaService);
+  private readonly admin = inject(PuenteAdminService);
+  /** Con puente y equipo capturado se puede pedir el barrido de autoasignación. */
+  readonly ia = inject(IaService);
 
   /** El campo de titulo del alta; recibe el foco al abrir el formulario. */
   private readonly tituloNuevo =
@@ -82,6 +90,21 @@ export class PendientesComponent {
 
   constructor() {
     this.ia.cargarEquipo();
+    // Si al entrar hay un barrido en curso (lo arranco otra pestaña, Telegram
+    // o esta misma antes de recargar), se retoma el sondeo.
+    if (this.ia.disponible) {
+      this.admin.estadoAutoasignacion().subscribe({
+        next: (estado) => {
+          if (estado.enCurso) {
+            this.autoasignando.set(true);
+            this.mostrarAvance(estado);
+            this.sondearAutoasignacion();
+          }
+        },
+        error: () => undefined
+      });
+    }
+    inject(DestroyRef).onDestroy(() => this.detenerSondeo());
     effect(() => {
       const campo = this.tituloNuevo();
       if (this.mostrarAlta() && campo) {
@@ -173,6 +196,23 @@ export class PendientesComponent {
         .filter((t) => t.status !== 'hecho' && !t.assignee && !t.personal)
         .length
   );
+
+  /**
+   * Barrido de autoasignación: el botón abre una confirmación en línea y,
+   * al aceptar, el puente recorre en segundo plano todos los pendientes de
+   * correo sin responsable (puede tardar minutos: hasta 40 consultas a la
+   * IA). Mientras corre se pregunta cómo va cada 3 s.
+   */
+  readonly confirmandoAutoasignar = signal(false);
+  /** Incluir los que la IA ya revisó y siguen sin responsable ni sugerencia. */
+  readonly reintentarRevisados = signal(false);
+  readonly autoasignando = signal(false);
+  readonly resultadoAutoasignacion = signal<
+    { texto: string; error?: boolean } | undefined
+  >(undefined);
+  /** Lo asignado hasta ahora, para el "Revisando… (N asignados hasta ahora)". */
+  readonly avanceAutoasignacion = signal<number | undefined>(undefined);
+  private sondeo: ReturnType<typeof setInterval> | undefined;
 
   /** Alta rapida de un pendiente propio. */
   readonly newTitle = signal('');
@@ -360,6 +400,89 @@ export class PendientesComponent {
     this.store.refreshTasks();
   }
 
+  pedirAutoasignar(): void {
+    this.resultadoAutoasignacion.set(undefined);
+    this.reintentarRevisados.set(false);
+    this.confirmandoAutoasignar.set(true);
+  }
+
+  cancelarAutoasignar(): void {
+    this.confirmandoAutoasignar.set(false);
+  }
+
+  autoasignarConfirmado(): void {
+    if (this.autoasignando()) {
+      return;
+    }
+    this.confirmandoAutoasignar.set(false);
+    this.autoasignando.set(true);
+    this.avanceAutoasignacion.set(undefined);
+    this.resultadoAutoasignacion.set(undefined);
+    this.admin
+      .autoasignar({ reintentar: this.reintentarRevisados() })
+      .subscribe({
+        next: () => this.sondearAutoasignacion(),
+        error: (error: unknown) => {
+          this.autoasignando.set(false);
+          this.resultadoAutoasignacion.set({
+            texto: describirError(error),
+            error: true
+          });
+        }
+      });
+  }
+
+  /** Pregunta cómo va cada 3 s hasta que el puente diga que terminó. */
+  private sondearAutoasignacion(): void {
+    this.detenerSondeo();
+    const consultar = () =>
+      this.admin.estadoAutoasignacion().subscribe({
+        next: (estado) => {
+          if (estado.enCurso) {
+            this.mostrarAvance(estado);
+            return;
+          }
+          this.detenerSondeo();
+          this.autoasignando.set(false);
+          this.avanceAutoasignacion.set(undefined);
+          this.resultadoAutoasignacion.set(
+            estado.error
+              ? { texto: `El barrido falló: ${estado.error}`, error: true }
+              : estado.resumen
+                ? { texto: describirAutoasignacion(estado.resumen) }
+                : { texto: 'Sin barridos recientes.' }
+          );
+          // Para ver los responsables nuevos y los chips "Sugerido".
+          this.store.refreshTasks();
+        },
+        error: (error: unknown) => {
+          this.detenerSondeo();
+          this.autoasignando.set(false);
+          this.avanceAutoasignacion.set(undefined);
+          this.resultadoAutoasignacion.set({
+            texto: describirError(error),
+            error: true
+          });
+        }
+      });
+    this.sondeo = setInterval(consultar, 3000);
+    consultar();
+  }
+
+  private mostrarAvance(estado: EstadoBarrido): void {
+    const r = estado.resumen;
+    this.avanceAutoasignacion.set(
+      r ? r.asignadosPorRegla.length + r.asignadosPorIa.length : undefined
+    );
+  }
+
+  private detenerSondeo(): void {
+    if (this.sondeo !== undefined) {
+      clearInterval(this.sondeo);
+      this.sondeo = undefined;
+    }
+  }
+
   private clearFiltersSuave(): void {
     this.search.set('');
     this.owner.set('todos');
@@ -378,6 +501,17 @@ export class PendientesComponent {
     this.sender.set('todos');
     this.foco.set('todos');
   }
+}
+
+/** El resultado del barrido en una línea: qué quedó asignado, sugerido o sin propuesta. */
+function describirAutoasignacion(r: ResumenAutoasignacion): string {
+  const asignados = r.asignadosPorRegla.length + r.asignadosPorIa.length;
+  return (
+    `Asignados ${asignados} (regla ${r.asignadosPorRegla.length}, IA ${r.asignadosPorIa.length})` +
+    ` · Sugeridos ${r.sugeridos.length}` +
+    ` · Sin propuesta ${r.sinPropuesta}` +
+    (r.omitidos > 0 ? ` · ${r.omitidos} por revisar en otra corrida` : '')
+  );
 }
 
 /**

@@ -291,6 +291,64 @@
       <span class="tabular-nums">{{ sinAsignar() }}</span>
       sin responsable
     </button>
+    <!-- Barrido de autoasignacion: solo con puente y equipo capturado. Confirma en linea. -->
+    @if (ia.disponible && ia.equipo().length > 0) {
+      @if (confirmandoAutoasignar()) {
+        <span
+          class="inline-flex flex-wrap items-center gap-2 rounded-lg border border-line px-2 py-1 text-xs">
+          <span class="font-medium text-ink"
+            >¿Autoasignar los sin responsable?</span
+          >
+          <label class="flex items-center gap-1.5 text-ink-muted">
+            <input
+              type="checkbox"
+              class="h-4 w-4 rounded border-line text-brand focus:ring-brand"
+              [ngModel]="reintentarRevisados()"
+              (ngModelChange)="reintentarRevisados.set($event)"
+              name="reintentar-revisados" />
+            Reintentar los ya revisados
+          </label>
+          <button
+            type="button"
+            class="btn btn-primary h-8 px-3 text-xs"
+            (click)="autoasignarConfirmado()">
+            Sí
+          </button>
+          <button
+            type="button"
+            class="btn h-8 px-3 text-xs"
+            (click)="cancelarAutoasignar()">
+            No
+          </button>
+        </span>
+      } @else {
+        <button
+          type="button"
+          class="btn h-8 gap-1.5 px-3 text-xs"
+          [disabled]="autoasignando()"
+          [attr.aria-busy]="autoasignando()"
+          (click)="pedirAutoasignar()">
+          <pt-icon name="equipo" class="h-3.5 w-3.5" />
+          {{
+            !autoasignando()
+              ? "Autoasignar"
+              : avanceAutoasignacion() !== undefined
+                ? "Revisando… (" +
+                  avanceAutoasignacion() +
+                  " asignados hasta ahora)"
+                : "Revisando…"
+          }}
+        </button>
+      }
+      @if (resultadoAutoasignacion(); as r) {
+        <span
+          class="self-center text-xs"
+          [class]="r.error ? 'text-danger' : 'text-ink-muted'"
+          role="status">
+          {{ r.texto }}
+        </span>
+      }
+    }
     @if (porIdentificar() > 0 || sender() === "por_identificar") {
       <button
         type="button"

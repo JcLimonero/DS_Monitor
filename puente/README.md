@@ -69,6 +69,30 @@ con "Asignar" y "×" para descartarla. A la IA se le pregunta una sola vez por
 pendiente y como mucho cinco por lectura (el resto en la siguiente); con el
 equipo vacío no se hace nada.
 
+Lo que ya estaba registrado antes de que hubiera reglas (o más viejo que los
+30 días) se atiende con el **barrido a demanda**: `POST /pendientes/autoasignar`
+(con sesión o `PUENTE_ADMIN_TOKEN`; cuerpo opcional `{ maximoConsultas: 40,
+reintentar: false, soloCuenta }`, tope 100 consultas) recorre los pendientes de
+correo de todas las cuentas sin límite de días con la misma lógica
+(`autoasignarPendientes` en `rutas.ts`, candidatos en
+`src/pendientes/autoasignar.ts`). Como puede tardar minutos y los proxys cortan
+respuestas largas, corre **en segundo plano**: la ruta contesta `202 { enCurso,
+iniciadoEn }` al instante (si ya hay uno en curso, lo mismo sin arrancar otro) y
+`GET /pendientes/autoasignar/estado` dice cómo va: `{ enCurso, iniciadoEn,
+terminadoEn, resumen, error }`, con el resumen parcial mientras avanza y el
+final al terminar (`revisados`, `asignadosPorRegla`, `asignadosPorIa`,
+`sugeridos`, `sinPropuesta`, `omitidos` —se acabaron las consultas o no hay
+IA— y `consultas`). El estado vive en memoria: si el puente reinicia, se pierde.
+Con `reintentar: true` vuelve sobre los que ya se revisaron y siguen sin
+responsable ni sugerencia; en ningún caso toca los asignados, hechos,
+eliminados ni los que alguien ya movió. Lo asignado así queda en la
+trazabilidad como "por barrido". En el portal está como botón **Autoasignar**
+en Pendientes (junto a "N sin responsable", solo con puente y equipo capturado;
+confirma en línea, pregunta el estado cada 3 s —"Revisando… (N asignados hasta
+ahora)"— y al terminar enseña el resumen; si al entrar hay uno en curso, lo
+retoma) y en Telegram como `/autoasignar` (contesta "Revisando…" y manda el
+resumen al terminar; si ya hay uno en curso, lo dice).
+
 Además del responsable, un pendiente puede tener **seguidores** (`followers`):
 se agregan desde el detalle de la tarjeta, reciben el mismo correo con liga, ven
 el pendiente en `/mio/:token` marcado como "seguimiento" (pueden comentar y

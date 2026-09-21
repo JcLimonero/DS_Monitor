@@ -133,6 +133,38 @@ export interface Emisor {
   ultimoEnvio?: string;
 }
 
+/** Un pendiente que el barrido dejó con responsable o con propuesta. */
+export interface PendienteAtendido {
+  id: string;
+  titulo: string;
+  responsable: string;
+}
+
+/** Lo que lleva o dejó un barrido de autoasignación. */
+export interface ResumenAutoasignacion {
+  revisados: number;
+  asignadosPorRegla: PendienteAtendido[];
+  asignadosPorIa: PendienteAtendido[];
+  sugeridos: PendienteAtendido[];
+  sinPropuesta: number;
+  /** Quedaron para otra vez: sin IA o se acabaron las consultas. */
+  omitidos: number;
+  consultas: number;
+}
+
+/**
+ * Cómo va (o cómo quedó) el último barrido. El puente lo tiene en memoria:
+ * si reinició, viene `enCurso: false` sin nada más.
+ */
+export interface EstadoBarrido {
+  enCurso: boolean;
+  iniciadoEn?: string;
+  terminadoEn?: string;
+  /** Parcial mientras corre; final al terminar. */
+  resumen?: ResumenAutoasignacion;
+  error?: string;
+}
+
 const TOKEN_KEY = 'ds-monitor.puente-token';
 
 /**
@@ -328,6 +360,31 @@ export class PuenteAdminService {
     return this.http.post<{ ok: boolean; aviso?: string }>(
       this.url('/pendientes/reasignacion'),
       datos,
+      { headers: this.headers() }
+    );
+  }
+
+  /**
+   * Arranca el barrido de autoasignación: el puente recorre en segundo plano
+   * todos los pendientes de correo sin responsable e intenta asignarlos
+   * (regla aprendida o IA). Contesta al instante; cómo va se pregunta con
+   * `estadoAutoasignacion()`. Si ya hay uno en curso, no arranca otro.
+   */
+  autoasignar(opciones: {
+    maximoConsultas?: number;
+    reintentar?: boolean;
+    soloCuenta?: string;
+  }): Observable<{ enCurso: boolean; iniciadoEn?: string }> {
+    return this.http.post<{ enCurso: boolean; iniciadoEn?: string }>(
+      this.url('/pendientes/autoasignar'),
+      opciones,
+      { headers: this.headers() }
+    );
+  }
+
+  estadoAutoasignacion(): Observable<EstadoBarrido> {
+    return this.http.get<EstadoBarrido>(
+      this.url('/pendientes/autoasignar/estado'),
       { headers: this.headers() }
     );
   }

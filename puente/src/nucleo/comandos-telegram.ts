@@ -2,6 +2,10 @@ import type { Ejecucion, EstadoEjecucion } from '../ingesta/ejecuciones.js';
 import type { MonitorTarget, TaskItem } from './contrato.js';
 import type { Tablero } from '../ia/tablero.js';
 import {
+  describirResumen,
+  type ResumenAutoasignacion
+} from '../pendientes/autoasignar.js';
+import {
   abiertos,
   juntasDelDia,
   paraHoy,
@@ -17,6 +21,7 @@ import {
  *   /hoy         juntas de hoy, vencidos y lo que vence hoy
  *   /pendientes  lo abierto, lo urgente primero
  *   /servicios   la ultima corrida de cada servicio y los sitios caidos
+ *   /autoasignar barrido: busca responsable a los pendientes que no tienen
  *   ?pregunta    la IA contesta con lo que hay en el tablero
  *   /ayuda       esta lista
  */
@@ -25,6 +30,7 @@ export type Comando =
   | { tipo: 'hoy' }
   | { tipo: 'pendientes' }
   | { tipo: 'servicios' }
+  | { tipo: 'autoasignar' }
   | { tipo: 'ayuda' }
   | { tipo: 'pregunta'; texto: string }
   | undefined;
@@ -44,6 +50,9 @@ export function interpretarComando(texto: string): Comando {
     }
     if (nombre === 'servicios' || nombre === 'ejecuciones') {
       return { tipo: 'servicios' };
+    }
+    if (nombre === 'autoasignar' || nombre === 'barrido') {
+      return { tipo: 'autoasignar' };
     }
     if (nombre === 'ayuda' || nombre === 'help') {
       return { tipo: 'ayuda' };
@@ -65,6 +74,7 @@ export const TEXTO_AYUDA =
   '• <code>/hoy</code> — juntas de hoy, vencidos y lo que vence hoy.\n' +
   '• <code>/pendientes</code> — lo abierto, lo urgente primero.\n' +
   '• <code>/servicios</code> — la última corrida de cada servicio y sitios caídos.\n' +
+  '• <code>/autoasignar</code> — barrido: busca responsable a los pendientes de correo que no tienen.\n' +
   '• <code>?pregunta</code> — la IA contesta con lo que hay en el tablero.';
 
 export function textoHoy(tablero: Tablero, ahora = new Date()): string {
@@ -118,6 +128,39 @@ export function textoPendientes(tablero: Tablero, ahora = new Date()): string {
     `\n${lista(todos, 12, true)}` +
     (todos.length > 12 ? `\n… y ${todos.length - 12} más en el portal.` : '')
   );
+}
+
+/** El resultado del barrido de autoasignacion, con quien quedo cada uno. */
+export function textoAutoasignacion(resumen: ResumenAutoasignacion): string {
+  const lineas = [
+    `<b>Autoasignación</b> · ${escapar(describirResumen(resumen))}`
+  ];
+  const renglones = (
+    titulo: string,
+    lista: ResumenAutoasignacion['asignadosPorRegla']
+  ) => {
+    if (lista.length > 0) {
+      lineas.push(
+        `<b>${titulo}</b>\n${lista
+          .slice(0, 12)
+          .map((p) => `• ${escapar(p.titulo)} → ${escapar(p.responsable)}`)
+          .join(
+            '\n'
+          )}${lista.length > 12 ? `\n… y ${lista.length - 12} más.` : ''}`
+      );
+    }
+  };
+  renglones('Asignados por regla', resumen.asignadosPorRegla);
+  renglones('Asignados por la IA', resumen.asignadosPorIa);
+  renglones('Sugeridos (esperan decisión)', resumen.sugeridos);
+  if (resumen.revisados === 0 && resumen.omitidos === 0) {
+    lineas.push('No había pendientes de correo sin responsable que revisar.');
+  } else if (resumen.omitidos > 0) {
+    lineas.push(
+      `Quedaron ${resumen.omitidos} sin revisar (sin IA o se acabaron las consultas); vuelve a mandar /autoasignar.`
+    );
+  }
+  return lineas.join('\n\n');
 }
 
 export function textoServicios(
