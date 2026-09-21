@@ -2544,27 +2544,6 @@ export function construirRutas(
     !!persona.email &&
     correosDelDueno().has(persona.email.trim().toLowerCase());
 
-  /**
-   * El mismo correo llega a varios buzones y cada uno crea su pendiente: el
-   * aviso a la misma persona por el mismo titulo no se repite en 24 h.
-   */
-  const avisosMandados = new Map<string, number>();
-  const AVISO_REPETIDO_MS = 24 * 3600_000;
-  const avisoRepetido = (persona: Person, titulo: string): boolean => {
-    const clave = `${(persona.email ?? persona.id).toLowerCase()}|${asuntoNormalizado(titulo)}`;
-    const ahora = Date.now();
-    for (const [k, en] of avisosMandados) {
-      if (ahora - en > AVISO_REPETIDO_MS) {
-        avisosMandados.delete(k);
-      }
-    }
-    if (avisosMandados.has(clave)) {
-      return true;
-    }
-    avisosMandados.set(clave, ahora);
-    return false;
-  };
-
   const avisarConLiga = async (
     persona: Person,
     id: string,
@@ -2641,9 +2620,6 @@ export function construirRutas(
     }
     if (esDelDueno(persona)) {
       return `${hecho} sin aviso: es tu propio correo.`;
-    }
-    if (avisoRepetido(persona, tarea.title ?? id)) {
-      return `${hecho}; el aviso ya se mando hoy por otro buzon.`;
     }
     const t = tarea;
     const encabezado =
@@ -3011,9 +2987,14 @@ export function construirRutas(
     const t = tarea;
     const esResponsable = !!principal && mismaPersona(principal, para);
     const de = sesion ? ` (${escapar(sesion.correo)})` : '';
-    const encabezado = esResponsable
-      ? `<p>Te asignaron un pendiente en <strong>DS Monitor</strong>${de}:</p>`
-      : `<p>Te agregaron para dar seguimiento a un pendiente en <strong>DS Monitor</strong>${de}:</p>`;
+    // Con copias el encabezado es neutro: lo leen el responsable y quienes
+    // dan seguimiento en el mismo correo.
+    const encabezado =
+      cc.length > 0 && principal
+        ? `<p>Pendiente en <strong>DS Monitor</strong>${de}: responsable <strong>${escapar(principal.name)}</strong>; en copia quienes dan seguimiento.</p>`
+        : esResponsable
+          ? `<p>Te asignaron un pendiente en <strong>DS Monitor</strong>${de}:</p>`
+          : `<p>Te agregaron para dar seguimiento a un pendiente en <strong>DS Monitor</strong>${de}:</p>`;
     // Una liga a la vez: cada una lee y reescribe el mismo archivo.
     const copias: { persona: Person; liga: string }[] = [];
     for (const persona of cc) {
