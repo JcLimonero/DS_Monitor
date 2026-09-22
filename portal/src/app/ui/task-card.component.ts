@@ -188,27 +188,6 @@ const ESPERA_BORRAR_MS = 5000;
                 {{ comments().length === 1 ? 'comentario' : 'comentarios' }}
               </span>
             }
-            <!-- Abierto: hecho o reabrir de un clic, sin pasar por el selector. -->
-            @if (open() && puedeMarcar()) {
-              @if (done()) {
-                <button
-                  type="button"
-                  class="btn ml-auto h-10 px-3 text-xs lg:h-8"
-                  [disabled]="saving()"
-                  (click)="toggle()">
-                  Reabrir
-                </button>
-              } @else {
-                <button
-                  type="button"
-                  class="btn btn-primary ml-auto h-10 px-3 text-xs lg:h-8"
-                  [disabled]="saving()"
-                  (click)="toggle()">
-                  <pt-icon name="ok" class="h-3.5 w-3.5" />
-                  Marcar hecho
-                </button>
-              }
-            }
           </div>
 
           @if (task().description) {
@@ -257,6 +236,29 @@ const ESPERA_BORRAR_MS = 5000;
               </select>
             } @else {
               <span [class]="statusClass()">{{ statusLabel() }}</span>
+            }
+            <!-- Hecho/Reabrir de un clic, sin abrir la tarjeta ni el combo. -->
+            @if (puedeMarcar()) {
+              @if (done()) {
+                <button
+                  type="button"
+                  class="btn h-10 px-2.5 text-xs lg:h-8"
+                  [disabled]="saving()"
+                  title="Volver a pendiente"
+                  (click)="toggle(); $event.stopPropagation()">
+                  Reabrir
+                </button>
+              } @else {
+                <button
+                  type="button"
+                  class="btn btn-primary h-10 gap-1 px-2.5 text-xs lg:h-8"
+                  [disabled]="saving()"
+                  title="Marcar como hecho"
+                  (click)="toggle(); $event.stopPropagation()">
+                  <pt-icon name="ok" class="h-3.5 w-3.5" />
+                  Hecho
+                </button>
+              }
             }
             @if (ia.disponible && ia.equipo().length > 0) {
               <!-- Responsable de tres formas: Mío (me lo asigno, sin correo si
