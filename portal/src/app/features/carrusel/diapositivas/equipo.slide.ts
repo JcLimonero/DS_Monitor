@@ -10,14 +10,14 @@ import { plural } from '../../../core/util/text.util';
 import { RelativePipe } from '../../../ui/portal.pipes';
 
 /** Cuantas personas caben antes de que los renglones se aprieten. */
-const RENGLONES = 6;
+const RENGLONES = 10;
 
 /** Carga del equipo de desarrollo: quién trae más y quién trae vencidos. */
 @Component({
   selector: 'pt-slide-equipo',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RelativePipe],
-  host: { class: 'flex h-full flex-col gap-3' },
+  host: { class: 'flex h-full flex-col gap-2 2xl:gap-3' },
   template: `
     @if (conAsignados() > 0) {
       <p class="shrink-0 text-center tv-row text-ink-muted">
@@ -26,11 +26,12 @@ const RENGLONES = 6;
     }
     @if (cargas().length > 0) {
       <ul
-        class="flex min-h-0 flex-1 flex-col justify-center gap-3 overflow-y-auto">
+        class="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto lg:grid-cols-2 lg:gap-2.5 2xl:grid-cols-1 2xl:gap-3">
         @for (carga of cargas(); track carga.person.id) {
-          <li class="tv-card flex shrink-0 items-center gap-6 px-6 py-4">
+          <li
+            class="tv-card flex shrink-0 items-center gap-3 px-3 py-2.5 lg:gap-4 lg:px-4 lg:py-3 2xl:gap-6 2xl:px-6 2xl:py-4">
             <span
-              class="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-brand-soft text-2xl font-bold text-brand">
+              class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-soft text-base font-bold text-brand lg:h-12 lg:w-12 lg:text-xl 2xl:h-16 2xl:w-16 2xl:text-2xl">
               {{ iniciales(carga.person.name) }}
             </span>
 
@@ -38,18 +39,19 @@ const RENGLONES = 6;
               <span class="block truncate tv-title">{{
                 carga.person.name
               }}</span>
-              <span class="block truncate text-lg text-ink-muted 2xl:text-xl">
+              <span
+                class="block truncate text-sm text-ink-muted lg:text-base 2xl:text-xl">
                 {{ carga.person.role ?? 'Sin rol' }}
               </span>
               @if (carga.oldestOpen; as viejo) {
                 <span
-                  class="mt-1 block truncate text-base text-ink-muted 2xl:text-lg">
+                  class="mt-1 hidden truncate text-sm text-ink-muted lg:block 2xl:text-lg">
                   Más antiguo: {{ viejo.title }} ·
                   {{ viejo.updatedAt | relativo }}
                 </span>
               }
               <span
-                class="mt-2 block h-2 w-full max-w-md overflow-hidden rounded-full bg-surface-muted">
+                class="mt-1.5 block h-1.5 w-full max-w-md overflow-hidden rounded-full bg-surface-muted 2xl:mt-2 2xl:h-2">
                 <span
                   class="block h-full rounded-full"
                   [class]="carga.overdue > 0 ? 'bg-danger' : 'bg-accent'"
@@ -57,17 +59,17 @@ const RENGLONES = 6;
               </span>
             </span>
 
-            <span class="flex shrink-0 gap-6 text-center">
-              <span class="w-28">
+            <span class="flex shrink-0 gap-3 text-center 2xl:gap-6">
+              <span class="w-16 lg:w-20 2xl:w-28">
                 <span
-                  class="block text-4xl font-bold tabular-nums text-ink 2xl:text-5xl">
+                  class="block text-2xl font-bold tabular-nums text-ink lg:text-3xl 2xl:text-5xl">
                   {{ carga.open }}
                 </span>
                 <span class="tv-label">Abiertos</span>
               </span>
-              <span class="w-28">
+              <span class="w-16 lg:w-20 2xl:w-28">
                 <span
-                  class="block text-4xl font-bold tabular-nums 2xl:text-5xl"
+                  class="block text-2xl font-bold tabular-nums lg:text-3xl 2xl:text-5xl"
                   [class]="
                     carga.overdue > 0 ? 'text-danger' : 'text-ink-subtle'
                   ">
@@ -75,9 +77,9 @@ const RENGLONES = 6;
                 </span>
                 <span class="tv-label">Vencidos</span>
               </span>
-              <span class="w-28">
+              <span class="w-16 lg:w-20 2xl:w-28">
                 <span
-                  class="block text-4xl font-bold tabular-nums 2xl:text-5xl"
+                  class="block text-2xl font-bold tabular-nums lg:text-3xl 2xl:text-5xl"
                   [class]="carga.blocked > 0 ? 'text-warn' : 'text-ink-subtle'">
                   {{ carga.blocked }}
                 </span>
