@@ -292,6 +292,8 @@ export class PendientesSlideComponent implements DiapositivaConContenido {
    * campana.
    */
   abrir(tarea: TaskItem): void {
+    // Solo desplegar la tarjeta del diálogo del carrusel; el diálogo del
+    // shell es para la campana y las ligas ?abrir=.
     this.avisos.abrir.set(tarea.id);
     this.respaldo.set(tarea);
     this.seleccionadaId.set(tarea.id);

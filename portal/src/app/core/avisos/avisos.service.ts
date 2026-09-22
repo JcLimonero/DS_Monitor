@@ -19,7 +19,8 @@ export interface Aviso {
 
 /**
  * Avisos del monitor: la campana del encabezado. Se consultan al abrir y
- * cada minuto; al tocar uno se marca leído y lleva al pendiente.
+ * cada minuto; al tocar uno se marca leído y abre el pendiente en un
+ * diálogo (desde cualquier pantalla).
  */
 @Injectable({ providedIn: 'root' })
 export class AvisosService {
@@ -30,13 +31,35 @@ export class AvisosService {
   readonly noLeidos = computed(
     () => this.avisos().filter((a) => !a.leido).length
   );
-  /** El pendiente que hay que abrir al llegar a la lista (viene de un aviso o de la URL). */
+  /**
+   * El pendiente que hay que abrir (campana, liga del correo o carrusel).
+   * La tarjeta se despliega cuando coincide; el shell muestra el diálogo.
+   */
   readonly abrir = signal<string | undefined>(undefined);
+  /**
+   * Id del pendiente en el diálogo del shell. Separado de `abrir` para que
+   * la tarjeta dentro del diálogo no lo cierre al consumir `abrir`.
+   */
+  readonly dialogoId = signal<string | undefined>(undefined);
 
   constructor() {
     if (this.config.gatewayUrl) {
       this.cargar();
       interval(60_000).subscribe(() => this.cargar());
+    }
+  }
+
+  /** Abre el detalle en diálogo (y deja la tarjeta lista desplegada). */
+  abrirEnDialogo(tareaId: string): void {
+    this.abrir.set(tareaId);
+    this.dialogoId.set(tareaId);
+  }
+
+  cerrarDialogo(): void {
+    const id = this.dialogoId();
+    this.dialogoId.set(undefined);
+    if (id && this.abrir() === id) {
+      this.abrir.set(undefined);
     }
   }
 
