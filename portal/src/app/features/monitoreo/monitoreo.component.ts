@@ -1,4 +1,3 @@
-import { IaDiagnosticosComponent } from '../ia/ia-diagnosticos.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -30,7 +29,6 @@ import { StatusPillComponent } from '../../ui/status-pill.component';
   selector: 'pt-monitoreo',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    IaDiagnosticosComponent,
     EmptyStateComponent,
     FormsModule,
     IconComponent,
@@ -115,11 +113,29 @@ export class MonitoreoComponent {
     ].join(' · ');
   });
 
+  constructor() {
+    this.ia.diagnosticos().subscribe({
+      next: (lista) => this.aplicarDiagnosticosSitio(lista),
+      error: () => undefined
+    });
+  }
+
   uptimeClass(uptime: number): string {
     if (uptime >= 99) {
       return 'text-ok';
     }
     return uptime >= 95 ? 'text-warn' : 'text-danger';
+  }
+
+  /** Zona ámbar: caído/degradado o ya hay incident/sugerencia/consejo. */
+  mostrarZonaIa(target: MonitorTarget): boolean {
+    return (
+      target.status === 'caido' ||
+      target.status === 'degradado' ||
+      !!target.incident ||
+      !!target.sugerencia ||
+      !!this.consejo(target.id)
+    );
   }
 
   consejo(id: string): Diagnostico | undefined {
@@ -163,6 +179,44 @@ export class MonitoreoComponent {
       }
     });
   }
+
+  /** Mapea diagnósticos de clase sitio a consejos por targetId (el más reciente). */
+  private aplicarDiagnosticosSitio(lista: Diagnostico[]): void {
+    const porSitio: Record<string, Diagnostico> = {};
+    for (const d of lista) {
+      if (d.clase !== 'sitio') {
+        continue;
+      }
+      const targetId = targetIdDeDiagnostico(d.id);
+      if (!targetId) {
+        continue;
+      }
+      const actual = porSitio[targetId];
+      if (!actual || d.generadoEn > actual.generadoEn) {
+        porSitio[targetId] = d;
+      }
+    }
+    this.consejos.update((m) => {
+      const next = { ...m };
+      for (const [id, d] of Object.entries(porSitio)) {
+        const actual = next[id];
+        if (!actual || d.generadoEn > actual.generadoEn) {
+          next[id] = d;
+        }
+      }
+      return next;
+    });
+  }
+}
+
+/** Id de diagnóstico: `sitio:<targetId>:<lastCheck>` → segundo segmento. */
+function targetIdDeDiagnostico(id: string): string | undefined {
+  if (!id.startsWith('sitio:')) {
+    return undefined;
+  }
+  const resto = id.slice('sitio:'.length);
+  const i = resto.indexOf(':');
+  return i === -1 ? resto || undefined : resto.slice(0, i) || undefined;
 }
 
 /** Lo roto primero: el orden de la rejilla es el orden en que hay que atender. */

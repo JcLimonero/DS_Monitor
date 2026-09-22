@@ -23,10 +23,6 @@
   </div>
 </pt-page-header>
 
-<div class="mb-4">
-  <pt-ia-diagnosticos clase="sitio" />
-</div>
-
 @if (targets().length > 0) {
   <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
     @for (target of targets(); track target.id) {
@@ -90,7 +86,7 @@
           </div>
         </dl>
 
-        @if (target.incident || target.sugerencia || consejo(target.id)) {
+        @if (mostrarZonaIa(target)) {
           <div
             class="space-y-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
             @if (target.incident; as incident) {
@@ -119,6 +115,9 @@
                   class="btn h-8 shrink-0 gap-1 px-2 text-xs"
                   [disabled]="diagnosticando() === target.id"
                   title="La IA recomienda cómo corregirlo"
+                  [attr.aria-label]="
+                    'Pedir a la IA cómo corregir ' + target.name
+                  "
                   (click)="pedirConsejo(target)">
                   <span class="text-sm leading-none">✦</span>
                   {{ diagnosticando() === target.id ? "Pensando…" : "IA" }}
@@ -147,6 +146,14 @@
                     <strong>Qué hacer:</strong> {{ d.accion }}
                   </p>
                 }
+                <details class="mt-2">
+                  <summary class="cursor-pointer text-xs text-ink-subtle">
+                    Evidencia · {{ d.generadoEn | relativo }}
+                  </summary>
+                  <pre
+                    class="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-surface-muted p-2 font-mono text-xs text-ink-muted"
+                    >{{ d.evidencia }}</pre>
+                </details>
               </div>
             }
           </div>
