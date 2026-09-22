@@ -195,11 +195,17 @@ export interface TeamLoad {
   following: number;
   /** Los suyos y los que sigue. */
   tasks: TaskItem[];
+  /**
+   * El abierto a su nombre con `updatedAt` más antiguo: el que más tiempo
+   * lleva sin moverse.
+   */
+  oldestOpen?: TaskItem;
 }
 
 /**
  * La carga por persona: lo que tiene a su nombre cuenta; lo que solo sigue
- * se lista aparte ("+M seguimiento") para no inflar la carga.
+ * se lista aparte ("+M seguimiento") para no inflar la carga. En los
+ * asignados abiertos se apunta también el más antiguo por `updatedAt`.
  */
 export function teamWorkload(
   tasks: readonly TaskItem[],
@@ -233,6 +239,12 @@ export function teamWorkload(
         }
         if (task.status === 'bloqueado') {
           current.blocked++;
+        }
+        if (
+          !current.oldestOpen ||
+          task.updatedAt < current.oldestOpen.updatedAt
+        ) {
+          current.oldestOpen = task;
         }
       }
     }

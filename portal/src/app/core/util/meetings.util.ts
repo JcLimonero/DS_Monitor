@@ -12,13 +12,17 @@ import { Meeting } from '../models';
 
 /** Lo que hace a dos juntas la misma: título normalizado, inicio y fin. */
 export function meetingKey(m: Meeting): string {
-  const titulo = m.title
+  const titulo = texto(m.title)
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
-  return `${titulo}|${m.start.slice(0, 16)}|${m.end.slice(0, 16)}`;
+  return `${titulo}|${texto(m.start).slice(0, 16)}|${texto(m.end).slice(0, 16)}`;
+}
+
+function texto(valor: unknown): string {
+  return typeof valor === 'string' ? valor : '';
 }
 
 export function mergeMeetings(meetings: readonly Meeting[]): Meeting[] {

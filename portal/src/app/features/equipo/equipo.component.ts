@@ -14,6 +14,7 @@ import { formatDay, formatTime, isSameDay } from '../../core/util/date.util';
 import { plural } from '../../core/util/text.util';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
+import { RelativePipe } from '../../ui/portal.pipes';
 import { TaskCardComponent } from '../../ui/task-card.component';
 
 @Component({
@@ -23,6 +24,7 @@ import { TaskCardComponent } from '../../ui/task-card.component';
     RouterLink,
     EmptyStateComponent,
     PageHeaderComponent,
+    RelativePipe,
     TaskCardComponent
   ],
   templateUrl: './equipo.component.html'
@@ -151,6 +153,14 @@ export class EquipoComponent {
       (a, b) => b.open - a.open || a.person.name.localeCompare(b.person.name)
     );
   });
+
+  /**
+   * Solo quienes tienen pendientes abiertos a su nombre: cuántos, cuál es
+   * el más antiguo y cuándo se actualizó.
+   */
+  readonly resumenCarga = computed(() =>
+    this.loads().filter((carga) => carga.open > 0)
+  );
 
   readonly unassigned = computed<TaskItem[]>(() =>
     this.store

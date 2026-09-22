@@ -7,6 +7,7 @@
     "start": "ng serve",
     "build": "ng build --configuration production",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "test": "npx --yes tsx --test src/app/core/state/portal.selectors.prueba.ts",
     "format": "prettier --write \"src/**/*.{ts,html,scss,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,html,scss,json}\""
   },

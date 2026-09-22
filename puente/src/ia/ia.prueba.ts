@@ -11,7 +11,11 @@ import { detectarAlertas, registrarCostos } from './alertas.js';
 import { aplicarVeredictos } from './pendientes.js';
 import { semanaIso } from './repos.js';
 import { semanaDeCadaQuien } from './semana.js';
-import { homologarJuntas, juntasSinHomologar } from '../nucleo/juntas.js';
+import {
+  homologarJuntas,
+  juntasSinHomologar,
+  claveDeJunta
+} from '../nucleo/juntas.js';
 import {
   diaLocal,
   juntasDelDia,
@@ -335,6 +339,17 @@ describe('homologacion de juntas', () => {
       [['c', ['correo-itech']]]
     );
     assert.equal(juntasSinHomologar(juntas, ['correo-nexus'], AHORA).length, 0);
+  });
+
+  it('una junta sin titulo ni fechas no truena', () => {
+    const cruda = {
+      ...junta('x', '2026-09-18T13:00:00Z'),
+      title: undefined as unknown as string,
+      start: undefined as unknown as string,
+      end: undefined as unknown as string
+    };
+    assert.equal(claveDeJunta(cruda), '||');
+    assert.doesNotThrow(() => homologarJuntas([cruda]));
   });
 });
 
