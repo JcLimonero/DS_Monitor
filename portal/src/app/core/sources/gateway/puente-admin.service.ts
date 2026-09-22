@@ -400,6 +400,23 @@ export class PuenteAdminService {
     );
   }
 
+  /**
+   * Convierte un acuerdo (subtarea) de una junta Fireflies en pendiente
+   * propio. Devuelve el nuevo y el padre actualizado.
+   */
+  convertirSubtarea(
+    idPadre: string,
+    subId: string
+  ): Observable<{ pendiente: TaskItem; padre: TaskItem }> {
+    return this.http.post<{ pendiente: TaskItem; padre: TaskItem }>(
+      this.url(
+        `/pendientes/${encodeURIComponent(idPadre)}/subtareas/${encodeURIComponent(subId)}/convertir`
+      ),
+      {},
+      { headers: this.headers() }
+    );
+  }
+
   /** El catálogo de empresas del grupo, activas e inactivas. */
   empresas(): Observable<Empresa[]> {
     return this.http.get<Empresa[]>(this.url('/empresas'));

@@ -2,7 +2,9 @@ import type {
   Person,
   TaskItem,
   TaskPriority,
-  TaskStatus
+  TaskStatus,
+  TaskSubtarea,
+  TaskUnread
 } from '../nucleo/contrato.js';
 import { conPrioridadPersonal } from './prioridad.js';
 
@@ -100,6 +102,66 @@ export function limpiarPersona(valor: unknown): Person | undefined {
   };
 }
 
+/** Novedad (correo, respuesta o pendiente nuevo) que viaja con el propio. */
+export function limpiarUnread(valor: unknown): TaskUnread | undefined {
+  if (!valor || typeof valor !== 'object' || Array.isArray(valor)) {
+    return undefined;
+  }
+  const u = valor as Record<string, unknown>;
+  const at = typeof u['at'] === 'string' ? u['at'].trim() : '';
+  const text = typeof u['text'] === 'string' ? u['text'].trim() : '';
+  if (!at || !text) {
+    return undefined;
+  }
+  const kind = (['correo', 'respuesta', 'nuevo'] as const).find(
+    (k) => k === u['kind']
+  );
+  return { at, text, kind };
+}
+
+/** Acuerdos de una junta Fireflies; se conservan al guardar personales. */
+export function limpiarSubtareas(valor: unknown): TaskSubtarea[] | undefined {
+  if (!Array.isArray(valor)) {
+    return undefined;
+  }
+  const salida: TaskSubtarea[] = [];
+  for (const cruda of valor) {
+    if (!cruda || typeof cruda !== 'object' || Array.isArray(cruda)) {
+      continue;
+    }
+    const s = cruda as Record<string, unknown>;
+    const id = typeof s['id'] === 'string' ? s['id'].trim() : '';
+    const titulo = typeof s['titulo'] === 'string' ? s['titulo'].trim() : '';
+    if (!id || !titulo) {
+      continue;
+    }
+    const responsables = Array.isArray(s['responsables'])
+      ? (s['responsables'] as unknown[])
+          .map(limpiarPersona)
+          .filter((p): p is Person => !!p)
+      : undefined;
+    const pendienteId =
+      typeof s['pendienteId'] === 'string' && s['pendienteId'].trim()
+        ? s['pendienteId'].trim()
+        : undefined;
+    const responsableEtiqueta =
+      typeof s['responsableEtiqueta'] === 'string' &&
+      s['responsableEtiqueta'].trim()
+        ? s['responsableEtiqueta'].trim()
+        : undefined;
+    salida.push({
+      id: id.slice(0, 80),
+      titulo: titulo.slice(0, 160),
+      responsables:
+        responsables && responsables.length > 0 ? responsables : undefined,
+      convertida: s['convertida'] === true ? true : undefined,
+      pendienteId,
+      responsableEtiqueta
+    });
+  }
+  return salida.length > 0 ? salida : undefined;
+}
+
 /**
  * Un pendiente propio (alta del portal, dictado, Telegram) listo para
  * escribirse: titulo, detalle con saltos, fotos, fecha/hora. El responsable
@@ -121,6 +183,8 @@ export function limpiarPendienteLocal(
   const personal = t['personal'] === true;
   const dueDate = texto(t['dueDate']);
   const imagenes = limpiarImagenes(t['imagenes']);
+  const unread = limpiarUnread(t['unread']);
+  const subtareas = limpiarSubtareas(t['subtareas']);
   const limpio: TaskItem = {
     id: texto(t['id']) ?? `local-${i}-${Date.now()}`,
     title: title.slice(0, 160),
@@ -139,6 +203,9 @@ export function limpiarPendienteLocal(
     project: texto(t['project']),
     company: texto(t['company']),
     personal: personal ? true : undefined,
+    url: texto(t['url']),
+    unread,
+    subtareas,
     tags: Array.isArray(t['tags'])
       ? (t['tags'] as unknown[]).filter(
           (x): x is string => typeof x === 'string'
