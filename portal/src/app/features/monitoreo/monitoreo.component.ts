@@ -7,6 +7,8 @@ import {
   signal
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Diagnostico } from '../../core/ia/ia.models';
+import { IaService, describirError } from '../../core/ia/ia.service';
 import {
   MONITOR_ENVIRONMENT_LABEL,
   MONITOR_KIND_LABEL,
@@ -41,6 +43,7 @@ import { StatusPillComponent } from '../../ui/status-pill.component';
 })
 export class MonitoreoComponent {
   private readonly store = inject(PortalStore);
+  readonly ia = inject(IaService);
 
   readonly kindLabel = MONITOR_KIND_LABEL;
   readonly statusLabel = MONITOR_STATUS_LABEL;
@@ -53,6 +56,10 @@ export class MonitoreoComponent {
 
   readonly environment = signal<MonitorEnvironment | 'todos'>('todos');
   readonly onlyProblems = signal(false);
+  /** Sitio al que se le está pidiendo consejo a la IA. */
+  readonly diagnosticando = signal<string | undefined>(undefined);
+  readonly consejos = signal<Record<string, Diagnostico>>({});
+  readonly erroresConsejo = signal<Record<string, string>>({});
 
   readonly targets = computed<MonitorTarget[]>(() => {
     const environment = this.environment();
@@ -113,6 +120,48 @@ export class MonitoreoComponent {
       return 'text-ok';
     }
     return uptime >= 95 ? 'text-warn' : 'text-danger';
+  }
+
+  consejo(id: string): Diagnostico | undefined {
+    return this.consejos()[id];
+  }
+
+  errorConsejo(id: string): string | undefined {
+    return this.erroresConsejo()[id];
+  }
+
+  pedirConsejo(target: MonitorTarget): void {
+    if (!this.ia.disponible || this.diagnosticando()) {
+      return;
+    }
+    this.diagnosticando.set(target.id);
+    this.erroresConsejo.update((m) => {
+      const next = { ...m };
+      delete next[target.id];
+      return next;
+    });
+    this.ia.generarDiagnosticos(target.id).subscribe({
+      next: (lista) => {
+        const d = lista.find((x) => x.clase === 'sitio') ?? lista[0];
+        if (d) {
+          this.consejos.update((m) => ({ ...m, [target.id]: d }));
+        } else {
+          this.erroresConsejo.update((m) => ({
+            ...m,
+            [target.id]:
+              'No hubo diagnóstico. Prueba de nuevo o prende «Diagnóstico de caídas» en Integraciones → IA.'
+          }));
+        }
+        this.diagnosticando.set(undefined);
+      },
+      error: (e: unknown) => {
+        this.erroresConsejo.update((m) => ({
+          ...m,
+          [target.id]: describirError(e)
+        }));
+        this.diagnosticando.set(undefined);
+      }
+    });
   }
 }
 

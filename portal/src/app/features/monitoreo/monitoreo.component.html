@@ -90,12 +90,66 @@
           </div>
         </dl>
 
-        @if (target.incident; as incident) {
-          <p
-            class="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
-            <pt-icon name="alerta" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            {{ incident }}
-          </p>
+        @if (target.incident || target.sugerencia || consejo(target.id)) {
+          <div
+            class="space-y-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+            @if (target.incident; as incident) {
+              <p class="flex items-start gap-2">
+                <pt-icon name="alerta" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span class="min-w-0 flex-1">{{ incident }}</span>
+                @if (ia.disponible && ia.activa() !== false) {
+                  <button
+                    type="button"
+                    class="btn h-8 shrink-0 gap-1 px-2 text-xs"
+                    [disabled]="diagnosticando() === target.id"
+                    title="La IA recomienda cómo corregirlo"
+                    [attr.aria-label]="
+                      'Pedir a la IA cómo corregir ' + target.name
+                    "
+                    (click)="pedirConsejo(target)">
+                    <span class="text-sm leading-none">✦</span>
+                    {{ diagnosticando() === target.id ? "Pensando…" : "IA" }}
+                  </button>
+                }
+              </p>
+            } @else if (ia.disponible && ia.activa() !== false) {
+              <div class="flex justify-end">
+                <button
+                  type="button"
+                  class="btn h-8 shrink-0 gap-1 px-2 text-xs"
+                  [disabled]="diagnosticando() === target.id"
+                  title="La IA recomienda cómo corregirlo"
+                  (click)="pedirConsejo(target)">
+                  <span class="text-sm leading-none">✦</span>
+                  {{ diagnosticando() === target.id ? "Pensando…" : "IA" }}
+                </button>
+              </div>
+            }
+            @if (target.sugerencia; as s) {
+              <p class="text-amber-800/90 dark:text-amber-100/80">
+                <strong>Sugerencia:</strong> {{ s }}
+              </p>
+            }
+            @if (errorConsejo(target.id); as e) {
+              <p class="text-danger">{{ e }}</p>
+            }
+            @if (consejo(target.id); as d) {
+              <div
+                class="rounded-md border border-amber-200/80 bg-surface/60 p-2 text-ink dark:border-amber-500/30 dark:bg-surface-muted/40">
+                <p class="font-medium text-ink">{{ d.resumen }}</p>
+                @if (d.causa) {
+                  <p class="mt-1 text-ink-muted">
+                    <strong>Causa:</strong> {{ d.causa }}
+                  </p>
+                }
+                @if (d.accion) {
+                  <p class="text-ink-muted">
+                    <strong>Qué hacer:</strong> {{ d.accion }}
+                  </p>
+                }
+              </div>
+            }
+          </div>
         }
 
         <p class="mt-auto text-xs text-ink-subtle">

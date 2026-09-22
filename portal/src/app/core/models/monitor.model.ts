@@ -29,6 +29,8 @@ export interface MonitorTarget {
   history: MonitorCheck[];
   /** Descripción del incidente en curso, si el destino no está operativo. */
   incident?: string;
+  /** Pista breve de qué revisar, según el último chequeo. */
+  sugerencia?: string;
   accountId: string;
 }
 

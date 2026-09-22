@@ -250,6 +250,8 @@ export interface MonitorTarget {
   lastCheck?: string;
   history: MonitorCheck[];
   incident?: string;
+  /** Pista breve de qué revisar, según el último chequeo. */
+  sugerencia?: string;
   accountId: string;
 }
 
