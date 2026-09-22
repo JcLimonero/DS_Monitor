@@ -15,6 +15,14 @@ import {
   type DatosCorreo,
   type OpcionesIa
 } from './correo.js';
+import {
+  encabezadosAria,
+  esCuentaItech,
+  juntaDesdeAria,
+  parsearConsultaAria,
+  textoPlanoDeCuerpo,
+  yaAgendadaAria
+} from './aria.js';
 import type { EncabezadoCorreo } from './imap.js';
 import { sinEtiquetas } from './mime.js';
 
@@ -422,6 +430,72 @@ export async function leerCorreoMicrosoft(
       }
     }
     siguienteEvento = pagina['@odata.nextLink'];
+  }
+
+  // --- ARIA → calendario iTechDev ---
+  // Tras leer el calendario: si el buzón es itech, crear juntas de
+  // «Nueva consulta agendada» que aún no estén en el calendario.
+  if (esCuentaItech(config.id) || esCuentaItech(config.accountId)) {
+    for (const encabezado of encabezadosAria(encabezados)) {
+      const idMensaje = idPorUid.get(encabezado.uid);
+      if (!idMensaje) {
+        continue;
+      }
+      try {
+        const mensaje = await graph<{
+          body?: { content?: string; contentType?: string };
+        }>(token, `/me/messages/${idMensaje}?$select=body`);
+        const plano = textoPlanoDeCuerpo(
+          mensaje.body?.content ?? '',
+          mensaje.body?.contentType
+        );
+        const consulta = parsearConsultaAria(
+          encabezado.asunto,
+          plano,
+          ahora.getFullYear()
+        );
+        if (!consulta) {
+          continue;
+        }
+        consulta.messageId = idMensaje;
+        if (yaAgendadaAria(juntas, consulta)) {
+          continue;
+        }
+        const creada = await crearEventoMicrosoft(
+          config,
+          juntaDesdeAria(consulta)
+        );
+        console.log(
+          `[puente] ARIA: junta creada «${consulta.nombre}» ${consulta.inicio} → ${creada.id}`
+        );
+        juntas.push({
+          id: `${config.accountId}-${creada.id}`,
+          title: `Consulta ARIA: ${consulta.nombre} · ${consulta.empresa}`,
+          start: consulta.inicio,
+          end: consulta.fin,
+          allDay: false,
+          accountId: config.accountId,
+          status: 'confirmada',
+          attendees: consulta.correo
+            ? [
+                {
+                  id: consulta.correo,
+                  name: consulta.nombre,
+                  email: consulta.correo
+                }
+              ]
+            : [],
+          location: consulta.teamsUrl || 'Microsoft Teams',
+          joinUrl: creada.joinUrl ?? consulta.teamsUrl,
+          notes: consulta.messageId
+        });
+      } catch (error) {
+        console.warn(
+          `[puente] ARIA: no se pudo agendar «${encabezado.asunto}»:`,
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
   }
 
   return {

@@ -8,6 +8,7 @@ import type {
 } from '../nucleo/contrato.js';
 import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
 import { variableContrasena } from '../config/entorno.js';
+import { esCorreoAria } from './aria.js';
 import { calendarioGoogle, tokenDeAccesoGoogle } from './google.js';
 import { ClienteImap, type EncabezadoCorreo } from './imap.js';
 import { extraerCalendario, juntasDeCalendario } from './ics.js';
@@ -385,7 +386,8 @@ export function candidatosParaIa(
         !PUBLICIDAD.test(e.asunto) &&
         !SIN_RESPUESTA.test(e.remitente) &&
         !DEL_MONITOR.test(e.asunto) &&
-        !esCorreoDeTotalOne(e.asunto)
+        !esCorreoDeTotalOne(e.asunto) &&
+        !esCorreoAria(e.asunto, e.remitente)
     )
     .sort((a, b) => b.fecha.localeCompare(a.fecha))
     .map((encabezado) => ({
@@ -858,6 +860,10 @@ export function detectarPendientesConEvidencia(
 
   for (const encabezado of encabezados) {
     if (!encabezado.fecha || PUBLICIDAD.test(encabezado.asunto)) {
+      continue;
+    }
+    // ARIA agenda juntas en el calendario itech; no es un TaskItem.
+    if (esCorreoAria(encabezado.asunto, encabezado.remitente)) {
       continue;
     }
     const recibido = new Date(encabezado.fecha).getTime();
