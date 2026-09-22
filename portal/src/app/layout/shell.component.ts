@@ -1,5 +1,6 @@
 import { IaService } from '../core/ia/ia.service';
 import { EmpresasService } from '../core/empresas/empresas.service';
+import { ProveedoresService } from '../core/proveedores/proveedores.service';
 import {
   VentanaIaBotonComponent,
   VentanaIaComponent
@@ -90,10 +91,14 @@ export class ShellComponent {
       .subscribe({ error: () => undefined });
     // El catálogo de empresas, para los selectores y filtros de todas las
     // pantallas. Se vuelve a pedir al entrar al shell por si la primera vez
-    // (antes de la sesión) el puente no contestó.
+    // (antes de la sesión) el puente no contestó. Lo mismo con proveedores.
     const empresas = inject(EmpresasService);
     if (empresas.error()) {
       empresas.cargar();
+    }
+    const proveedores = inject(ProveedoresService);
+    if (proveedores.error()) {
+      proveedores.cargar();
     }
     // Con un token guardado, el correo de quien entró se pide al puente: el
     // portal lo usa para "Míos" y para el botón "Mío" de las tarjetas, y al

@@ -235,16 +235,20 @@
                 }
                 <label>
                   <span class="mb-1 block text-xs font-medium text-ink-muted"
-                    >Proyecto / cliente</span
+                    >Proveedor / cliente</span
                   >
-                  <input
+                  <select
                     class="field"
-                    type="text"
                     [ngModel]="p.proyecto ?? ''"
                     (ngModelChange)="
                       cambiar($index, { proyecto: $event || undefined })
                     "
-                    name="proyecto-{{ $index }}" />
+                    name="proyecto-{{ $index }}">
+                    <option value="">Sin proveedor</option>
+                    @for (prov of proveedoresPara(p); track prov) {
+                      <option [value]="prov">{{ prov }}</option>
+                    }
+                  </select>
                 </label>
                 @if (p.descripcion) {
                   <p class="text-xs text-ink-muted sm:col-span-2 lg:col-span-3">

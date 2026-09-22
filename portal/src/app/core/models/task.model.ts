@@ -113,7 +113,10 @@ export interface TaskItem {
   updateRequested?: UpdateRequest;
   accountId: string;
   origin: TaskOrigin;
-  /** Proyecto, tablero o equipo al que pertenece. */
+  /**
+   * Cliente o proveedor externo: el nombre de uno del catálogo
+   * (Integraciones → Proveedores).
+   */
   project?: string;
   /** Enlace al sistema de origen para abrir el pendiente ahí. */
   url?: string;

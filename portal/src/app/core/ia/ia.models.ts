@@ -102,6 +102,7 @@ export type JuntaParaAcuerdos = Pick<
 >;
 
 // Las empresas ya no están fijas: ver core/empresas/empresas.service.ts.
+// Los proveedores (campo proyecto) tampoco: ver core/proveedores/proveedores.service.ts.
 
 /** Lo que el puente entendió de un dictado; se corrige antes de guardar. */
 export interface Propuesta {

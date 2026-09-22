@@ -13,6 +13,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { CorreoConfigComponent } from '../configuracion/correo-config.component';
 import { DominiosConfigComponent } from '../configuracion/dominios-config.component';
 import { EmpresasConfigComponent } from '../configuracion/empresas-config.component';
+import { ProveedoresConfigComponent } from '../configuracion/proveedores-config.component';
 import { EquipoConfigComponent } from '../configuracion/equipo-config.component';
 import { AvisosConfigComponent } from '../ia/avisos-config.component';
 import { IaUsosComponent } from '../ia/ia-usos.component';
@@ -27,6 +28,7 @@ import { PageHeaderComponent } from '../../ui/page-header.component';
 type Pestana =
   | 'equipo'
   | 'empresas'
+  | 'proveedores'
   | 'avisos'
   | 'dominios'
   | 'correo'
@@ -48,6 +50,12 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
     id: 'empresas',
     titulo: 'Empresas',
     detalle: 'Las empresas del grupo: nombre, descripción para la IA y buzones'
+  },
+  {
+    id: 'proveedores',
+    titulo: 'Proveedores',
+    detalle:
+      'Clientes y proveedores externos: Vanguardia, Birdom y los que se agreguen'
   },
   {
     id: 'avisos',
@@ -115,6 +123,7 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
     CorreoConfigComponent,
     DominiosConfigComponent,
     EmpresasConfigComponent,
+    ProveedoresConfigComponent,
     EquipoConfigComponent,
     EmisoresConfigComponent,
     IntegracionConfigComponent,
@@ -154,7 +163,7 @@ export class IntegracionesComponent {
     this.mostrarActiva();
   }
 
-  /** Con doce pestañas, en angosto la activa puede quedar fuera de la franja. */
+  /** Con tantas pestañas, en angosto la activa puede quedar fuera de la franja. */
   private mostrarActiva(): void {
     const id = this.activa();
     const boton = this.botones().find(
