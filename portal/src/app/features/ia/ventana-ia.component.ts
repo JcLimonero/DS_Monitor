@@ -58,6 +58,41 @@ export class VentanaIaBotonComponent {
   selector: 'pt-ventana-ia',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, IconComponent],
+  styles: `
+    @keyframes ia-punto {
+      0%,
+      80%,
+      100% {
+        opacity: 0.35;
+        transform: translateY(0);
+      }
+      40% {
+        opacity: 1;
+        transform: translateY(-3px);
+      }
+    }
+    .ia-pensando-punto {
+      animation: ia-punto 1.1s ease-in-out infinite;
+    }
+    .ia-pensando-punto:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+    .ia-pensando-punto:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+    @keyframes ia-brillo {
+      0%,
+      100% {
+        opacity: 0.55;
+      }
+      50% {
+        opacity: 1;
+      }
+    }
+    .ia-pensando-texto {
+      animation: ia-brillo 1.6s ease-in-out infinite;
+    }
+  `,
   template: `
     @if (abierta()) {
       <div
@@ -137,7 +172,26 @@ export class VentanaIaBotonComponent {
               </div>
             }
             @if (ocupado()) {
-              <p class="text-xs text-ink-subtle">Pensando…</p>
+              <div
+                class="inline-flex items-center gap-2 rounded-lg bg-surface-muted px-3 py-2"
+                role="status"
+                aria-live="polite"
+                aria-label="Pensando">
+                <span class="text-brand ia-pensando-texto" aria-hidden="true"
+                  >✦</span
+                >
+                <span class="text-xs text-ink-muted ia-pensando-texto"
+                  >Pensando</span
+                >
+                <span class="inline-flex gap-1" aria-hidden="true">
+                  <span
+                    class="ia-pensando-punto h-1.5 w-1.5 rounded-full bg-brand"></span>
+                  <span
+                    class="ia-pensando-punto h-1.5 w-1.5 rounded-full bg-brand"></span>
+                  <span
+                    class="ia-pensando-punto h-1.5 w-1.5 rounded-full bg-brand"></span>
+                </span>
+              </div>
             }
             @if (error(); as e) {
               <p class="text-xs text-danger">{{ e }}</p>
