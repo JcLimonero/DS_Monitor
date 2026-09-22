@@ -117,6 +117,17 @@ export class LocalTaskStore implements TaskSource {
     this.commit(this.tasksSignal().filter((task) => task.id !== id));
   }
 
+  /** Actualiza campos de un pendiente propio (fotos de referencia, etc.). */
+  patch(id: string, cambio: Partial<TaskItem>): void {
+    this.commit(
+      this.tasksSignal().map((task) =>
+        task.id === id
+          ? { ...task, ...cambio, updatedAt: new Date().toISOString() }
+          : task
+      )
+    );
+  }
+
   /** La siguiente lectura vuelve al servidor (algo cambió allá: una anotación). */
   invalidar(): void {
     this.cargado = false;

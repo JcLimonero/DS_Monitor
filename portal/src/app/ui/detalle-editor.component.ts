@@ -49,7 +49,9 @@ import { IconComponent } from './icon.component';
         <pt-icon name="foto" class="h-3.5 w-3.5" />
         Adjuntar foto
       </button>
-      <span class="text-xs text-ink-subtle">o pégala aquí (Ctrl+V)</span>
+      <span class="text-xs text-ink-subtle"
+        >de referencia: pégala aquí (Ctrl+V)</span
+      >
       @if (aviso()) {
         <span class="text-xs text-danger">{{ aviso() }}</span>
       }

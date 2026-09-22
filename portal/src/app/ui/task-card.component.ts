@@ -32,6 +32,7 @@ import {
 import { LocalTaskStore } from '../core/sources/local/local-task.store';
 import { PortalStore } from '../core/state/portal.store';
 import { isOverdue } from '../core/util/date.util';
+import { MAX_FOTOS } from '../core/util/fotos.util';
 import { sinPrefijosDeCorreo } from '../core/util/text.util';
 import { DetalleEditorComponent } from './detalle-editor.component';
 import { FotosPendienteComponent } from './fotos-pendiente.component';
@@ -204,7 +205,14 @@ const ESPERA_BORRAR_MS = 5000;
               {{ task().description }}
             </p>
           }
-          <pt-fotos-pendiente [urls]="task().imagenes" [compact]="!open()" />
+          @if (!editing()) {
+            <pt-fotos-pendiente
+              [urls]="task().imagenes"
+              [compact]="!open()"
+              [editable]="open() && puedeFotos()"
+              [disabled]="saving()"
+              (imagenesChange)="guardarFotos($event)" />
+          }
 
           <!-- Orden fijo: fecha, estado, responsable, prioridad, cuenta · origen. -->
           <div
@@ -610,6 +618,19 @@ const ESPERA_BORRAR_MS = 5000;
                     (click)="startEdit()">
                     Editar
                   </button>
+                  @if (puedeFotos()) {
+                    <button
+                      type="button"
+                      class="btn"
+                      [disabled]="
+                        saving() || (task().imagenes?.length ?? 0) >= maxFotos
+                      "
+                      title="Pantallazo, croquis o foto para tener a la mano"
+                      (click)="elegirFoto()">
+                      <pt-icon name="foto" class="h-4 w-4" />
+                      Foto de referencia
+                    </button>
+                  }
                   @if (task().dueDate && ia.calendarios().length > 0) {
                     <button
                       type="button"
@@ -759,7 +780,7 @@ const ESPERA_BORRAR_MS = 5000;
                   <pt-detalle-editor
                     class="sm:col-span-2"
                     [name]="'e-desc-' + task().id"
-                    etiqueta="Descripción"
+                    etiqueta="Descripción y fotos de referencia"
                     placeholder="El detalle: lo que se capturó de referencia se puede completar aquí"
                     [disabled]="saving()"
                     [texto]="e.description"
@@ -1014,6 +1035,8 @@ export class TaskCardComponent {
   private readonly sesion = inject(SesionService);
 
   readonly task = input.required<TaskItem>();
+  readonly maxFotos = MAX_FOTOS;
+  private readonly fotosRef = viewChild(FotosPendienteComponent);
 
   readonly open = signal(false);
   readonly draft = signal('');
@@ -1614,6 +1637,33 @@ export class TaskCardComponent {
         this.drafting.set(false);
       }
     });
+  }
+
+  /**
+   * Fotos de referencia: con puente se anotan; lo propio también se guarda
+   * en la lista local si el puente no está.
+   */
+  puedeFotos(): boolean {
+    return this.ia.disponible || this.task().origin === 'local';
+  }
+
+  elegirFoto(): void {
+    this.fotosRef()?.abrirSelector();
+  }
+
+  guardarFotos(imagenes: string[]): void {
+    if (this.ia.disponible) {
+      this.guardar({
+        cambios: { imagenes },
+        tarea: this.task()
+      });
+      return;
+    }
+    if (this.task().origin === 'local') {
+      this.local.patch(this.task().id, {
+        imagenes: imagenes.length ? imagenes : undefined
+      });
+    }
   }
 
   startEdit(): void {
