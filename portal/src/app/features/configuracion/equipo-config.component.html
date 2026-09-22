@@ -1,96 +1,55 @@
 <section class="card card-pad mt-4">
-  <h2 class="text-sm font-semibold text-ink">Equipo</h2>
-  <p class="mt-1 max-w-3xl text-sm text-ink-muted">
-    Quiénes son, con su correo y su rol. La vista Equipo los muestra aunque no
-    tengan pendientes, y los pendientes que llegan con ese correo se les
-    cuelgan.
-  </p>
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h2 class="text-sm font-semibold text-ink">Equipo</h2>
+      <p class="mt-1 max-w-3xl text-sm text-ink-muted">
+        Quiénes son, con su correo y su rol. La vista Equipo los muestra aunque
+        no tengan pendientes, y los pendientes que llegan con ese correo se les
+        cuelgan.
+      </p>
+    </div>
+    @if (admin.disponible) {
+      <button type="button" class="btn" (click)="abrirAlta()">
+        <pt-icon name="mas" class="h-4 w-4" />
+        Agregar persona
+      </button>
+    }
+  </div>
   @if (!admin.disponible) {
     <p class="mt-3 text-xs text-ink-muted">
       El equipo se administra en la aplicación publicada.
     </p>
   } @else {
+    @if (equipoDraft().length === 0) {
+      <p class="mt-4 text-sm text-ink-muted">
+        Todavía no hay personas. Agrega la primera.
+      </p>
+    }
     <ul class="mt-3 divide-y divide-line">
-      @for (p of equipoDraft(); track $index) {
-        <li class="grid gap-2 py-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
-          <input
-            class="field"
-            type="text"
-            [name]="'eq-nombre-' + $index"
-            placeholder="Nombre"
-            [ngModel]="p.name"
-            (ngModelChange)="updatePersona($index, { name: $event })" />
-          <input
-            class="field"
-            type="email"
-            [name]="'eq-correo-' + $index"
-            placeholder="correo"
-            [ngModel]="p.email"
-            (ngModelChange)="updatePersona($index, { email: $event })" />
-          <input
-            class="field"
-            type="text"
-            [name]="'eq-rol-' + $index"
-            placeholder="Rol"
-            [ngModel]="p.role"
-            (ngModelChange)="updatePersona($index, { role: $event })" />
-          <div class="flex items-center gap-3">
-            <label
-              class="flex items-center gap-1.5 text-xs text-ink-muted"
-              title="Cada día hábil a las 9 recibe un correo con sus pendientes y una liga para actualizarlos">
-              <input
-                type="checkbox"
-                [checked]="p.pedirEstatus === true"
-                (change)="
-                  updatePersona($index, { pedirEstatus: !p.pedirEstatus })
-                " />
-              Pedir estatus
-            </label>
-            <button type="button" class="btn" (click)="removePersona($index)">
-              <pt-icon name="basura" class="h-4 w-4" /> Quitar
+      @for (p of equipoDraft(); track p.id || $index; let i = $index) {
+        <li class="flex flex-wrap items-center justify-between gap-3 py-3">
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-ink">{{ p.name }}</p>
+            @if (resumen(p); as s) {
+              <p class="mt-0.5 text-xs text-ink-muted">{{ s }}</p>
+            }
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" class="btn" (click)="abrirEdicion(i)">
+              Editar
+            </button>
+            <button
+              type="button"
+              class="btn btn-danger"
+              (click)="quitarPersona(i)">
+              <pt-icon name="basura" class="h-4 w-4" />
+              Quitar
             </button>
           </div>
         </li>
       }
-      <li class="grid gap-2 py-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
-        <input
-          class="field"
-          type="text"
-          name="eq-nuevo-nombre"
-          placeholder="Nombre"
-          [ngModel]="nuevaPersona().name"
-          (ngModelChange)="updateNuevaPersona({ name: $event })" />
-        <input
-          class="field"
-          type="email"
-          name="eq-nuevo-correo"
-          placeholder="correo"
-          [ngModel]="nuevaPersona().email"
-          (ngModelChange)="updateNuevaPersona({ email: $event })" />
-        <input
-          class="field"
-          type="text"
-          name="eq-nuevo-rol"
-          placeholder="Rol"
-          [ngModel]="nuevaPersona().role"
-          (ngModelChange)="updateNuevaPersona({ role: $event })" />
-        <button
-          type="button"
-          class="btn"
-          [disabled]="!nuevaPersona().name.trim()"
-          (click)="addPersona()">
-          <pt-icon name="mas" class="h-4 w-4" /> Agregar
-        </button>
-      </li>
     </ul>
     <div class="mt-3 flex flex-wrap items-center gap-3">
-      <button
-        type="button"
-        class="btn btn-primary"
-        [disabled]="ocupado() === 'equipo'"
-        (click)="saveEquipo()">
-        Guardar equipo
-      </button>
       <button
         type="button"
         class="btn"
@@ -140,3 +99,73 @@
 </section>
 
 <pt-semana-config />
+
+@if (dialogo(); as d) {
+  <pt-dialogo [titulo]="tituloDialogo()" (cerrar)="cerrarDialogo()">
+    <form id="persona-form" class="grid gap-3" (ngSubmit)="confirmarDialogo()">
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Nombre</span
+        >
+        <input
+          class="field"
+          type="text"
+          name="persona-nombre"
+          placeholder="Nombre"
+          [ngModel]="borrador().name"
+          (ngModelChange)="cambiarBorrador({ name: $event })" />
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted"
+          >Correo</span
+        >
+        <input
+          class="field"
+          type="email"
+          name="persona-correo"
+          placeholder="correo"
+          [ngModel]="borrador().email"
+          (ngModelChange)="cambiarBorrador({ email: $event })" />
+      </label>
+      <label>
+        <span class="mb-1 block text-xs font-medium text-ink-muted">Rol</span>
+        <input
+          class="field"
+          type="text"
+          name="persona-rol"
+          placeholder="Rol"
+          [ngModel]="borrador().role"
+          (ngModelChange)="cambiarBorrador({ role: $event })" />
+      </label>
+      <label
+        class="inline-flex min-h-11 items-center gap-2 text-sm text-ink"
+        title="Cada día hábil a las 9 recibe un correo con sus pendientes y una liga para actualizarlos">
+        <input
+          type="checkbox"
+          class="h-4 w-4 rounded border-line accent-brand"
+          [checked]="borrador().pedirEstatus === true"
+          (change)="
+            cambiarBorrador({ pedirEstatus: !borrador().pedirEstatus })
+          " />
+        Pedir estatus
+      </label>
+      @if (equipoMensaje(); as m) {
+        @if (!m.ok) {
+          <p class="text-xs text-rose-700">{{ m.mensaje }}</p>
+        }
+      }
+    </form>
+    <div class="dialogo-pie flex flex-wrap items-center gap-2">
+      <button
+        type="submit"
+        form="persona-form"
+        class="btn btn-primary"
+        [disabled]="ocupado() === 'equipo'">
+        Guardar
+      </button>
+      <button type="button" class="btn" (click)="cerrarDialogo()">
+        Cancelar
+      </button>
+    </div>
+  </pt-dialogo>
+}

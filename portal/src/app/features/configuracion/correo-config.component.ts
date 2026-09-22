@@ -1,9 +1,9 @@
-import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { AccountChipComponent } from '../../ui/account-chip.component';
+import { DialogoComponent } from '../../ui/dialogo.component';
 import { IconComponent } from '../../ui/icon.component';
-import { DayPipe, RelativePipe } from '../../ui/portal.pipes';
+import { RelativePipe } from '../../ui/portal.pipes';
 import { ConfiguracionBase } from './configuracion-base';
 
 /** Los buzones y su conexión (IMAP o Microsoft), con la aplicación de Entra ID. */
@@ -11,9 +11,7 @@ import { ConfiguracionBase } from './configuracion-base';
   selector: 'pt-correo-config',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    AccountChipComponent,
-    DayPipe,
-    DecimalPipe,
+    DialogoComponent,
     FormsModule,
     IconComponent,
     NgTemplateOutlet,
@@ -21,4 +19,24 @@ import { ConfiguracionBase } from './configuracion-base';
   ],
   templateUrl: './correo-config.component.html'
 })
-export class CorreoConfigComponent extends ConfiguracionBase {}
+export class CorreoConfigComponent extends ConfiguracionBase {
+  readonly altaBuzon = signal(false);
+
+  abrirAltaBuzon(): void {
+    this.newMailLabel.set('');
+    this.newMailEmail.set('');
+    this.altaBuzon.set(true);
+  }
+
+  cerrarAltaBuzon(): void {
+    this.altaBuzon.set(false);
+  }
+
+  confirmarAltaBuzon(): void {
+    if (!this.canAddMail()) {
+      return;
+    }
+    this.addMail();
+    this.altaBuzon.set(false);
+  }
+}

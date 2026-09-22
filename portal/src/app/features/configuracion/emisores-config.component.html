@@ -1,9 +1,19 @@
 @if (disponible) {
   <section class="card card-pad mt-4">
-    <h2 class="text-sm font-semibold text-ink">{{ titulo() }}</h2>
-    @if (descripcion()) {
-      <p class="mt-1 max-w-3xl text-sm text-ink-muted">{{ descripcion() }}</p>
-    }
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 class="text-sm font-semibold text-ink">{{ titulo() }}</h2>
+        @if (descripcion()) {
+          <p class="mt-1 max-w-3xl text-sm text-ink-muted">
+            {{ descripcion() }}
+          </p>
+        }
+      </div>
+      <button type="button" class="btn" (click)="abrirAlta()">
+        <pt-icon name="mas" class="h-4 w-4" />
+        Crear token
+      </button>
+    </div>
 
     @if (propios().length > 0) {
       <ul class="mt-3 divide-y divide-line text-xs">
@@ -27,58 +37,27 @@
             @if (!e.deEntorno) {
               <button
                 type="button"
-                class="btn px-2 py-1"
+                class="btn btn-danger px-2 py-1"
                 title="Quitar"
                 (click)="borrar(e.nombre)">
                 <pt-icon name="basura" class="h-4 w-4" />
+                Quitar
               </button>
             }
           </li>
         }
       </ul>
-    }
-
-    <form class="mt-3 flex flex-wrap items-end gap-2" (ngSubmit)="crear()">
-      <label class="min-w-0 flex-1">
-        <span class="mb-1 block text-xs font-medium text-ink-muted"
-          >Nuevo emisor (quién va a mandar)</span
-        >
-        <input
-          class="field"
-          type="text"
-          name="emisor"
-          placeholder="Por ejemplo: tablero-ops"
-          [ngModel]="nuevoNombre()"
-          (ngModelChange)="nuevoNombre.set($event)" />
-      </label>
-      <button
-        type="submit"
-        class="btn btn-primary"
-        [disabled]="ocupado() || !nuevoNombre().trim()">
-        <pt-icon name="mas" class="h-4 w-4" />
-        Crear token
-      </button>
-    </form>
-
-    @if (creado(); as nuevo) {
-      <div
-        class="mt-3 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-200">
-        <p class="font-medium">
-          Token de <span class="font-mono">{{ nuevo.nombre }}</span> — cópialo
-          ahora, no se vuelve a mostrar:
-        </p>
-        <code
-          class="mt-1 block select-all break-all rounded bg-surface px-2 py-1 font-mono text-ink"
-          >{{ nuevo.token }}</code
-        >
-      </div>
+    } @else {
+      <p class="mt-3 text-sm text-ink-muted">Todavía no hay emisores.</p>
     }
 
     @if (mensaje(); as m) {
-      <p
-        class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200">
-        {{ m }}
-      </p>
+      @if (!dialogo()) {
+        <p
+          class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200">
+          {{ m }}
+        </p>
+      }
     }
 
     <details class="mt-3 text-xs text-ink-muted">
@@ -117,4 +96,68 @@
       }
     </details>
   </section>
+
+  @if (dialogo()) {
+    <pt-dialogo [titulo]="tituloDialogo()" (cerrar)="cerrarDialogo()">
+      @if (creado(); as nuevo) {
+        <div
+          class="rounded-lg bg-emerald-50 p-3 text-xs text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-200">
+          <p class="font-medium">
+            Token de <span class="font-mono">{{ nuevo.nombre }}</span> — cópialo
+            ahora, no se vuelve a mostrar:
+          </p>
+          <code
+            class="mt-2 block select-all break-all rounded bg-surface px-2 py-1 font-mono text-ink"
+            >{{ nuevo.token }}</code
+          >
+        </div>
+      } @else {
+        <form
+          id="emisor-form-{{ tipos()[0] }}"
+          class="grid gap-3"
+          (ngSubmit)="crear()">
+          <label>
+            <span class="mb-1 block text-xs font-medium text-ink-muted"
+              >Nuevo emisor (quién va a mandar)</span
+            >
+            <input
+              class="field"
+              type="text"
+              name="emisor"
+              placeholder="Por ejemplo: tablero-ops"
+              [ngModel]="nuevoNombre()"
+              (ngModelChange)="nuevoNombre.set($event)" />
+          </label>
+          @if (mensaje(); as m) {
+            <p
+              class="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200">
+              {{ m }}
+            </p>
+          }
+        </form>
+      }
+      <div class="dialogo-pie flex flex-wrap items-center gap-2">
+        @if (creado()) {
+          <button
+            type="button"
+            class="btn btn-primary"
+            (click)="cerrarDialogo()">
+            Cerrar
+          </button>
+        } @else {
+          <button
+            type="submit"
+            [attr.form]="'emisor-form-' + tipos()[0]"
+            class="btn btn-primary"
+            [disabled]="ocupado() || !nuevoNombre().trim()">
+            <pt-icon name="mas" class="h-4 w-4" />
+            Crear token
+          </button>
+          <button type="button" class="btn" (click)="cerrarDialogo()">
+            Cancelar
+          </button>
+        }
+      </div>
+    </pt-dialogo>
+  }
 }

@@ -208,3 +208,8 @@ body {
   min-height: 2.5rem;
   min-width: 2.5rem;
 }
+
+/* Mientras un CRUD de Integraciones esta en overlay, el fondo no se mueve. */
+html.con-dialogo-portal {
+  overflow: hidden;
+}

@@ -11,18 +11,19 @@ import {
   Emisor,
   PuenteAdminService
 } from '../../core/sources/gateway/puente-admin.service';
+import { DialogoComponent } from '../../ui/dialogo.component';
 import { IconComponent } from '../../ui/icon.component';
 import { RelativePipe } from '../../ui/portal.pipes';
 
 /**
  * La API para que otro sistema alimente un módulo: quién puede mandar (los
  * emisores), con qué token, y cómo se manda. El token se enseña una sola vez,
- * al crearlo.
+ * al crearlo, dentro del diálogo de alta.
  */
 @Component({
   selector: 'pt-emisores-config',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, RelativePipe],
+  imports: [DialogoComponent, FormsModule, IconComponent, RelativePipe],
   templateUrl: './emisores-config.component.html'
 })
 export class EmisoresConfigComponent {
@@ -46,6 +47,11 @@ export class EmisoresConfigComponent {
   );
   readonly mensaje = signal<string | undefined>(undefined);
   readonly ocupado = signal(false);
+  readonly dialogo = signal(false);
+
+  readonly tituloDialogo = computed(() =>
+    this.creado() ? 'Token creado' : 'Crear token'
+  );
 
   /** Solo los emisores que pueden mandar alguno de los tipos de este panel. */
   readonly propios = computed(() =>
@@ -76,6 +82,18 @@ export class EmisoresConfigComponent {
       next: (lista) => this.emisores.set(lista),
       error: (error: unknown) => this.mensaje.set(describe(error))
     });
+  }
+
+  abrirAlta(): void {
+    this.nuevoNombre.set('');
+    this.creado.set(undefined);
+    this.mensaje.set(undefined);
+    this.dialogo.set(true);
+  }
+
+  cerrarDialogo(): void {
+    this.dialogo.set(false);
+    this.creado.set(undefined);
   }
 
   crear(): void {
