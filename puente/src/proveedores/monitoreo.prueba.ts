@@ -5,6 +5,7 @@ import {
   disponibilidad,
   disponibilidad30,
   estadoDe,
+  sugerenciaDe,
   urlHttpAlterna
 } from './monitoreo.js';
 
@@ -51,6 +52,21 @@ describe('monitoreo', () => {
     );
     assert.equal(urlHttpAlterna('http://ejemplo.mx'), undefined);
     assert.equal(urlHttpAlterna('no-es-url'), undefined);
+  });
+
+  it('sugiere http cuando https cae sin código', () => {
+    assert.match(
+      sugerenciaDe('caido', revision(false, 500), 'https://x.mx') ?? '',
+      /HTTP|http/
+    );
+    assert.match(
+      sugerenciaDe(
+        'caido',
+        { ...revision(false), statusCode: 503 },
+        'https://x.mx'
+      ) ?? '',
+      /proxy|proceso/i
+    );
   });
 });
 

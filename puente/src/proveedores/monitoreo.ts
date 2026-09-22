@@ -202,6 +202,40 @@ export function disponibilidad(revisiones: readonly MonitorCheck[]): number {
 }
 
 /**
+ * Pista concreta según lo que midió el chequeo: no sustituye al diagnóstico
+ * de la IA, pero orienta al instante (p. ej. https vs http).
+ */
+export function sugerenciaDe(
+  estado: MonitorStatus,
+  revision: MonitorCheck,
+  url: string
+): string | undefined {
+  if (estado === 'degradado') {
+    return 'Responde, pero lento. Revisa carga del servidor, base de datos o red.';
+  }
+  if (estado !== 'caido') {
+    return undefined;
+  }
+  const codigo = revision.statusCode;
+  if (codigo === 401 || codigo === 403) {
+    return 'El servicio rechaza la petición. Revisa autenticación o firewall.';
+  }
+  if (codigo === 404) {
+    return 'La URL no existe en el servidor. Confirma la ruta del destino.';
+  }
+  if (codigo === 502 || codigo === 503 || codigo === 504) {
+    return 'El proxy responde, pero el proceso de atrás no. Revisa el servicio y los logs.';
+  }
+  if (codigo !== undefined) {
+    return `Respondió HTTP ${codigo}. Revisa el proceso, el proxy y que la URL sea la correcta.`;
+  }
+  if (url.startsWith('https://')) {
+    return 'Sin respuesta por HTTPS (TLS, timeout o red). Si el sitio solo es HTTP, captura http:// en el destino o prueba esa URL en el navegador.';
+  }
+  return 'Sin respuesta de red. Revisa DNS, que el dominio exista, firewall y que el proceso esté arriba.';
+}
+
+/**
  * Decide el estado a partir de la ultima revision.
  *
  * Degradado es responder bien pero lento: es un estado real y distinto de estar
@@ -254,6 +288,7 @@ export async function destinosMonitoreados(
           : estado === 'degradado'
             ? `Respondió en ${revision.latencyMs} ms`
             : undefined,
+      sugerencia: sugerenciaDe(estado, revision, revision.urlEfectiva),
       accountId: config.accountId
     };
   });

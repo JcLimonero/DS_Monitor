@@ -181,10 +181,10 @@ export class IaService {
       : of([]);
   }
 
-  generarDiagnosticos(): Observable<Diagnostico[]> {
+  generarDiagnosticos(sitioId?: string): Observable<Diagnostico[]> {
     return this.http.post<Diagnostico[]>(
       this.url('/ia/diagnosticos/generar'),
-      {},
+      sitioId ? { sitioId } : {},
       { headers: this.headers() }
     );
   }

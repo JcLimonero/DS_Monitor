@@ -726,19 +726,36 @@ export function registrarRutasIa(
 
   // --- Diagnostico de caidas y despliegues fallidos ---
 
-  const diagnosticos = async (ahora: Date): Promise<Diagnostico[]> => {
+  const diagnosticos = async (
+    ahora: Date,
+    filtro?: { sitioId?: string }
+  ): Promise<Diagnostico[]> => {
     const config = d.iaPara('diagnosticos');
     const [monitoreo, despliegues] = await Promise.all([
       d.fuentes.monitoreo().catch(() => [] as MonitorTarget[]),
       d.fuentes.despliegues().catch(() => [] as Deployment[])
     ]);
-    const caidos = monitoreo.filter((m) => m.status === 'caido');
-    const fallidos = despliegues.filter(
-      (x) =>
-        x.state === 'error' &&
-        Date.parse(x.createdAt) > ahora.getTime() - 2 * 86_400_000
-    );
-    const guardados = d.datos.iaDiagnosticos.leer();
+    let caidos = monitoreo.filter((m) => m.status === 'caido');
+    if (filtro?.sitioId) {
+      // Un clic en la tarjeta: ese destino, aunque solo esté degradado.
+      caidos = monitoreo.filter((m) => m.id === filtro.sitioId);
+    }
+    const fallidos = filtro?.sitioId
+      ? []
+      : despliegues.filter(
+          (x) =>
+            x.state === 'error' &&
+            Date.parse(x.createdAt) > ahora.getTime() - 2 * 86_400_000
+        );
+    const guardados = { ...d.datos.iaDiagnosticos.leer() };
+    if (filtro?.sitioId) {
+      // Pedido a demanda: se regenera, no se sirve el cache viejo.
+      for (const clave of Object.keys(guardados)) {
+        if (clave.startsWith(`sitio:${filtro.sitioId}:`)) {
+          delete guardados[clave];
+        }
+      }
+    }
     const salida: Diagnostico[] = [];
     let cambio = false;
     const incidentes: {
@@ -808,7 +825,12 @@ export function registrarRutasIa(
   router.post('/ia/diagnosticos/generar', async (contexto) => {
     d.exigirAdmin(contexto);
     exigirIa('diagnosticos');
-    return diagnosticos(new Date());
+    const cuerpo = (contexto.cuerpo ?? {}) as { sitioId?: string };
+    const sitioId =
+      typeof cuerpo.sitioId === 'string' && cuerpo.sitioId.trim()
+        ? cuerpo.sitioId.trim()
+        : undefined;
+    return diagnosticos(new Date(), sitioId ? { sitioId } : undefined);
   });
 
   // --- La semana en los repositorios ---
