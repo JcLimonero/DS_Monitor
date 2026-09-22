@@ -227,6 +227,7 @@ import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
 import { REVISION_MINUTOS } from '../nucleo/programador.js';
 import { licenciasAnthropic } from '../proveedores/anthropic.js';
 import { consumoOpenRouter } from '../proveedores/openrouter.js';
+import { esCorreoAria } from '../proveedores/aria.js';
 import {
   esCorreoDeTotalOne,
   leerCorreo,
@@ -1633,16 +1634,20 @@ export function construirRutas(
       return [];
     }
     const ahora = new Date();
-    // Los avisos de Total One no van a la IA: se anotan como vistos (sin
-    // pendiente) para no volver a bajarlos en cada lectura.
-    const deTotalOne = lectura.paraIa.filter((c) =>
-      esCorreoDeTotalOne(c.encabezado.asunto, c.texto)
+    // Los avisos de Total One y ARIA no van a la IA: se anotan como vistos
+    // (sin pendiente) para no volver a bajarlos en cada lectura.
+    const excluidosIa = lectura.paraIa.filter(
+      (c) =>
+        esCorreoDeTotalOne(c.encabezado.asunto, c.texto) ||
+        esCorreoAria(c.encabezado.asunto, c.encabezado.remitente)
     );
-    const paraIa = lectura.paraIa.filter((c) => !deTotalOne.includes(c));
-    let resultados: Clasificacion[] = deTotalOne.map((c) => ({
+    const paraIa = lectura.paraIa.filter((c) => !excluidosIa.includes(c));
+    let resultados: Clasificacion[] = excluidosIa.map((c) => ({
       id: c.clave,
       esPendiente: false,
-      motivo: 'Aviso de Total One',
+      motivo: esCorreoAria(c.encabezado.asunto, c.encabezado.remitente)
+        ? 'Aviso de ARIA (iTechDev)'
+        : 'Aviso de Total One',
       analizadoEn: ahora.toISOString()
     }));
     // Lo que ya esta registrado en esta cuenta: por asunto se reconoce la
@@ -2038,14 +2043,18 @@ export function construirRutas(
       ];
       // Lo detectado se registra: un pendiente no desaparece porque el
       // correo que lo origino ya sea viejo.
-      // Lo que Total One le avisa a sus clientes no es un pendiente de Carlos;
-      // se descarta tambien de lo ya registrado, por si entro antes de la regla.
-      const sinTotalOne = (lista: TaskItem[]) =>
-        lista.filter((t) => !esCorreoDeTotalOne(t.title, t.description ?? ''));
+      // Total One y ARIA no son pendientes de Carlos; se descartan tambien
+      // de lo ya registrado, por si entraron antes de la regla.
+      const sinAvisosExternos = (lista: TaskItem[]) =>
+        lista.filter(
+          (t) =>
+            !esCorreoDeTotalOne(t.title, t.description ?? '') &&
+            !esCorreoAria(t.title, t.description ?? '')
+        );
       const registro = datos.registroCorreo.leer();
       const actual = registrar(
-        sinTotalOne(registro[cuenta.id] ?? []),
-        sinTotalOne(detectados),
+        sinAvisosExternos(registro[cuenta.id] ?? []),
+        sinAvisosExternos(detectados),
         hechos()
       );
       await datos.registroCorreo.escribir({ ...registro, [cuenta.id]: actual });

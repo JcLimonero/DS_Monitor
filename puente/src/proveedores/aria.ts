@@ -93,9 +93,7 @@ const TODAS_ETIQUETAS = [...ETIQUETAS_DATOS, ...ETIQUETAS_CUESTIONARIO];
 /** Cuenta de correo iTechDev (calendario destino de ARIA). */
 export function esCuentaItech(id: string): boolean {
   const n = id.trim().toLowerCase();
-  return (
-    n === 'correo-itech' || n === 'correo-itech-alterno' || n.includes('itech')
-  );
+  return n === 'correo-itech' || n === 'correo-itech-alterno';
 }
 
 export function esCorreoAria(asunto: string, remitente: string): boolean {

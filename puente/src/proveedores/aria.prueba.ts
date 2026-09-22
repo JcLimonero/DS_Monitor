@@ -63,10 +63,10 @@ describe('esCorreoAria', () => {
 });
 
 describe('esCuentaItech', () => {
-  it('reconoce los ids de iTechDev', () => {
+  it('solo los ids exactos de iTechDev', () => {
     assert.equal(esCuentaItech('correo-itech'), true);
     assert.equal(esCuentaItech('correo-itech-alterno'), true);
-    assert.equal(esCuentaItech('itech'), true);
+    assert.equal(esCuentaItech('itech'), false);
     assert.equal(esCuentaItech('correo-nexus'), false);
   });
 });

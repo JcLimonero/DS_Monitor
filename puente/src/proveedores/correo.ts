@@ -386,7 +386,8 @@ export function candidatosParaIa(
         !PUBLICIDAD.test(e.asunto) &&
         !SIN_RESPUESTA.test(e.remitente) &&
         !DEL_MONITOR.test(e.asunto) &&
-        !esCorreoDeTotalOne(e.asunto)
+        !esCorreoDeTotalOne(e.asunto) &&
+        !esCorreoAria(e.asunto, e.remitente)
     )
     .sort((a, b) => b.fecha.localeCompare(a.fecha))
     .map((encabezado) => ({
