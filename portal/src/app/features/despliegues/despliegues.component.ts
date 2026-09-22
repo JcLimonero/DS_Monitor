@@ -7,6 +7,7 @@ import {
   signal
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
 import {
   DEPLOYMENT_ENVIRONMENT_LABEL,
   DEPLOYMENT_STATE_LABEL,
@@ -23,6 +24,7 @@ import {
   runningDeployments
 } from '../../core/state/portal.selectors';
 import { PortalesService } from '../../core/portales/portales.service';
+import { PuenteAdminService } from '../../core/sources/gateway/puente-admin.service';
 import { PortalStore } from '../../core/state/portal.store';
 import { PortalChipComponent } from '../../ui/portal-chip.component';
 import { RouterLink } from '@angular/router';
@@ -48,6 +50,12 @@ const CLASE_ESTADO: Record<DeploymentState, string> = {
 /** A partir de cuantos despliegues vale la pena enseñar los filtros. */
 const MINIMO_PARA_FILTRAR = 5;
 
+/** Dominio de producción del portal (no el host *.vercel.app del despliegue). */
+const PORTAL_URL = 'https://portal.dealersolutions.com.mx';
+
+/** Fecha local del último refresco forzado (Vercel + Coolify). */
+const CLAVE_REFRESCO_DIA = 'ds-monitor.despliegues.refresco-dia';
+
 /**
  * Trailers que agregan las herramientas al final del commit. Solo estos se
  * descartan: una primera linea como "fix: corrige X" es el titulo, no un trailer.
@@ -70,6 +78,30 @@ export function mensajeCompleto(mensaje: string): string {
     .filter((l) => !TRAILER.test(l))
     .join('\n')
     .trim();
+}
+
+/** Fecha local de hoy en `YYYY-MM-DD`. */
+export function hoyLocal(ahora = new Date()): string {
+  const y = ahora.getFullYear();
+  const m = String(ahora.getMonth() + 1).padStart(2, '0');
+  const d = String(ahora.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function leerDiaRefresco(): string | undefined {
+  try {
+    return localStorage.getItem(CLAVE_REFRESCO_DIA) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function guardarDiaRefresco(dia = hoyLocal()): void {
+  try {
+    localStorage.setItem(CLAVE_REFRESCO_DIA, dia);
+  } catch {
+    // Sin almacenamiento el refresco diario se repetirá al montar.
+  }
 }
 
 const CLASE_PLATAFORMA: Record<PlatformIndicator, string> = {
@@ -100,6 +132,7 @@ export class DesplieguesComponent {
   readonly store = inject(PortalStore);
   /** Lo montado en Coolify: se muestra debajo de los despliegues de Vercel. */
   readonly portales = inject(PortalesService);
+  private readonly admin = inject(PuenteAdminService);
   readonly disponible = this.portales.disponible;
 
   readonly estadoLabel = DEPLOYMENT_STATE_LABEL;
@@ -111,6 +144,8 @@ export class DesplieguesComponent {
   readonly soloProblemas = signal(false);
   /** Renglon con el mensaje de commit abierto completo. */
   readonly abierto = signal<string | undefined>(undefined);
+  /** Evita doble clic mientras corre el refresco forzado. */
+  readonly refrescando = signal(false);
 
   /** Con pocos despliegues los filtros estorban mas de lo que ayudan. */
   readonly conFiltros = computed(
@@ -151,6 +186,9 @@ export class DesplieguesComponent {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   });
 
+  /** Liga al sitio del portal en producción (pestaña nueva). */
+  readonly urlPortal = PORTAL_URL;
+
   readonly fallidos = computed(() =>
     failedDeployments(this.store.deployments())
   );
@@ -169,6 +207,13 @@ export class DesplieguesComponent {
       `${this.fallidos().length} con error`
     ].join(' · ')
   );
+
+  constructor() {
+    // Una vez al día (zona local): olvida caché del puente y vuelve a pedir.
+    if (leerDiaRefresco() !== hoyLocal()) {
+      void this.refrescar();
+    }
+  }
 
   claseEstado(despliegue: Deployment): string {
     return CLASE_ESTADO[despliegue.state];
@@ -195,6 +240,36 @@ export class DesplieguesComponent {
   limpiarFiltros(): void {
     this.proyecto.set('todos');
     this.soloProblemas.set(false);
+  }
+
+  /**
+   * Olvida la caché de Vercel y Coolify en el puente y vuelve a pedir ambas
+   * listas. Solo marca el día local si el puente contestó (o no hay puente);
+   * si el POST falla, el auto del día siguiente (o al remontar) reintenta.
+   */
+  async refrescar(): Promise<void> {
+    if (this.refrescando()) {
+      return;
+    }
+    this.refrescando.set(true);
+    let ok = !this.admin.disponible;
+    try {
+      if (this.admin.disponible) {
+        try {
+          await firstValueFrom(this.admin.refrescarDespliegues());
+          ok = true;
+        } catch {
+          // Sin limpiar caché pedimos igual lo que haya; no marcamos el día.
+        }
+      }
+      this.store.refreshDeployments();
+      this.portales.cargar();
+      if (ok) {
+        guardarDiaRefresco();
+      }
+    } finally {
+      this.refrescando.set(false);
+    }
   }
 
   /** Fecha y hora completas para el `title` de la fecha relativa. */
