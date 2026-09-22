@@ -359,6 +359,103 @@ describe('dictado por reglas', () => {
     assert.equal(b?.personal, false);
   });
 
+  it('«con alguien del equipo» es el responsable y se quita del título y la descripción', async () => {
+    const { interpretarPorReglas } = await import('./dictado.js');
+    const equipo: Person[] = [
+      {
+        id: 'marco',
+        name: 'Marco Ramos',
+        email: 'marco.ramos@nexusqtech.com'
+      }
+    ];
+    const [p] = interpretarPorReglas(
+      'Dar seguimiento a la instalación de AutoScope con Marco Ramos',
+      equipo
+    );
+    assert.equal(p?.persona?.id, 'marco');
+    assert.equal(p?.responsable, 'Marco Ramos');
+    assert.equal(p?.titulo, 'Dar seguimiento a la instalación de AutoScope');
+    assert.equal(
+      p?.descripcion,
+      'Dar seguimiento a la instalación de AutoScope'
+    );
+    assert.equal(p?.titulo.includes('con Marco'), false);
+  });
+
+  it('«con alguien» que no está en el equipo se deja como está', async () => {
+    const { interpretarPorReglas } = await import('./dictado.js');
+    const [p] = interpretarPorReglas(
+      'Dar seguimiento a AutoScope con Juan Pérez',
+      [{ id: 'marco', name: 'Marco Ramos' }]
+    );
+    assert.equal(p?.persona, undefined);
+    assert.match(p?.titulo ?? '', /con Juan Pérez/);
+  });
+
+  it('no pisa un responsable de «que X revise» por un «con» de otra persona', async () => {
+    const { interpretarPorReglas } = await import('./dictado.js');
+    const equipo: Person[] = [
+      { id: 'efren', name: 'Efrén' },
+      { id: 'marco', name: 'Marco Ramos' }
+    ];
+    const [p] = interpretarPorReglas(
+      'Que Efrén revise la instalación de AutoScope con Marco Ramos',
+      equipo
+    );
+    assert.equal(p?.persona?.id, 'efren');
+    assert.match(p?.titulo ?? '', /con Marco Ramos/);
+  });
+
+  it('tampoco pisa a Efrén si Marco va primero en el equipo', async () => {
+    const { interpretarPorReglas } = await import('./dictado.js');
+    const [p] = interpretarPorReglas(
+      'Que Efrén revise la instalación de AutoScope con Marco Ramos',
+      [
+        { id: 'marco', name: 'Marco Ramos' },
+        { id: 'efren', name: 'Efrén' }
+      ]
+    );
+    assert.equal(p?.persona?.id, 'efren');
+    assert.match(p?.titulo ?? '', /con Marco Ramos/);
+  });
+
+  it('«con Marco el lunes» solo quita el nombre, no la fecha', async () => {
+    const { interpretarPorReglas } = await import('./dictado.js');
+    const [p] = interpretarPorReglas(
+      'Junta con Marco el lunes a las 12 en Italian Coffee',
+      [{ id: 'marco', name: 'Marco Ramos' }],
+      new Date('2026-09-17T15:00:00Z')
+    );
+    assert.equal(p?.persona?.id, 'marco');
+    assert.match(p?.titulo ?? '', /lunes/);
+    assert.equal(/\bcon Marco\b/i.test(p?.titulo ?? ''), false);
+  });
+
+  it('«con datos de Marco» no recorta el título', async () => {
+    const { interpretarPorReglas } = await import('./dictado.js');
+    const frase = 'Continuar con datos de Marco para AutoScope';
+    const [p] = interpretarPorReglas(frase, [
+      { id: 'marco', name: 'Marco Ramos' }
+    ]);
+    assert.match(p?.titulo ?? '', /con datos de Marco/);
+  });
+
+  it('la voz en minúsculas («con marco ramos») también asigna y limpia', async () => {
+    const { interpretarPorReglas } = await import('./dictado.js');
+    const [p] = interpretarPorReglas(
+      'dar seguimiento a autoscope con marco ramos',
+      [
+        {
+          id: 'marco',
+          name: 'Marco Ramos',
+          email: 'marco.ramos@nexusqtech.com'
+        }
+      ]
+    );
+    assert.equal(p?.persona?.id, 'marco');
+    assert.equal(/\bcon marco ramos\b/i.test(p?.titulo ?? ''), false);
+  });
+
   it('el mismo dia de la semana apunta a la proxima semana, y "mañana a las 5 pm" a la tarde', async () => {
     const { fechaDeFrase } = await import('./dictado.js');
     const jueves = new Date('2026-09-17T15:00:00Z');

@@ -59,7 +59,7 @@ export async function interpretarDictado(
   }
   const salida = await preguntar(config, {
     uso: 'dictado',
-    sistema: `${contextoEmpresas()}\nQuien te habla dicta pendientes, juntas y recordatorios en lenguaje natural, a veces varios de corrido. Conviértelos en elementos del sistema. Responde SOLO JSON: {"elementos":[{"titulo":"verbo + objeto o 'Junta con X · lugar', máx. 90 caracteres","descripcion":"el detalle que dictó, tal cual, o null","personal":false,"empresa":"${opcionesEmpresa()}","prioridad":"baja|media|alta|urgente","venceEn":"YYYY-MM-DDTHH:mm en hora de México o YYYY-MM-DD o null","responsable":"nombre o correo de quien lo hace, o null","proyecto":"cliente o proyecto mencionado (Vanguardia, Birdom…) o null","esJunta":false,"lugar":"lugar físico o 'Teams' si lo dice, o null"}]}. "esJunta" es true cuando es una reunión, cita o llamada con alguien a una hora. "personal" es true solo cuando claramente no es del trabajo (médico, familia, casa). Resuelve fechas relativas con la fecha de hoy; 'el martes' es el próximo martes. Si dice 'para mí' o no dice quién, responsable null. No inventes datos que no dijo.`,
+    sistema: `${contextoEmpresas()}\nQuien te habla dicta pendientes, juntas y recordatorios en lenguaje natural, a veces varios de corrido. Conviértelos en elementos del sistema. Responde SOLO JSON: {"elementos":[{"titulo":"verbo + objeto o 'Junta · lugar', máx. 90 caracteres","descripcion":"el detalle que dictó, sin el 'con <persona del equipo>', o null","personal":false,"empresa":"${opcionesEmpresa()}","prioridad":"baja|media|alta|urgente","venceEn":"YYYY-MM-DDTHH:mm en hora de México o YYYY-MM-DD o null","responsable":"nombre o correo de quien lo hace, o null","proyecto":"cliente o proyecto mencionado (Vanguardia, Birdom…) o null","esJunta":false,"lugar":"lugar físico o 'Teams' si lo dice, o null"}]}. "esJunta" es true cuando es una reunión, cita o llamada con alguien a una hora. "personal" es true solo cuando claramente no es del trabajo (médico, familia, casa). Resuelve fechas relativas con la fecha de hoy; 'el martes' es el próximo martes. Si dice 'para mí' o no dice quién, responsable null. Si dice "con <alguien del equipo>" (el arreglo de equipo que te paso), ESA persona es el responsable: no la dejes en el título ni en la descripción. Si "con X" no coincide con nadie del equipo, déjalo como está (es un cliente o un tercero). No inventes datos que no dijo.`,
     usuario: JSON.stringify({
       hoy: diaLocal(ahora),
       diaSemana: new Date(ahora).toLocaleDateString('es-MX', {
@@ -80,24 +80,27 @@ export async function interpretarDictado(
         return undefined;
       }
       const responsable = texto1(e.responsable);
-      return {
-        titulo: titulo.slice(0, 90),
-        descripcion: texto1(e.descripcion),
-        personal: e.personal === true,
-        empresa: empresaValida(e.empresa),
-        prioridad:
-          (['baja', 'media', 'alta', 'urgente'] as const).find(
-            (p) => p === e.prioridad
-          ) ?? 'media',
-        venceEn: fechaHora(e.venceEn),
-        conHora: tieneHora(e.venceEn),
-        responsable,
-        persona: responsable ? personaDe(responsable, equipo) : undefined,
-        proyecto: texto1(e.proyecto),
-        esJunta: e.esJunta === true,
-        lugar: texto1(e.lugar),
-        origen: 'ia'
-      };
+      return aplicarConAlguien(
+        {
+          titulo: titulo.slice(0, 90),
+          descripcion: texto1(e.descripcion),
+          personal: e.personal === true,
+          empresa: empresaValida(e.empresa),
+          prioridad:
+            (['baja', 'media', 'alta', 'urgente'] as const).find(
+              (p) => p === e.prioridad
+            ) ?? 'media',
+          venceEn: fechaHora(e.venceEn),
+          conHora: tieneHora(e.venceEn),
+          responsable,
+          persona: responsable ? personaDe(responsable, equipo) : undefined,
+          proyecto: texto1(e.proyecto),
+          esJunta: e.esJunta === true,
+          lugar: texto1(e.lugar),
+          origen: 'ia'
+        },
+        equipo
+      );
     })
     .filter((p): p is Propuesta => p !== undefined);
 }
@@ -171,26 +174,181 @@ export function interpretarPorReglas(
       /\b(dentista|doctor|medico|familia|casa|escuela|hijos?|coche|carro)\b/.test(
         sinAcentos
       );
-    return {
-      titulo: capitalizar(
-        frase.replace(/^(y que|que|hay que|tengo que|pendiente:?)\s+/i, '')
-      ).slice(0, 90),
-      descripcion: frase,
-      personal,
-      empresa: personal ? undefined : empresa,
-      prioridad,
-      venceEn: fechaDeFrase(sinAcentos, ahora),
-      conHora: HORA_EN_FRASE.test(sinAcentos),
-      responsable: persona?.name,
-      persona,
-      proyecto: CLIENTES.find((c) => sinAcentos.includes(c.toLowerCase())),
-      esJunta: /\b(junta|reunion|cita|llamada|call)\b/.test(sinAcentos),
-      lugar: /\ben (el |la |los |las )?([A-Z][^,.]{2,40})/
-        .exec(frase)?.[2]
-        ?.trim(),
-      origen: 'reglas'
-    };
+    return aplicarConAlguien(
+      {
+        titulo: capitalizar(
+          frase.replace(/^(y que|que|hay que|tengo que|pendiente:?)\s+/i, '')
+        ).slice(0, 90),
+        descripcion: frase,
+        personal,
+        empresa: personal ? undefined : empresa,
+        prioridad,
+        venceEn: fechaDeFrase(sinAcentos, ahora),
+        conHora: HORA_EN_FRASE.test(sinAcentos),
+        responsable: persona?.name,
+        persona,
+        proyecto: CLIENTES.find((c) => sinAcentos.includes(c.toLowerCase())),
+        esJunta: /\b(junta|reunion|cita|llamada|call)\b/.test(sinAcentos),
+        lugar: /\ben (el |la |los |las )?([A-Z][^,.]{2,40})/
+          .exec(frase)?.[2]
+          ?.trim(),
+        origen: 'reglas'
+      },
+      equipo
+    );
   });
+}
+
+/**
+ * "…con Marco Ramos" en un audio: si Marco está en el equipo, es el
+ * responsable y se quita del título y de la descripción. Si no hay
+ * coincidencia (un cliente, un tercero) se deja el texto como estaba.
+ * No pisa un responsable que ya salió de "que Efrén revise…".
+ */
+export function aplicarConAlguien(
+  propuesta: Propuesta,
+  equipo: Person[]
+): Propuesta {
+  const cuerpo = `${propuesta.titulo} ${propuesta.descripcion ?? ''}`;
+  const porQue = personaPorQue(cuerpo, equipo);
+  const enTitulo = personaDichaCon(propuesta.titulo, equipo);
+  const enDesc = personaDichaCon(propuesta.descripcion ?? '', equipo);
+  const porCon = enTitulo?.persona ?? enDesc?.persona;
+
+  // "que Efrén revise … con Marco": Efrén manda; no se toca el "con".
+  if (porQue && porCon && porQue.id !== porCon.id) {
+    return { ...propuesta, persona: porQue, responsable: porQue.name };
+  }
+
+  const persona = porQue ?? porCon;
+  if (!persona) {
+    return propuesta;
+  }
+  if (!porQue && propuesta.persona && propuesta.persona.id !== persona.id) {
+    return propuesta;
+  }
+
+  const titulo =
+    enTitulo && enTitulo.persona.id === persona.id
+      ? quitarCon(propuesta.titulo, enTitulo.dicho)
+      : propuesta.titulo;
+  const descripcion = propuesta.descripcion
+    ? enDesc && enDesc.persona.id === persona.id
+      ? quitarCon(propuesta.descripcion, enDesc.dicho)
+      : enTitulo && enTitulo.persona.id === persona.id
+        ? quitarCon(propuesta.descripcion, enTitulo.dicho)
+        : propuesta.descripcion
+    : undefined;
+  return {
+    ...propuesta,
+    persona,
+    responsable: persona.name,
+    titulo: (titulo || propuesta.titulo).slice(0, 90),
+    descripcion: descripcion || undefined
+  };
+}
+
+/** Artículos y posesivos: "con el cliente" no es un nombre. */
+const NO_ES_NOMBRE =
+  /^(el|la|los|las|un|una|unos|unas|mi|mis|su|sus|este|esta|estos|estas)$/i;
+
+/** "que Efrén revise": el de "que + nombre" manda sobre un "con" de otro. */
+function personaPorQue(texto: string, equipo: Person[]): Person | undefined {
+  return personaTrasPalabra(texto, /\bque\s+/gi, equipo)?.persona;
+}
+
+function personaDichaCon(
+  texto: string,
+  equipo: Person[]
+): { persona: Person; dicho: string } | undefined {
+  return personaTrasPalabra(texto, /\bcon\s+/gi, equipo);
+}
+
+/**
+ * Tras "con"/"que" solo cuenta un nombre del equipo como prefijo (nombre
+ * completo o nombre de pila, token entero). No "Marco el lunes" ni "datos
+ * de Marco".
+ */
+function personaTrasPalabra(
+  texto: string,
+  ancla: RegExp,
+  equipo: Person[]
+): { persona: Person; dicho: string } | undefined {
+  if (!texto.trim() || equipo.length === 0) {
+    return undefined;
+  }
+  let m: RegExpExecArray | null;
+  while ((m = ancla.exec(texto))) {
+    const resto = texto.slice(m.index + m[0].length);
+    const palabras = resto
+      .split(/[\s,.;:]+/)
+      .filter(Boolean)
+      .slice(0, 4);
+    if (palabras[0] && NO_ES_NOMBRE.test(palabras[0])) {
+      continue;
+    }
+    const coincidencias: { persona: Person; dicho: string }[] = [];
+    for (const p of equipo) {
+      const dicho = prefijoDeNombre(palabras, p, equipo);
+      if (dicho) {
+        coincidencias.push({ persona: p, dicho });
+      }
+    }
+    coincidencias.sort(
+      (a, b) => b.dicho.split(/\s+/).length - a.dicho.split(/\s+/).length
+    );
+    if (coincidencias[0]) {
+      return coincidencias[0];
+    }
+  }
+  return undefined;
+}
+
+function prefijoDeNombre(
+  palabras: string[],
+  persona: Person,
+  equipo: Person[]
+): string | undefined {
+  if (palabras.length === 0) {
+    return undefined;
+  }
+  const tokensNombre = clave(persona.name).split(/\s+/).filter(Boolean);
+  const tokensDicho = palabras.map(clave);
+  if (
+    tokensNombre.length > 0 &&
+    tokensNombre.length <= tokensDicho.length &&
+    tokensNombre.every((t, i) => t === tokensDicho[i])
+  ) {
+    return palabras.slice(0, tokensNombre.length).join(' ');
+  }
+  const pila = tokensNombre[0];
+  if (!pila || pila.length < 3 || tokensDicho[0] !== pila) {
+    return undefined;
+  }
+  const homonimos = equipo.filter(
+    (p) => clave(p.name).split(/\s+/)[0] === pila
+  );
+  return homonimos.length === 1 ? palabras[0] : undefined;
+}
+
+function clave(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function quitarCon(texto: string, dicho: string): string {
+  return texto
+    .replace(new RegExp(`\\s*\\bcon\\s+${escaparRegex(dicho)}\\b`, 'gi'), '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.;:])/g, '$1')
+    .trim();
+}
+
+function escaparRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** "el martes a las 12", "hoy", "mañana a las 5 pm" → ISO, o nada. */
