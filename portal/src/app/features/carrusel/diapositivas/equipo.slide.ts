@@ -26,7 +26,7 @@ const RENGLONES = 10;
     }
     @if (cargas().length > 0) {
       <ul
-        class="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto lg:grid-cols-2 lg:gap-2.5 2xl:grid-cols-1 2xl:gap-3">
+        class="grid min-h-0 flex-1 content-center grid-cols-1 gap-2 overflow-y-auto lg:grid-cols-2 lg:gap-2.5 2xl:grid-cols-1 2xl:gap-3">
         @for (carga of cargas(); track carga.person.id) {
           <li
             class="tv-card flex shrink-0 items-center gap-3 px-3 py-2.5 lg:gap-4 lg:px-4 lg:py-3 2xl:gap-6 2xl:px-6 2xl:py-4">
