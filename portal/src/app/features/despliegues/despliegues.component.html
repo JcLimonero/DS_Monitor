@@ -127,26 +127,34 @@
 
           <!-- Las ligas no abren el renglon -->
           <div
-            class="flex shrink-0 items-center gap-1"
+            class="flex shrink-0 flex-wrap items-center justify-end gap-1.5"
             (click)="$event.stopPropagation()">
-            <a
-              class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
-              [href]="despliegue.url"
-              target="_blank"
-              rel="noopener"
-              [attr.aria-label]="'Abrir ' + despliegue.project">
-              <pt-icon name="externo" class="h-4 w-4" />
-            </a>
             @if (despliegue.inspectorUrl; as inspector) {
               <a
-                class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
+                class="btn h-10 gap-1.5 px-2.5 text-xs lg:h-8"
                 [href]="inspector"
                 target="_blank"
-                rel="noopener"
-                [attr.aria-label]="'Ver el detalle de ' + despliegue.project">
-                <pt-icon name="despliegue" class="h-4 w-4" />
+                rel="noopener noreferrer"
+                title="Abre el detalle en Vercel u otro proveedor, sin buscarlo en la lista"
+                [attr.aria-label]="
+                  'Abrir el despliegue de ' +
+                  despliegue.project +
+                  ' en una ventana nueva'
+                ">
+                <pt-icon name="despliegue" class="h-3.5 w-3.5" />
+                Abrir despliegue
               </a>
             }
+            <a
+              class="btn h-10 gap-1.5 px-2.5 text-xs lg:h-8"
+              [href]="despliegue.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Abre la URL publicada de este despliegue"
+              [attr.aria-label]="'Abrir el sitio de ' + despliegue.project">
+              <pt-icon name="externo" class="h-3.5 w-3.5" />
+              Sitio
+            </a>
           </div>
         </div>
       </li>
