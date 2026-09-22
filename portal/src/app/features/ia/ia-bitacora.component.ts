@@ -30,7 +30,9 @@ interface Resumen {
   salida: number;
 }
 
-/** Qué se le pidió al modelo, qué costó y qué contestó: las últimas 100 llamadas. */
+const POR_PAGINA = 20;
+
+/** Qué se le pidió al modelo, qué costó y qué contestó: con páginas de 20. */
 @Component({
   selector: 'pt-ia-bitacora',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -59,40 +61,66 @@ interface Resumen {
         <p class="mt-3 text-sm text-ink-muted">
           Todavía no hay llamadas registradas.
         </p>
-      }
-      <ul class="mt-3 divide-y divide-line">
-        @for (e of entradas(); track e.en + e.uso) {
-          <li class="py-2 text-xs">
-            <details>
-              <summary
-                class="flex cursor-pointer flex-wrap items-center gap-2 text-ink">
-                <span class="chip bg-surface-muted text-ink-muted">{{
-                  e.uso
-                }}</span>
-                <span class="text-ink-subtle">{{ e.en | relativo }}</span>
-                <span class="text-ink-muted">{{ e.modelo }}</span>
-                <span class="ml-auto tabular-nums text-ink-muted">
-                  {{ e.entrada }} → {{ e.salida }} tok · {{ e.ms }} ms
-                  @if (e.costo !== undefined) {
-                    · {{ e.costo | number: '1.5-5' }} USD
+      } @else {
+        <ul class="mt-3 divide-y divide-line">
+          @for (e of pagina(); track e.en + e.uso) {
+            <li class="py-2 text-xs">
+              <details>
+                <summary
+                  class="flex cursor-pointer flex-wrap items-center gap-2 text-ink">
+                  <span class="chip bg-surface-muted text-ink-muted">{{
+                    e.uso
+                  }}</span>
+                  <span class="text-ink-subtle">{{ e.en | relativo }}</span>
+                  <span class="text-ink-muted">{{ e.modelo }}</span>
+                  <span class="ml-auto tabular-nums text-ink-muted">
+                    {{ e.entrada }} → {{ e.salida }} tok · {{ e.ms }} ms
+                    @if (e.costo !== undefined) {
+                      · {{ e.costo | number: '1.5-5' }} USD
+                    }
+                  </span>
+                  @if (e.error) {
+                    <span class="chip bg-rose-100 text-rose-700">error</span>
                   }
-                </span>
-                @if (e.error) {
-                  <span class="chip bg-rose-100 text-rose-700">error</span>
-                }
-              </summary>
-              <div class="mt-2 grid gap-2 lg:grid-cols-2">
-                <pre
-                  class="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-surface-muted p-2 font-mono text-[11px] text-ink-muted"
-                  >{{ e.pregunta }}</pre>
-                <pre
-                  class="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-surface-muted p-2 font-mono text-[11px] text-ink-muted"
-                  >{{ e.error ?? e.respuesta }}</pre>
-              </div>
-            </details>
-          </li>
+                </summary>
+                <div class="mt-2 grid gap-2 lg:grid-cols-2">
+                  <pre
+                    class="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-surface-muted p-2 font-mono text-[11px] text-ink-muted"
+                    >{{ e.pregunta }}</pre>
+                  <pre
+                    class="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-surface-muted p-2 font-mono text-[11px] text-ink-muted"
+                    >{{ e.error ?? e.respuesta }}</pre>
+                </div>
+              </details>
+            </li>
+          }
+        </ul>
+        @if (totalPaginas() > 1) {
+          <div
+            class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-muted">
+            <p>
+              {{ desde() }}–{{ hasta() }} de {{ entradas().length }} · página
+              {{ hoja() }} de {{ totalPaginas() }}
+            </p>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                class="btn h-10 px-3 lg:h-8"
+                [disabled]="hoja() <= 1"
+                (click)="ir(hoja() - 1)">
+                Anterior
+              </button>
+              <button
+                type="button"
+                class="btn h-10 px-3 lg:h-8"
+                [disabled]="hoja() >= totalPaginas()"
+                (click)="ir(hoja() + 1)">
+                Siguiente
+              </button>
+            </div>
+          </div>
         }
-      </ul>
+      }
     </section>
   `
 })
@@ -102,14 +130,39 @@ export class IaBitacoraComponent {
 
   readonly entradas = signal<Entrada[]>([]);
   readonly porUso = signal<Record<string, Resumen>>({});
+  readonly hoja = signal(1);
+  readonly porPagina = POR_PAGINA;
+
   readonly resumen = computed(() =>
     Object.entries(this.porUso())
       .map(([uso, r]) => ({ uso, ...r }))
       .sort((a, b) => b.costo - a.costo || b.llamadas - a.llamadas)
   );
 
+  readonly totalPaginas = computed(() =>
+    Math.max(1, Math.ceil(this.entradas().length / this.porPagina))
+  );
+
+  readonly pagina = computed(() => {
+    const i = (this.hoja() - 1) * this.porPagina;
+    return this.entradas().slice(i, i + this.porPagina);
+  });
+
+  readonly desde = computed(() =>
+    this.entradas().length === 0 ? 0 : (this.hoja() - 1) * this.porPagina + 1
+  );
+
+  readonly hasta = computed(() =>
+    Math.min(this.hoja() * this.porPagina, this.entradas().length)
+  );
+
   constructor() {
     this.cargar();
+  }
+
+  ir(n: number): void {
+    const tope = this.totalPaginas();
+    this.hoja.set(Math.min(tope, Math.max(1, n)));
   }
 
   cargar(): void {
@@ -124,6 +177,7 @@ export class IaBitacoraComponent {
         next: (r) => {
           this.entradas.set(r.entradas);
           this.porUso.set(r.porUso);
+          this.hoja.set(1);
         },
         error: () => undefined
       });
