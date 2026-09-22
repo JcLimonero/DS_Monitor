@@ -201,7 +201,7 @@ const ESPERA_BORRAR_MS = 5000;
               } @else {
                 <button
                   type="button"
-                  class="btn btn-primary ml-auto h-10 px-3 text-xs lg:h-8"
+                  class="btn btn-ok ml-auto h-10 px-3 text-xs lg:h-8"
                   [disabled]="saving()"
                   (click)="toggle()">
                   <pt-icon name="ok" class="h-3.5 w-3.5" />
@@ -1412,6 +1412,13 @@ export class TaskCardComponent {
       return;
     }
     this.store.marcarRecienHecho(this.task().id, estado === 'hecho');
+    // Hecho ↔ no-hecho: el botón y el chip cambian al instante (carrusel incluido).
+    if (estado === 'hecho' || this.task().status === 'hecho') {
+      this.store.actualizarTarea(this.task().id, {
+        status: estado,
+        updatedAt: new Date().toISOString()
+      });
+    }
     this.guardar({ estado }, () =>
       this.message.set({
         texto:
@@ -1425,13 +1432,21 @@ export class TaskCardComponent {
   toggle(): void {
     const hecho = !this.done();
     this.store.marcarRecienHecho(this.task().id, hecho);
+    const cambioEstado = {
+      status: (hecho ? 'hecho' : 'pendiente') as TaskStatus,
+      updatedAt: new Date().toISOString()
+    };
     if (!this.ia.disponible) {
       if (this.task().origin === 'local') {
+        // Optimista también en modo local: el botón cambia antes del refresh.
+        this.store.actualizarTarea(this.task().id, cambioEstado);
         this.local.toggleDone(this.task().id);
         this.store.refreshTasks();
       }
       return;
     }
+    // Optimista: el botón pasa a Reabrir/Hecho sin esperar al puente.
+    this.store.actualizarTarea(this.task().id, cambioEstado);
     this.guardar({ hecho }, () =>
       this.message.set({
         texto: hecho
@@ -1910,6 +1925,8 @@ export class TaskCardComponent {
 
   borrarConfirmado(): void {
     this.cancelarBorrar();
+    // Sale de la lista al instante; si el puente falla, guardar refresca.
+    this.store.quitarTarea(this.task().id);
     if (!this.ia.disponible) {
       this.local.remove(this.task().id);
       this.store.refreshTasks();
@@ -1935,6 +1952,8 @@ export class TaskCardComponent {
       error: (error: unknown) => {
         this.saving.set(false);
         this.message.set({ texto: describirError(error), error: true });
+        // Restaura lista/estado si falló un cambio optimista (borrar, hecho…).
+        this.store.refreshTasks();
       }
     });
   }
