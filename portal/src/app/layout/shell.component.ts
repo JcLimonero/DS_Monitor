@@ -5,26 +5,23 @@ import {
   VentanaIaBotonComponent,
   VentanaIaComponent
 } from '../features/ia/ventana-ia.component';
-import { Aviso, AvisosService } from '../core/avisos/avisos.service';
-import { Router } from '@angular/router';
+import { AvisosCampanaComponent } from '../ui/avisos-campana.component';
+import { AvisosService } from '../core/avisos/avisos.service';
 import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  effect,
   inject,
-  signal
+  signal,
+  viewChild
 } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { SesionService } from '../core/acceso/sesion.service';
-import { TaskItem } from '../core/models';
-import { LocalTaskStore } from '../core/sources/local/local-task.store';
 import { PortalStore } from '../core/state/portal.store';
 import { ThemeService } from '../core/theme/theme.service';
 import { BrandLogoComponent } from '../ui/brand-logo.component';
 import { IconComponent, IconName } from '../ui/icon.component';
 import { RelativePipe } from '../ui/portal.pipes';
-import { TaskCardComponent } from '../ui/task-card.component';
 
 interface NavItem {
   path: string;
@@ -65,13 +62,13 @@ const NAV: NavItem[] = [
   imports: [
     VentanaIaBotonComponent,
     VentanaIaComponent,
+    AvisosCampanaComponent,
     BrandLogoComponent,
     IconComponent,
     RelativePipe,
     RouterLink,
     RouterLinkActive,
-    RouterOutlet,
-    TaskCardComponent
+    RouterOutlet
   ],
   templateUrl: './shell.component.html',
   host: { '(document:keydown.escape)': 'cerrarMenus()' }
@@ -80,37 +77,12 @@ export class ShellComponent {
   private readonly theme = inject(ThemeService);
 
   readonly store = inject(PortalStore);
-  private readonly locales = inject(LocalTaskStore);
   readonly sesion = inject(SesionService);
   readonly avisos = inject(AvisosService);
-  private readonly router = inject(Router);
+  private readonly campana = viewChild(AvisosCampanaComponent);
   readonly nav = NAV;
-  readonly avisosAbiertos = signal(false);
   /** Menu de tema y salir en pantallas chicas; en escritorio van sueltos. */
   readonly menuUsuarioAbierto = signal(false);
-  /**
-   * Última copia vista del pendiente del diálogo: si el store refresca un
-   * instante sin él, el diálogo no se cierra a medias.
-   */
-  private readonly dialogoRespaldo = signal<TaskItem | undefined>(undefined);
-
-  private readonly tareaEnStore = computed(() => {
-    const id = this.avisos.dialogoId();
-    if (!id) {
-      return undefined;
-    }
-    return (
-      this.store.tasks().find((t) => t.id === id) ??
-      this.locales.tasks().find((t) => t.id === id)
-    );
-  });
-
-  /** Pendiente mostrado en el diálogo de la campana / liga `?abrir=`. */
-  readonly pendienteDialogo = computed(() =>
-    this.avisos.dialogoId()
-      ? (this.tareaEnStore() ?? this.dialogoRespaldo())
-      : undefined
-  );
 
   constructor() {
     // Una sola vez: si el puente tiene IA, para que las pantallas enseñen o
@@ -135,19 +107,6 @@ export class ShellComponent {
     if (this.sesion.token() && this.sesion.disponible) {
       this.sesion.estado().subscribe({ error: () => undefined });
     }
-    effect(() => {
-      const tarea = this.tareaEnStore();
-      if (tarea) {
-        this.dialogoRespaldo.set(tarea);
-      }
-    });
-    // Si se pidió el diálogo y aún no está en memoria, se vuelve a pedir.
-    effect(() => {
-      const id = this.avisos.dialogoId();
-      if (id && !this.tareaEnStore() && !this.dialogoRespaldo()) {
-        this.store.refreshTasks();
-      }
-    });
   }
 
   /** Menu lateral en pantallas chicas. En escritorio siempre esta visible. */
@@ -162,49 +121,20 @@ export class ShellComponent {
       : 'Cambiar a tema oscuro'
   );
 
-  /** Marca el aviso leído y abre el pendiente en un diálogo (cualquier pantalla). */
-  irAlAviso(a: Aviso): void {
-    this.avisos.marcarLeidos([a.id]);
-    this.avisosAbiertos.set(false);
-    if (a.tipo === 'sistema' || !a.tareaId) {
-      // Un aviso del monitor (el lunes de "sin asignar") lleva a la vista, no
-      // a un pendiente.
-      void this.router.navigate(['/pendientes'], {
-        queryParams: { owner: 'nadie' }
-      });
-      return;
-    }
-    this.dialogoRespaldo.set(undefined);
-    this.avisos.abrirEnDialogo(a.tareaId);
-    // La URL apunta al pendiente por si se comparte o se recarga; el diálogo
-    // ya está arriba aunque se venga de Hoy, Monitoreo, etc.
-    void this.router.navigate(['/pendientes'], {
-      queryParams: { abrir: a.tareaId }
-    });
-  }
-
   toggleTheme(): void {
     this.theme.toggle();
   }
 
-  /** Cierra menús de cabecera y, si hay, el diálogo del pendiente. */
+  /** Escape cierra menús de cabecera y el diálogo de la campana. */
   cerrarMenus(): void {
-    this.avisosAbiertos.set(false);
     this.menuUsuarioAbierto.set(false);
-    if (this.avisos.dialogoId()) {
-      this.cerrarDialogoPendiente();
+    const c = this.campana();
+    if (c?.panelAbierto()) {
+      c.cerrarPanel();
     }
-  }
-
-  cerrarDialogoPendiente(): void {
-    this.avisos.cerrarDialogo();
-    this.dialogoRespaldo.set(undefined);
-    // Quita ?abrir= sin salir de la pantalla actual.
-    void this.router.navigate([], {
-      queryParams: { abrir: null },
-      queryParamsHandling: 'merge',
-      replaceUrl: true
-    });
+    if (this.avisos.dialogoId()) {
+      c?.cerrarDialogo();
+    }
   }
 
   salir(): void {
