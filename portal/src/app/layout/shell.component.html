@@ -278,3 +278,48 @@
 
 <!-- Fuera de la cabecera (backdrop-blur) para que el fixed sea de verdad -->
 <pt-ventana-ia />
+
+<!--
+  Detalle del pendiente desde la campana o ?abrir=: encima de cualquier
+  pantalla (Hoy, Monitoreo, etc.), no solo dentro de Pendientes.
+-->
+@if (avisos.dialogoId(); as id) {
+  <div
+    class="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 lg:items-center lg:p-6"
+    (click)="cerrarDialogoPendiente()">
+    <div
+      class="card flex h-full w-full max-w-3xl flex-col rounded-none lg:h-auto lg:max-h-[90dvh] lg:rounded-xl"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dialogo-aviso-titulo"
+      (click)="$event.stopPropagation()">
+      <header
+        class="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2 lg:px-5">
+        <h2 id="dialogo-aviso-titulo" class="text-sm font-semibold text-ink">
+          Pendiente
+        </h2>
+        <a
+          class="ml-auto text-sm font-semibold text-brand hover:underline"
+          routerLink="/pendientes"
+          [queryParams]="{ abrir: id }"
+          (click)="cerrarDialogoPendiente()">
+          Ver en Pendientes →
+        </a>
+        <button
+          type="button"
+          class="flex h-11 w-11 items-center justify-center rounded-lg text-ink-subtle hover:bg-surface-muted hover:text-ink"
+          aria-label="Cerrar"
+          (click)="cerrarDialogoPendiente()">
+          <pt-icon name="cerrar" class="h-5 w-5" />
+        </button>
+      </header>
+      <div class="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5">
+        @if (pendienteDialogo(); as tarea) {
+          <pt-task-card [task]="tarea" />
+        } @else {
+          <p class="text-sm text-ink-muted">Cargando el pendiente…</p>
+        }
+      </div>
+    </div>
+  </div>
+}
