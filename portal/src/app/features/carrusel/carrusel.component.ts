@@ -209,6 +209,18 @@ export class CarruselComponent {
     this.ultimoMovimiento.set(Date.now());
   }
 
+  /**
+   * Clic en una esquina del kiosco. Izquierda atras, derecha adelante.
+   * Con un dialogo abierto no se cambia de pantalla.
+   */
+  alClicEsquina(pasos: number): void {
+    this.despertarControles();
+    if (this.enDialogo()) {
+      return;
+    }
+    this.avanzar(pasos);
+  }
+
   async pantallaCompleta(): Promise<void> {
     try {
       if (document.fullscreenElement) {
