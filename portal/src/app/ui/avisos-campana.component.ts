@@ -87,11 +87,12 @@ const JUNTA_AVISO_MIN = 15;
             </p>
           }
           <ul class="max-h-96 overflow-y-auto">
-            @for (j of juntasIniciadas(); track j.id) {
-              <li>
+            @for (j of juntasIniciadas(); track claveJunta(j)) {
+              <li
+                class="flex items-stretch gap-1 rounded bg-amber-50 dark:bg-amber-500/10">
                 <button
                   type="button"
-                  class="w-full rounded px-2 py-2 text-left transition hover:bg-surface-muted bg-amber-50 dark:bg-amber-500/10"
+                  class="min-w-0 flex-1 rounded px-2 py-2 text-left transition hover:bg-surface-muted/60"
                   (click)="irAJunta(j)">
                   <p class="text-sm text-ink" [class.text-base]="tv()">
                     <span class="font-medium">Junta iniciada</span>
@@ -99,9 +100,20 @@ const JUNTA_AVISO_MIN = 15;
                     <span class="font-medium">{{ j.title }}</span>
                   </p>
                   <p class="text-xs text-ink-muted" [class.text-sm]="tv()">
-                    Desde las {{ j.start | hora }} · se quita a los
-                    {{ minutosRestantes(j) }} min
+                    Desde las {{ j.start | hora }} · × para quitar · se va sola
+                    en {{ minutosRestantes(j) }} min
                   </p>
+                </button>
+                <button
+                  type="button"
+                  class="flex shrink-0 items-center justify-center rounded px-3 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
+                  [class.px-4]="tv()"
+                  [attr.aria-label]="'Quitar aviso de ' + j.title"
+                  title="Quitar aviso"
+                  (click)="quitarJunta(j, $event)">
+                  <pt-icon
+                    name="cerrar"
+                    [class]="tv() ? 'h-6 w-6' : 'h-4 w-4'" />
                 </button>
               </li>
             }
@@ -201,6 +213,8 @@ export class AvisosCampanaComponent {
   readonly panelAbierto = signal(false);
   readonly ahora = signal(new Date());
   private readonly dialogoRespaldo = signal<TaskItem | undefined>(undefined);
+  /** Juntas cuyo aviso se quitó a mano; clave = id|inicio. */
+  private readonly juntasQuitadas = signal<ReadonlySet<string>>(new Set());
 
   private readonly tareaEnStore = computed(() => {
     const id = this.avisos.dialogoId();
@@ -221,15 +235,19 @@ export class AvisosCampanaComponent {
 
   /**
    * Juntas que ya empezaron y llevan menos de 15 minutos: aviso temporal
-   * que desaparece solo al cumplir ese plazo.
+   * que desaparece solo al cumplir ese plazo (o al quitarlo a mano).
    */
   readonly juntasIniciadas = computed(() => {
     const t = this.ahora().getTime();
     const limite = JUNTA_AVISO_MIN * 60_000;
+    const quitadas = this.juntasQuitadas();
     return this.store
       .meetings()
       .filter((m) => {
         if (m.status === 'cancelada' || m.allDay) {
+          return false;
+        }
+        if (quitadas.has(this.claveJunta(m))) {
           return false;
         }
         const inicio = Date.parse(m.start);
@@ -280,6 +298,23 @@ export class AvisosCampanaComponent {
   minutosRestantes(j: Meeting): number {
     const fin = Date.parse(j.start) + JUNTA_AVISO_MIN * 60_000;
     return Math.max(1, Math.ceil((fin - this.ahora().getTime()) / 60_000));
+  }
+
+  /** Id + inicio: la misma junta otro día puede avisar de nuevo. */
+  claveJunta(j: Meeting): string {
+    return `${j.id}|${j.start}`;
+  }
+
+  /** Quita el aviso al instante (un toque); no cancela la junta. */
+  quitarJunta(j: Meeting, event: Event): void {
+    event.stopPropagation();
+    event.preventDefault();
+    const clave = this.claveJunta(j);
+    this.juntasQuitadas.update((prev) => {
+      const next = new Set(prev);
+      next.add(clave);
+      return next;
+    });
   }
 
   irAJunta(j: Meeting): void {
