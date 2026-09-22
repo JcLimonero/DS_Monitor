@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  actualizarEspera,
   avisosPendientes,
   estadoDe,
   listarEjecuciones,
+  minutosEntreDias,
   registrarEjecucion
 } from './ejecuciones.js';
 
@@ -151,6 +153,37 @@ describe('ejecuciones', () => {
       'atrasada'
     );
   });
+
+  it('actualizarEspera cambia la frecuencia sin contar otra corrida', () => {
+    const { ejecuciones, ejecucion } = registrarEjecucion(
+      {},
+      'ds-monitor',
+      { integracion: 'sin asignar', estado: 'ok', cadaMinutos: 15 },
+      AHORA
+    );
+    const siguiente = actualizarEspera(
+      ejecuciones,
+      'ds-monitor',
+      'sin asignar',
+      7 * 24 * 60
+    );
+    assert.equal(siguiente?.[ejecucion.clave]?.cadaMinutos, 7 * 24 * 60);
+    assert.equal(siguiente?.[ejecucion.clave]?.corridas, 1);
+    assert.equal(siguiente?.[ejecucion.clave]?.terminoEn, ejecucion.terminoEn);
+    assert.equal(
+      estadoDe(
+        siguiente![ejecucion.clave]!,
+        new Date(AHORA.getTime() + 2 * 60 * 60_000)
+      ),
+      'ok'
+    );
+  });
+
+  it('minutosEntreDias toma el hueco más largo de la semana', () => {
+    assert.equal(minutosEntreDias([1]), 7 * 24 * 60);
+    assert.equal(minutosEntreDias([2, 4]), 5 * 24 * 60);
+    assert.equal(minutosEntreDias([0, 1, 2, 3, 4, 5, 6]), 24 * 60);
+  });
 });
 
 describe('avisosPendientes (Telegram)', () => {
@@ -202,6 +235,27 @@ describe('avisosPendientes (Telegram)', () => {
     ).ejecuciones;
     assert.deepEqual(avisosPendientes(e, {}, minutos(5 * 60)).lineas, []);
     assert.equal(avisosPendientes(e, {}, minutos(37 * 60)).lineas.length, 1);
+  });
+
+  it('una tarea semanal no se marca atrasada a las dos horas', () => {
+    const { ejecucion } = registrarEjecucion(
+      {},
+      'ds-monitor',
+      { integracion: 'sin asignar', estado: 'ok', cadaMinutos: 7 * 24 * 60 },
+      AHORA
+    );
+    assert.equal(
+      estadoDe(ejecucion, new Date(AHORA.getTime() + 2 * 60 * 60_000)),
+      'ok'
+    );
+    assert.equal(
+      estadoDe(ejecucion, new Date(AHORA.getTime() + 8 * 24 * 60 * 60_000)),
+      'ok'
+    );
+    assert.equal(
+      estadoDe(ejecucion, new Date(AHORA.getTime() + 11 * 24 * 60 * 60_000)),
+      'atrasada'
+    );
   });
 
   it('avisa el primer error de la racha, no cada fallo, y cuando vuelve a estar bien', () => {
