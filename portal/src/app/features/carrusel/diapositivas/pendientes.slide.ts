@@ -105,22 +105,34 @@ const CLASE_DIALOGO = 'con-dialogo';
                       }
                       {{ tarea.assignee?.name ?? 'Sin asignar' }}
                       @if (tarea.unread; as u) {
-                        <!-- Llegó un correo del hilo o contestó el equipo, y
-                             nadie lo ha abierto. -->
+                        <!-- Llegó un correo del hilo, contestó el equipo, o
+                             es un pendiente nuevo que nadie ha abierto. -->
                         <span
                           class="ml-1 inline-flex items-center gap-1 rounded px-1.5 text-xs font-bold uppercase tracking-wide"
                           [class]="
                             u.kind === 'respuesta'
                               ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200'
-                              : 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200'
+                              : u.kind === 'nuevo'
+                                ? 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200'
+                                : 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200'
                           "
                           [title]="u.text">
                           <pt-icon
                             [name]="
-                              u.kind === 'respuesta' ? 'enviar' : 'bandeja'
+                              u.kind === 'respuesta'
+                                ? 'enviar'
+                                : u.kind === 'nuevo'
+                                  ? 'alerta'
+                                  : 'bandeja'
                             "
                             class="h-3 w-3" />
-                          {{ u.kind === 'respuesta' ? 'respuesta' : 'correo' }}
+                          {{
+                            u.kind === 'respuesta'
+                              ? 'respuesta'
+                              : u.kind === 'nuevo'
+                                ? 'nuevo'
+                                : 'correo'
+                          }}
                         </span>
                       }
                     </span>

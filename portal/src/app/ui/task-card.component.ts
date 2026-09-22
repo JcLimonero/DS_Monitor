@@ -118,27 +118,39 @@ const ESPERA_BORRAR_MS = 5000;
               <span class="chip" [class]="companyClass()">{{ company }}</span>
             }
             @if (task().unread; as u) {
-              <!-- Llegó un correo del hilo, o alguien del equipo contestó
-                   desde su liga; se quita al abrir la tarjeta. -->
+              <!-- Llegó un correo del hilo, contestó el equipo, o es un
+                   pendiente nuevo (junta Fireflies); se quita al abrir. -->
               <span
                 class="chip"
                 [class]="
                   u.kind === 'respuesta'
                     ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200'
-                    : 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200'
+                    : u.kind === 'nuevo'
+                      ? 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200'
+                      : 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200'
                 "
                 [title]="
                   u.kind === 'respuesta'
                     ? 'Respuesta del responsable: ' + u.text
-                    : u.text
+                    : u.kind === 'nuevo'
+                      ? 'Pendiente nuevo; se quita al abrirlo'
+                      : u.text
                 ">
                 <pt-icon
-                  [name]="u.kind === 'respuesta' ? 'enviar' : 'bandeja'"
+                  [name]="
+                    u.kind === 'respuesta'
+                      ? 'enviar'
+                      : u.kind === 'nuevo'
+                        ? 'alerta'
+                        : 'bandeja'
+                  "
                   class="h-3.5 w-3.5" />
                 {{
                   u.kind === 'respuesta'
                     ? 'Respondió el responsable'
-                    : 'Novedad por correo'
+                    : u.kind === 'nuevo'
+                      ? 'Nuevo'
+                      : 'Novedad por correo'
                 }}
               </span>
             }
@@ -462,6 +474,63 @@ const ESPERA_BORRAR_MS = 5000;
                     >· {{ u.at | relativo }}</span
                   >
                 </p>
+              }
+              @if (task().subtareas?.length) {
+                <div class="space-y-2">
+                  <p
+                    class="text-xs font-medium uppercase tracking-wide text-ink-muted">
+                    Acuerdos de la junta
+                  </p>
+                  <ul class="space-y-2">
+                    @for (s of task().subtareas!; track s.id) {
+                      <li
+                        class="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-line bg-surface-muted/40 px-3 py-2">
+                        <div class="min-w-0 flex-1">
+                          <p class="text-sm text-ink">{{ s.titulo }}</p>
+                          <div class="mt-1 flex flex-wrap gap-1">
+                            @for (r of s.responsables ?? []; track r.id) {
+                              <span class="chip bg-surface text-ink-muted">{{
+                                r.name
+                              }}</span>
+                            }
+                            @if (
+                              !s.responsables?.length && s.responsableEtiqueta
+                            ) {
+                              <span
+                                class="chip bg-surface text-ink-subtle"
+                                [title]="'Según Fireflies; no emparejó con el equipo'"
+                                >{{ s.responsableEtiqueta }}</span
+                              >
+                            }
+                          </div>
+                        </div>
+                        @if (s.convertida) {
+                          <span
+                            class="chip bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
+                            [title]="
+                              s.pendienteId
+                                ? 'Pendiente: ' + s.pendienteId
+                                : 'Ya convertido'
+                            "
+                            >Ya es pendiente</span
+                          >
+                        } @else if (ia.disponible) {
+                          <button
+                            type="button"
+                            class="btn btn-primary shrink-0"
+                            [disabled]="saving() || convirtiendo() === s.id"
+                            (click)="convertirSubtarea(s.id)">
+                            {{
+                              convirtiendo() === s.id
+                                ? 'Convirtiendo…'
+                                : 'Convertir en pendiente'
+                            }}
+                          </button>
+                        }
+                      </li>
+                    }
+                  </ul>
+                </div>
               }
               @if (task().reassignRequest; as r) {
                 <div
@@ -1046,6 +1115,8 @@ export class TaskCardComponent {
   readonly open = signal(false);
   readonly draft = signal('');
   readonly saving = signal(false);
+  /** Id de subtarea que se está convirtiendo en pendiente. */
+  readonly convirtiendo = signal<string | undefined>(undefined);
   readonly drafting = signal(false);
   readonly sugiriendo = signal(false);
   readonly sugerencia = signal<
@@ -1278,7 +1349,10 @@ export class TaskCardComponent {
       }
       const id = this.task().id;
       this.admin.marcarVisto(id).subscribe({
-        next: () => this.store.actualizarTarea(id, { unread: undefined }),
+        next: () => {
+          this.store.actualizarTarea(id, { unread: undefined });
+          this.local.olvidarNovedad(id);
+        },
         error: () => {
           this.vistoEnviado = false;
         }
@@ -1373,6 +1447,35 @@ export class TaskCardComponent {
       return;
     }
     this.guardar({ comentario: texto }, () => this.draft.set(''));
+  }
+
+  /** Acuerdo de junta Fireflies → pendiente propio. */
+  convertirSubtarea(subId: string): void {
+    if (!this.ia.disponible || this.convirtiendo()) {
+      return;
+    }
+    this.convirtiendo.set(subId);
+    this.message.set(undefined);
+    const idPadre = this.task().id;
+    this.admin.convertirSubtarea(idPadre, subId).subscribe({
+      next: ({ pendiente, padre }) => {
+        this.convirtiendo.set(undefined);
+        this.local.reemplazar(padre);
+        this.local.anteponer(pendiente);
+        this.store.actualizarTarea(idPadre, {
+          subtareas: padre.subtareas,
+          updatedAt: padre.updatedAt
+        });
+        this.store.refreshTasks();
+        this.message.set({
+          texto: `Pendiente creado: «${pendiente.title}».`
+        });
+      },
+      error: (error: unknown) => {
+        this.convirtiendo.set(undefined);
+        this.message.set({ texto: describirError(error), error: true });
+      }
+    });
   }
 
   /** Reasignar desde la lista: cambia y avisa sin abrir la tarjeta. */

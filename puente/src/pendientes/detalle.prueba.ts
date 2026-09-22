@@ -107,6 +107,38 @@ describe('limpiarPendienteLocal', () => {
       /pendientes\[3\]\.title es obligatorio/
     );
   });
+
+  it('conserva subtareas y unread de junta Fireflies', () => {
+    const t = limpiarPendienteLocal(
+      {
+        id: 'fireflies-tr-1',
+        title: 'Junta: Sync',
+        tags: ['junta', 'fireflies'],
+        unread: { kind: 'nuevo', at: ahora, text: 'Junta de Fireflies' },
+        subtareas: [
+          {
+            id: 'sub-a',
+            titulo: 'Compartir API',
+            responsables: [{ id: 'c', name: 'Carlos' }],
+            convertida: true,
+            pendienteId: 'local-1'
+          },
+          {
+            id: 'sub-b',
+            titulo: 'Probar',
+            responsableEtiqueta: 'Johana'
+          }
+        ]
+      },
+      0,
+      ahora
+    );
+    assert.equal(t.unread?.kind, 'nuevo');
+    assert.equal(t.subtareas?.length, 2);
+    assert.equal(t.subtareas?.[0]?.convertida, true);
+    assert.equal(t.subtareas?.[0]?.pendienteId, 'local-1');
+    assert.equal(t.subtareas?.[1]?.responsableEtiqueta, 'Johana');
+  });
 });
 
 describe('limpiarPersona', () => {

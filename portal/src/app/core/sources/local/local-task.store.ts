@@ -128,6 +128,38 @@ export class LocalTaskStore implements TaskSource {
     );
   }
 
+  /**
+   * Quita la novedad en memoria sin volver a guardar: el puente ya la borro
+   * en `/pendientes/visto` (incluye kind "nuevo" de juntas Fireflies).
+   */
+  olvidarNovedad(id: string): void {
+    this.tasksSignal.update((tasks) =>
+      tasks.map((task) =>
+        task.id === id ? { ...task, unread: undefined } : task
+      )
+    );
+  }
+
+  /** Sustituye un pendiente propio en memoria (p. ej. padre tras convertir). */
+  reemplazar(tarea: TaskItem): void {
+    this.tasksSignal.update((tasks) => {
+      const i = tasks.findIndex((t) => t.id === tarea.id);
+      if (i < 0) {
+        return [tarea, ...tasks];
+      }
+      const copia = [...tasks];
+      copia[i] = tarea;
+      return copia;
+    });
+  }
+
+  /** Agrega un pendiente propio en memoria (p. ej. el convertido de subtarea). */
+  anteponer(tarea: TaskItem): void {
+    this.tasksSignal.update((tasks) =>
+      tasks.some((t) => t.id === tarea.id) ? tasks : [tarea, ...tasks]
+    );
+  }
+
   /** La siguiente lectura vuelve al servidor (algo cambió allá: una anotación). */
   invalidar(): void {
     this.cargado = false;

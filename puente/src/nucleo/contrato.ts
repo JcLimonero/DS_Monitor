@@ -60,15 +60,33 @@ export interface ReassignRequest {
 }
 
 /**
- * Llego algo nuevo al pendiente y nadie lo ha visto: un correo relacionado
- * o la respuesta de alguien del equipo desde su liga.
+ * Llego algo nuevo al pendiente y nadie lo ha visto: un correo relacionado,
+ * la respuesta de alguien del equipo desde su liga, o un pendiente recien
+ * creado (p. ej. la junta de Fireflies) que nadie ha abierto.
  */
 export interface TaskUnread {
   at: string;
   /** Resumen corto de lo que llego. */
   text: string;
   /** De donde viene; sin valor, correo (lo de antes). */
-  kind?: 'correo' | 'respuesta';
+  kind?: 'correo' | 'respuesta' | 'nuevo';
+}
+
+/**
+ * Un acuerdo dentro de un pendiente padre (junta de Fireflies): se puede
+ * convertir en pendiente propio cuando el dueno del monitor lo decida.
+ */
+export interface TaskSubtarea {
+  id: string;
+  titulo: string;
+  /** Cero, uno o varios del equipo; vacio si no se emparejo. */
+  responsables?: Person[];
+  /** Ya se convirtio en pendiente propio. */
+  convertida?: boolean;
+  /** Id del pendiente creado al convertir. */
+  pendienteId?: string;
+  /** Nombre crudo de Fireflies si no emparejo con el equipo. */
+  responsableEtiqueta?: string;
 }
 
 /** Se le pidio una actualizacion a los responsables y no han contestado. */
@@ -124,6 +142,11 @@ export interface TaskItem {
   reassignRequest?: ReassignRequest;
   /** Se pidio actualizacion a los responsables; se borra cuando contestan. */
   updateRequested?: UpdateRequest;
+  /**
+   * Acuerdos de una junta (Fireflies): viven en el pendiente padre hasta que
+   * alguien los convierte en pendientes propios.
+   */
+  subtareas?: TaskSubtarea[];
   accountId: string;
   origin: TaskOrigin;
   /**

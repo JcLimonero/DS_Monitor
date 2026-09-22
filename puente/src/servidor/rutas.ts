@@ -142,7 +142,12 @@ import {
   transcripcion,
   transcripcionesRecientes
 } from '../proveedores/fireflies.js';
-import { pendientesDeTranscripcion } from '../ia/juntas-fireflies.js';
+import {
+  decidirPendienteFireflies,
+  marcarSubtareaConvertida,
+  pendientesDeTranscripcion,
+  pendienteDeSubtarea
+} from '../ia/juntas-fireflies.js';
 import {
   bajarArchivo,
   leerUpdate,
@@ -453,7 +458,10 @@ export interface Datos {
   estatusConfig: AlmacenJson<{ dias: number[]; hora: number }>;
   /** Transcripciones de Fireflies ya convertidas en pendientes. */
   firefliesProcesadas: AlmacenJson<
-    Record<string, { en: string; titulo: string; pendientes: number }>
+    Record<
+      string,
+      { en: string; titulo: string; pendientes: number; acuerdos?: number }
+    >
   >;
   /**
    * Correos de asignacion/seguimiento ya mandados (persona + titulo → cuando),
@@ -3489,6 +3497,8 @@ export function construirRutas(
   });
 
   // Alguien abrio el pendiente en el portal: la novedad por correo ya se vio.
+  // Tambien limpia `unread` en personales (p. ej. junta de Fireflies con kind
+  // "nuevo"), que vive en el propio pendiente y no en anotaciones.
   router.post('/pendientes/visto', async (contexto) => {
     exigirAdmin(contexto, cfg(), acceso);
     const { id } = (contexto.cuerpo ?? {}) as { id?: string };
@@ -3502,6 +3512,18 @@ export function construirRutas(
     // tirar (tirarlo obligaria a releer los buzones por abrir una tarjeta).
     if (vista !== todas[clave] && vista) {
       await datos.anotaciones.escribir({ ...todas, [clave]: vista });
+    }
+    const propios = datos.personales.leer();
+    const i = propios.findIndex((t) => t.id === clave);
+    if (i >= 0 && propios[i]?.unread) {
+      const actualizados = propios.map((t, j) => {
+        if (j !== i) {
+          return t;
+        }
+        const { unread: _vista, ...resto } = t;
+        return resto;
+      });
+      await datos.personales.escribir(actualizados);
     }
     return { ok: true };
   });
@@ -3736,13 +3758,13 @@ export function construirRutas(
       : []
   );
 
-  // Cada junta que Fireflies transcribe se vuelve pendientes (uno por
-  // acuerdo, agrupados por el nombre de la junta), una sola vez por
-  // transcripcion. Corre solo cada 15 min; /fireflies/procesar lo fuerza.
+  // Cada junta que Fireflies transcribe se vuelve un pendiente padre con
+  // subtareas (una por acuerdo), una sola vez por transcripcion. Corre solo
+  // cada 15 min; /fireflies/procesar lo fuerza.
   const procesarTranscripcion = async (
     id: string,
     ahora = new Date()
-  ): Promise<{ titulo: string; pendientes: number }> => {
+  ): Promise<{ titulo: string; pendientes: number; acuerdos: number }> => {
     const fireflies = cfg().fireflies;
     if (!fireflies) {
       throw new ErrorConfiguracion(
@@ -3751,49 +3773,111 @@ export function construirRutas(
     }
     const completa = await transcripcion(fireflies, id);
     const equipo = await equipoCompleto();
-    const nuevos = await pendientesDeTranscripcion(
+    const nuevo = await pendientesDeTranscripcion(
       iaPara('juntas'),
       completa,
       equipo,
       ahora
     );
-    const existentes = new Set(datos.personales.leer().map((t) => t.id));
-    const agregar = nuevos.filter((t) => !existentes.has(t.id));
-    await datos.personales.escribir([
-      ...agregar.map(({ assignee: _a, ...t }) => t),
-      ...datos.personales.leer()
-    ]);
-    for (const t of agregar) {
-      if (t.assignee?.email || t.assignee?.id) {
-        await asignarPendiente(
-          t.id,
-          t.assignee.email ?? t.assignee.id,
-          t,
-          undefined
-        ).catch((error) =>
-          console.warn(`[puente] Fireflies: ${(error as Error).message}`)
-        );
-      }
+    const acuerdos = nuevo?.subtareas?.length ?? 0;
+    let agregados = 0;
+    // No auto-asignar acuerdos: el dueño convierte subtareas a mano.
+    // Si hay legado (`fireflies-{id}-{hash}`) o ya existe el padre, no crear
+    // otro pendiente de la misma junta.
+    const decision = decidirPendienteFireflies(datos.personales.leer(), nuevo);
+    if (decision.accion === 'agregar') {
+      await datos.personales.escribir([
+        decision.padre,
+        ...datos.personales.leer()
+      ]);
+      agregados = 1;
     }
     await datos.firefliesProcesadas.escribir({
       ...datos.firefliesProcesadas.leer(),
       [id]: {
         en: ahora.toISOString(),
         titulo: completa.titulo,
-        pendientes: agregar.length
+        pendientes: agregados,
+        acuerdos
       }
     });
-    if (agregar.length > 0) {
+    if (agregados > 0) {
       cache.olvidar();
       void push.avisar({
         titulo: `Junta: ${completa.titulo}`,
-        cuerpo: `${agregar.length} ${agregar.length === 1 ? 'acuerdo registrado' : 'acuerdos registrados'} como pendientes.`,
+        cuerpo:
+          acuerdos === 1
+            ? '1 pendiente de la junta con 1 acuerdo.'
+            : `1 pendiente de la junta con ${acuerdos} acuerdos.`,
         url: '/pendientes',
         etiqueta: `fireflies:${id}`
       });
     }
-    return { titulo: completa.titulo, pendientes: agregar.length };
+    return { titulo: completa.titulo, pendientes: agregados, acuerdos };
   };
+
+  /** Convierte una subtarea de junta Fireflies en pendiente propio. */
+  router.post(
+    '/pendientes/:id/subtareas/:subId/convertir',
+    async (contexto) => {
+      exigirAdmin(contexto, cfg(), acceso);
+      const idPadre = (contexto.segmentos[1] ?? '').trim();
+      const subId = (contexto.segmentos[3] ?? '').trim();
+      if (!idPadre || !subId) {
+        throw new ErrorPuente('Faltan el pendiente o la subtarea.', 400);
+      }
+      const actuales = datos.personales.leer();
+      const padre = actuales.find((t) => t.id === idPadre);
+      if (!padre) {
+        throw new ErrorPuente('No encontré ese pendiente de junta.', 404);
+      }
+      const subtarea = (padre.subtareas ?? []).find((s) => s.id === subId);
+      if (!subtarea) {
+        throw new ErrorPuente('No encontré esa subtarea.', 404);
+      }
+      if (subtarea.convertida && subtarea.pendienteId) {
+        const existente = actuales.find((t) => t.id === subtarea.pendienteId);
+        if (existente) {
+          return { pendiente: existente, padre };
+        }
+      }
+      const ahora = new Date().toISOString();
+      const creado = pendienteDeSubtarea(padre, subtarea, ahora);
+      const padreMarcado = marcarSubtareaConvertida(padre, subId, creado.id);
+      const sesion = acceso.sesionDe(tokenDe(contexto));
+      await datos.personales.escribir([
+        creado,
+        ...actuales.map((t) => (t.id === idPadre ? padreMarcado : t))
+      ]);
+      const quien = creado.assignee?.email ?? creado.assignee?.id ?? undefined;
+      if (quien) {
+        await asignarPendiente(creado.id, quien, creado, sesion).catch(
+          (error) =>
+            console.warn(
+              `[puente] convertir subtarea: ${(error as Error).message}`
+            )
+        );
+        const seguidores = creado.followers ?? [];
+        for (const f of seguidores) {
+          const clave = f.email ?? f.id;
+          if (clave) {
+            await agregarSeguidor(creado.id, clave, creado, sesion).catch(
+              (error) =>
+                console.warn(
+                  `[puente] convertir subtarea seguidor: ${(error as Error).message}`
+                )
+            );
+          }
+        }
+      }
+      cache.olvidar();
+      const frescos = datos.personales.leer();
+      return {
+        pendiente: frescos.find((t) => t.id === creado.id) ?? creado,
+        padre: frescos.find((t) => t.id === idPadre) ?? padreMarcado
+      };
+    }
+  );
 
   router.get('/fireflies/estado', async (contexto) => {
     exigirAdmin(contexto, cfg(), acceso);
@@ -3826,7 +3910,7 @@ export function construirRutas(
         try {
           const r = await procesarTranscripcion(t.id);
           console.log(
-            `[puente] junta "${r.titulo}": ${r.pendientes} pendientes desde Fireflies`
+            `[puente] junta "${r.titulo}": ${r.pendientes} pendiente(s), ${r.acuerdos} acuerdos desde Fireflies`
           );
         } catch (error) {
           console.warn(

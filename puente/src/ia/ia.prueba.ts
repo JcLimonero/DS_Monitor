@@ -545,6 +545,164 @@ Realizar pruebas integradas el martes o miércoles próximos (12:05)
     assert.equal(acuerdos[2]?.persona, undefined);
     assert.equal(acuerdos[3]?.responsable, undefined);
   });
+
+  it('pendientesDeTranscripcion: un padre con subtareas y unread nuevo', async () => {
+    const { pendientesDeTranscripcion, idSubtarea } =
+      await import('./juntas-fireflies.js');
+    const equipo: Person[] = [
+      { id: 'carlos', name: 'Carlos Limón', email: 'carlos@x.com' },
+      { id: 'marcos', name: 'Marcos Ruiz', email: 'marcos@x.com' }
+    ];
+    const acuerdos = `
+**Carlos**
+Compartir el API para incluir ID de cuenta (11:39)
+Revisar con Marcos el despliegue (11:40)
+
+**Equipo (Carlos, Johana y Marcos)**
+Realizar pruebas integradas (12:05)
+`;
+    const padre = await pendientesDeTranscripcion(
+      undefined,
+      {
+        id: 'tr-1',
+        titulo: 'Sync Salesforce',
+        fecha: '2026-09-18T16:00:00.000Z',
+        url: 'https://app.fireflies.ai/view/tr-1',
+        resumen: 'Hablaron de la integración.',
+        acuerdos,
+        participantes: ['carlos@x.com']
+      },
+      equipo,
+      new Date('2026-09-18T18:00:00.000Z')
+    );
+    assert.ok(padre);
+    assert.equal(padre!.id, 'fireflies-tr-1');
+    assert.equal(padre!.title, 'Junta: Sync Salesforce');
+    assert.equal(padre!.unread?.kind, 'nuevo');
+    assert.equal(padre!.origin, 'local');
+    assert.equal(padre!.accountId, 'mios');
+    assert.deepEqual(padre!.tags, ['junta', 'fireflies']);
+    assert.equal(padre!.subtareas?.length, 3);
+    assert.equal(
+      padre!.subtareas?.[0]?.id,
+      idSubtarea(0, 'Compartir el API para incluir ID de cuenta')
+    );
+    assert.equal(padre!.subtareas?.[0]?.responsables?.[0]?.id, 'carlos');
+    assert.equal(padre!.subtareas?.[0]?.convertida, undefined);
+    // El segundo menciona a Marcos en el titulo: ambos responsables.
+    const segundos =
+      padre!.subtareas?.[1]?.responsables?.map((p) => p.id) ?? [];
+    assert.ok(segundos.includes('carlos'));
+    assert.ok(segundos.includes('marcos'));
+    // Equipo: sin responsables.
+    assert.equal(padre!.subtareas?.[2]?.responsables, undefined);
+    // Misma junta → mismos ids.
+    const otra = await pendientesDeTranscripcion(
+      undefined,
+      {
+        id: 'tr-1',
+        titulo: 'Sync Salesforce',
+        fecha: '2026-09-18T16:00:00.000Z',
+        acuerdos,
+        participantes: []
+      },
+      equipo,
+      new Date('2026-09-19T10:00:00.000Z')
+    );
+    assert.equal(otra?.id, padre!.id);
+    assert.deepEqual(
+      otra?.subtareas?.map((s) => s.id),
+      padre!.subtareas?.map((s) => s.id)
+    );
+  });
+
+  it('convertir subtarea: crea pendiente y marca convertida', async () => {
+    const { pendienteDeSubtarea, marcarSubtareaConvertida, idSubtarea } =
+      await import('./juntas-fireflies.js');
+    const subId = idSubtarea(0, 'Compartir el API');
+    const padre: TaskItem = {
+      id: 'fireflies-tr-1',
+      title: 'Junta: Sync',
+      status: 'pendiente',
+      priority: 'media',
+      accountId: 'mios',
+      origin: 'local',
+      project: 'Sync',
+      company: 'Dealer',
+      tags: ['junta', 'fireflies'],
+      url: 'https://app.fireflies.ai/view/tr-1',
+      updatedAt: '2026-09-18T18:00:00.000Z',
+      subtareas: [
+        {
+          id: subId,
+          titulo: 'Compartir el API',
+          responsables: [
+            { id: 'carlos', name: 'Carlos', email: 'carlos@x.com' },
+            { id: 'marcos', name: 'Marcos', email: 'marcos@x.com' }
+          ]
+        }
+      ]
+    };
+    const subtarea = padre.subtareas![0]!;
+    const creado = pendienteDeSubtarea(
+      padre,
+      subtarea,
+      '2026-09-18T19:00:00.000Z'
+    );
+    assert.equal(creado.title, 'Compartir el API');
+    assert.equal(creado.assignee?.id, 'carlos');
+    assert.equal(creado.followers?.[0]?.id, 'marcos');
+    assert.ok(creado.tags.includes('convertido'));
+    assert.ok(creado.description?.includes('Junta: Sync'));
+    const marcado = marcarSubtareaConvertida(padre, subId, creado.id);
+    assert.equal(marcado.subtareas?.[0]?.convertida, true);
+    assert.equal(marcado.subtareas?.[0]?.pendienteId, creado.id);
+  });
+
+  it('decidirPendienteFireflies: no duplica con legado ni pisa el padre', async () => {
+    const { decidirPendienteFireflies } = await import('./juntas-fireflies.js');
+    const padre: TaskItem = {
+      id: 'fireflies-tr1',
+      title: 'Junta: Sync',
+      status: 'pendiente',
+      priority: 'media',
+      accountId: 'mios',
+      origin: 'local',
+      tags: ['junta', 'fireflies'],
+      updatedAt: '2026-09-18T18:00:00.000Z',
+      subtareas: [{ id: 'sub-1', titulo: 'Hacer algo' }]
+    };
+    // Sin existentes: se agrega el padre (sin assignee = sin auto-asignar).
+    const fresco = decidirPendienteFireflies([], padre);
+    assert.equal(fresco.accion, 'agregar');
+    if (fresco.accion === 'agregar') {
+      assert.equal(fresco.padre.id, 'fireflies-tr1');
+      assert.equal(fresco.padre.assignee, undefined);
+      assert.equal(fresco.padre.subtareas?.length, 1);
+    }
+    // Legado `fireflies-tr1-{hash}`: no crear el padre nuevo.
+    const conLegado = decidirPendienteFireflies(
+      [{ id: 'fireflies-tr1-abc' }, { id: 'fireflies-tr1-def' }],
+      padre
+    );
+    assert.deepEqual(conLegado, { accion: 'omitir', motivo: 'legado' });
+    // Ya existe el padre exacto: no pisar.
+    const yaExiste = decidirPendienteFireflies([{ id: 'fireflies-tr1' }], {
+      ...padre,
+      subtareas: [{ id: 'sub-otro', titulo: 'Otro' }]
+    });
+    assert.deepEqual(yaExiste, { accion: 'omitir', motivo: 'ya_existe' });
+    // Sin padre (sin acuerdos): nada.
+    assert.deepEqual(decidirPendienteFireflies([], undefined), {
+      accion: 'nada'
+    });
+    // Otra junta no bloquea.
+    const otra = decidirPendienteFireflies(
+      [{ id: 'fireflies-otra-xyz' }],
+      padre
+    );
+    assert.equal(otra.accion, 'agregar');
+  });
 });
 
 describe('liga personal', () => {
