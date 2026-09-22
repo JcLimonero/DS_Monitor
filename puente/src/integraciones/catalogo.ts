@@ -315,7 +315,7 @@ export const INTEGRACIONES: Integracion[] = [
         tipo: 'largo',
         obligatoria: true,
         ayuda:
-          'Uno por línea o separados por punto y coma: id|nombre|url|tipo|entorno. Tipo: sitio, api, servicio, proceso. Entorno: produccion, pruebas, desarrollo.'
+          'Uno por línea o separados por punto y coma: id|nombre|url|tipo|entorno. La url puede ser http:// o https:// (si https falla por TLS o red, el puente prueba http). Tipo: sitio, api, servicio, proceso. Entorno: produccion, pruebas, desarrollo.'
       }
     ],
     probar: async (config) => {

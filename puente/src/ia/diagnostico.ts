@@ -4,6 +4,7 @@ import type {
 } from '../config/entorno.js';
 import type { Deployment, MonitorTarget } from '../nucleo/contrato.js';
 import { bitacoraDeConstruccion } from '../proveedores/vercel.js';
+import { urlHttpAlterna } from '../proveedores/monitoreo.js';
 import { contextoEmpresas } from '../datos/empresas.js';
 import { comoJson, preguntar, texto1 } from './modelo.js';
 
@@ -44,29 +45,52 @@ export async function evidenciaDeSitio(
   const control = new AbortController();
   const temporizador = setTimeout(() => control.abort(), 10_000);
   const inicio = Date.now();
+
+  const pegar = async (url: string): Promise<string> => {
+    try {
+      const r = await fetch(url, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: control.signal,
+        headers: { 'user-agent': 'DSMonitor/0.1 (diagnostico)' }
+      });
+      const cuerpo = (await r.text().catch(() => '')).replace(/\s+/g, ' ');
+      const encabezados = [
+        'server',
+        'location',
+        'content-type',
+        'x-vercel-error',
+        'cf-ray',
+        'retry-after'
+      ]
+        .map((h) =>
+          r.headers.get(h) ? `${h}: ${r.headers.get(h)}` : undefined
+        )
+        .filter((x) => x)
+        .join('; ');
+      return `GET ${url} → ${r.status} ${r.statusText} en ${Date.now() - inicio} ms. ${encabezados}. Cuerpo: ${cuerpo.slice(0, 400)}`;
+    } catch (error) {
+      const e = error as Error & {
+        cause?: { code?: string; message?: string };
+      };
+      return `GET ${url} falló en ${Date.now() - inicio} ms: ${e.name} ${e.message}${e.cause?.code ? ` (${e.cause.code} ${e.cause.message ?? ''})` : ''}`;
+    }
+  };
+
   try {
-    const r = await fetch(destino.url, {
-      method: 'GET',
-      redirect: 'manual',
-      signal: control.signal,
-      headers: { 'user-agent': 'DSMonitor/0.1 (diagnostico)' }
-    });
-    const cuerpo = (await r.text().catch(() => '')).replace(/\s+/g, ' ');
-    const encabezados = [
-      'server',
-      'location',
-      'content-type',
-      'x-vercel-error',
-      'cf-ray',
-      'retry-after'
-    ]
-      .map((h) => (r.headers.get(h) ? `${h}: ${r.headers.get(h)}` : undefined))
-      .filter((x) => x)
-      .join('; ');
-    return `GET ${destino.url} → ${r.status} ${r.statusText} en ${Date.now() - inicio} ms. ${encabezados}. Cuerpo: ${cuerpo.slice(0, 400)}`;
-  } catch (error) {
-    const e = error as Error & { cause?: { code?: string; message?: string } };
-    return `GET ${destino.url} falló en ${Date.now() - inicio} ms: ${e.name} ${e.message}${e.cause?.code ? ` (${e.cause.code} ${e.cause.message ?? ''})` : ''}`;
+    const primera = await pegar(destino.url);
+    if (!/falló|fallo/i.test(primera)) {
+      return primera;
+    }
+    const alternativa = urlHttpAlterna(destino.url);
+    if (!alternativa) {
+      return primera;
+    }
+    const segunda = await pegar(alternativa);
+    if (!/falló|fallo/i.test(segunda)) {
+      return `${segunda} (tras fallar en https: ${primera.slice(0, 200)})`;
+    }
+    return `${primera}\nTambién se probó HTTP: ${segunda}`;
   } finally {
     clearTimeout(temporizador);
   }

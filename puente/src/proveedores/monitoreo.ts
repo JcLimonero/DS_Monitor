@@ -86,29 +86,49 @@ const TIEMPO_LIMITE_MS = 10_000;
 /** Historial por destino cuando no hay almacen (pruebas, desarrollo). */
 let enMemoria: HistorialMonitoreo = {};
 
-/** Revisa un destino una vez. Nunca lanza: un fallo tambien es un resultado. */
-export async function revisar(
-  destino: DestinoMonitoreo
-): Promise<MonitorCheck> {
-  const control = new AbortController();
-  const temporizador = setTimeout(() => control.abort(), TIEMPO_LIMITE_MS);
-  const arranque = performance.now();
-
+/**
+ * Si la URL es https://, la misma en http://. Sirve para sitios que solo
+ * escuchan en 80 o cuyo certificado no cubre el dominio: con HTTPS fallan
+ * y con HTTP responden.
+ */
+export function urlHttpAlterna(url: string): string | undefined {
   try {
-    const respuesta = await fetch(destino.url, {
+    const u = new URL(url);
+    if (u.protocol !== 'https:') {
+      return undefined;
+    }
+    u.protocol = 'http:';
+    return u.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+/** Fallo de red/TLS (sin código HTTP): conviene probar HTTP. */
+function sinCodigoHttp(r: MonitorCheck): boolean {
+  return !r.ok && r.statusCode === undefined;
+}
+
+async function pegarUrl(
+  url: string,
+  arranque: number,
+  signal: AbortSignal
+): Promise<MonitorCheck> {
+  try {
+    const respuesta = await fetch(url, {
       // HEAD basta para saber si responde y no descarga la pagina entera. Hay
       // servidores que no lo soportan; esos caen al GET de abajo.
       method: 'HEAD',
       redirect: 'follow',
-      signal: control.signal,
+      signal,
       headers: { 'user-agent': 'DSMonitor/0.1 (monitoreo)' }
     });
 
     if (respuesta.status === 405 || respuesta.status === 501) {
-      const conGet = await fetch(destino.url, {
+      const conGet = await fetch(url, {
         method: 'GET',
         redirect: 'follow',
-        signal: control.signal,
+        signal,
         headers: { 'user-agent': 'DSMonitor/0.1 (monitoreo)' }
       });
       return {
@@ -131,9 +151,45 @@ export async function revisar(
       ok: false,
       latencyMs: Math.round(performance.now() - arranque)
     };
-  } finally {
-    clearTimeout(temporizador);
   }
+}
+
+export interface RevisionMonitoreo extends MonitorCheck {
+  /** URL con la que se midió (puede ser http tras un fallo de https). */
+  urlEfectiva: string;
+}
+
+/**
+ * Revisa un destino una vez. Nunca lanza: un fallo tambien es un resultado.
+ * Si https falla sin código HTTP (TLS, timeout, conexión), reintenta en http.
+ */
+export async function revisar(
+  destino: DestinoMonitoreo
+): Promise<RevisionMonitoreo> {
+  const intentar = async (url: string): Promise<MonitorCheck> => {
+    const control = new AbortController();
+    const temporizador = setTimeout(() => control.abort(), TIEMPO_LIMITE_MS);
+    const arranque = performance.now();
+    try {
+      return await pegarUrl(url, arranque, control.signal);
+    } finally {
+      clearTimeout(temporizador);
+    }
+  };
+
+  const primera = await intentar(destino.url);
+  if (!sinCodigoHttp(primera)) {
+    return { ...primera, urlEfectiva: destino.url };
+  }
+  const alternativa = urlHttpAlterna(destino.url);
+  if (!alternativa) {
+    return { ...primera, urlEfectiva: destino.url };
+  }
+  const segunda = await intentar(alternativa);
+  if (segunda.ok || segunda.statusCode !== undefined) {
+    return { ...segunda, urlEfectiva: alternativa };
+  }
+  return { ...primera, urlEfectiva: destino.url };
 }
 
 /** Porcentaje de revisiones exitosas, de 0 a 100 con un decimal. */
@@ -174,7 +230,7 @@ export async function destinosMonitoreados(
   const historial: HistorialMonitoreo = { ...(almacen?.leer() ?? enMemoria) };
 
   const salida = config.destinos.map((destino, indice) => {
-    const revision = revisiones[indice] as MonitorCheck;
+    const revision = revisiones[indice] as RevisionMonitoreo;
     const actualizado = conRevision(historial[destino.id], revision, ahora);
     historial[destino.id] = actualizado;
 
@@ -183,7 +239,8 @@ export async function destinosMonitoreados(
       id: destino.id,
       name: destino.name,
       kind: destino.kind,
-      url: destino.url,
+      // La URL con la que respondió (http si https falló por TLS/red).
+      url: revision.urlEfectiva,
       environment: destino.environment,
       status: estado,
       latencyMs: revision.ok ? revision.latencyMs : undefined,

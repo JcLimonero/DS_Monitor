@@ -4,7 +4,8 @@ import {
   conRevision,
   disponibilidad,
   disponibilidad30,
-  estadoDe
+  estadoDe,
+  urlHttpAlterna
 } from './monitoreo.js';
 
 const revision = (ok: boolean, latencyMs = 120) => ({
@@ -41,6 +42,15 @@ describe('monitoreo', () => {
 
   it('sin revision el estado es desconocido, no operativo', () => {
     assert.equal(estadoDe(undefined), 'desconocido');
+  });
+
+  it('https tiene alternativa http; http no', () => {
+    assert.equal(
+      urlHttpAlterna('https://ejemplo.mx/ruta'),
+      'http://ejemplo.mx/ruta'
+    );
+    assert.equal(urlHttpAlterna('http://ejemplo.mx'), undefined);
+    assert.equal(urlHttpAlterna('no-es-url'), undefined);
   });
 });
 
