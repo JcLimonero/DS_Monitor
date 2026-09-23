@@ -18,6 +18,53 @@ import { RelativePipe, TimePipe } from './portal.pipes';
 
 /** Minutos que dura el aviso de «junta iniciada» desde el start. */
 const JUNTA_AVISO_MIN = 15;
+/** Juntas quitadas a mano: `{ clave id|inicio: expiraEpochMs }`. */
+const ALMACEN_JUNTAS_QUITADAS = 'ds-monitor-juntas-quitadas';
+
+/** Lee las juntas quitadas y tira las que ya vencieron. */
+function juntasQuitadasGuardadas(ahora = Date.now()): Record<string, number> {
+  try {
+    const crudo = localStorage.getItem(ALMACEN_JUNTAS_QUITADAS);
+    if (!crudo) {
+      return {};
+    }
+    const parsed: unknown = JSON.parse(crudo);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+    const vigentes: Record<string, number> = {};
+    let descarto = false;
+    for (const [clave, expira] of Object.entries(parsed)) {
+      if (
+        typeof expira === 'number' &&
+        Number.isFinite(expira) &&
+        expira > ahora
+      ) {
+        vigentes[clave] = expira;
+      } else {
+        descarto = true;
+      }
+    }
+    if (descarto) {
+      try {
+        localStorage.setItem(ALMACEN_JUNTAS_QUITADAS, JSON.stringify(vigentes));
+      } catch {
+        // La sesión usa solo las vigentes; el almacén se limpia en otro intento.
+      }
+    }
+    return vigentes;
+  } catch {
+    return {};
+  }
+}
+
+function guardarJuntasQuitadas(mapa: Readonly<Record<string, number>>): void {
+  try {
+    localStorage.setItem(ALMACEN_JUNTAS_QUITADAS, JSON.stringify(mapa));
+  } catch {
+    // Si el almacenamiento falla, el aviso sigue quitado en esta sesión.
+  }
+}
 
 /**
  * Campana de movimientos del equipo (y juntas que acaban de iniciar).
@@ -161,8 +208,10 @@ export class AvisosCampanaComponent {
 
   readonly panelAbierto = signal(false);
   readonly ahora = signal(new Date());
-  /** Juntas cuyo aviso se quitó a mano; clave = id|inicio. */
-  private readonly juntasQuitadas = signal<ReadonlySet<string>>(new Set());
+  /** Juntas cuyo aviso se quitó a mano; clave = id|inicio, valor = expira. */
+  private readonly juntasQuitadas = signal<Readonly<Record<string, number>>>(
+    juntasQuitadasGuardadas()
+  );
 
   /**
    * Juntas que ya empezaron y llevan menos de 15 minutos: aviso temporal
@@ -178,7 +227,7 @@ export class AvisosCampanaComponent {
         if (m.status === 'cancelada' || m.allDay) {
           return false;
         }
-        if (quitadas.has(this.claveJunta(m))) {
+        if (Object.hasOwn(quitadas, this.claveJunta(m))) {
           return false;
         }
         const inicio = Date.parse(m.start);
@@ -229,11 +278,11 @@ export class AvisosCampanaComponent {
     event.stopPropagation();
     event.preventDefault();
     const clave = this.claveJunta(j);
-    this.juntasQuitadas.update((prev) => {
-      const next = new Set(prev);
-      next.add(clave);
-      return next;
-    });
+    const inicio = Date.parse(j.start);
+    const expira = inicio + JUNTA_AVISO_MIN * 60_000;
+    const next = { ...this.juntasQuitadas(), [clave]: expira };
+    this.juntasQuitadas.set(next);
+    guardarJuntasQuitadas(next);
   }
 
   irAJunta(j: Meeting): void {
@@ -250,6 +299,12 @@ export class AvisosCampanaComponent {
   irAlAviso(a: Aviso): void {
     this.avisos.marcarLeidos([a.id]);
     this.cerrarPanel();
+    if (a.tipo === 'sistema' && a.titulo.startsWith('Consulta agendada')) {
+      if (!this.kiosco()) {
+        void this.router.navigate(['/agenda']);
+      }
+      return;
+    }
     if (a.tipo === 'sistema' || !a.tareaId) {
       if (!this.kiosco()) {
         void this.router.navigate(['/pendientes'], {

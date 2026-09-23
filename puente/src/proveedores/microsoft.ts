@@ -12,9 +12,11 @@ import {
   detectarPendientesConEvidencia,
   montoDelRecibo,
   type CandidatoIa,
+  type ConsultaAgendadaAria,
   type DatosCorreo,
   type OpcionesIa
 } from './correo.js';
+import { huella } from './ia.js';
 import {
   encabezadosAria,
   esCuentaItech,
@@ -295,6 +297,7 @@ export async function leerCorreoMicrosoft(
     ahora.getTime() - config.diasAtras * 86_400_000
   ).toISOString();
   const encabezados: EncabezadoCorreo[] = [];
+  const agendadasAria: ConsultaAgendadaAria[] = [];
   const idPorUid = new Map<number, string>();
   const vistaPorUid = new Map<number, string>();
   let siguiente: string | undefined =
@@ -310,6 +313,7 @@ export async function leerCorreoMicrosoft(
       vistaPorUid.set(uid, mensaje.bodyPreview ?? '');
       encabezados.push({
         uid,
+        idEstable: huella(mensaje.id),
         fecha: mensaje.receivedDateTime ?? '',
         remitente: direccion(mensaje.from),
         asunto: mensaje.subject ?? '',
@@ -465,6 +469,11 @@ export async function leerCorreoMicrosoft(
           config,
           juntaDesdeAria(consulta)
         );
+        agendadasAria.push({
+          nombre: consulta.nombre,
+          empresa: consulta.empresa,
+          inicio: consulta.inicio
+        });
         console.log(
           `[puente] ARIA: junta creada «${consulta.nombre}» ${consulta.inicio} → ${creada.id}`
         );
@@ -503,7 +512,8 @@ export async function leerCorreoMicrosoft(
     pendientes: pendientes.map((p) => p.tarea),
     juntas: juntas.sort((a, b) => a.start.localeCompare(b.start)),
     leidos: encabezados.length,
-    paraIa
+    paraIa,
+    agendadasAria
   };
 }
 

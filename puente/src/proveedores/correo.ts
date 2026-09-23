@@ -333,6 +333,13 @@ const TOLERANCIA_DIAS: Record<Periodo, number> = { mensual: 75, anual: 730 };
 const DIAS_DE_INVITACIONES = 60;
 const DIAS_DE_PENDIENTES = 30;
 
+/** Consulta de ARIA que esta lectura creo en el calendario. */
+export interface ConsultaAgendadaAria {
+  nombre: string;
+  empresa: string;
+  inicio: string;
+}
+
 export interface DatosCorreo {
   licencias: LicenseUsage[];
   pendientes: TaskItem[];
@@ -341,6 +348,8 @@ export interface DatosCorreo {
   leidos: number;
   /** Correos recientes que las reglas no reconocen, listos para la IA. */
   paraIa: CandidatoIa[];
+  /** Juntas de ARIA creadas en esta lectura. Vacio si no hubo. */
+  agendadasAria: ConsultaAgendadaAria[];
 }
 
 /** Un correo que las reglas no reconocieron y que la IA todavia no vio. */
@@ -584,7 +593,8 @@ export async function leerCorreo(
       pendientes: pendientes.map((p) => p.tarea),
       juntas,
       leidos: encabezados.length,
-      paraIa
+      paraIa,
+      agendadasAria: []
     };
   } finally {
     await cliente.cerrar();
@@ -890,7 +900,9 @@ export function detectarPendientesConEvidencia(
     porAsunto.set(llave, {
       encabezado,
       tarea: {
-        id: `${accountId}-${encabezado.uid}`,
+        id: encabezado.idEstable
+          ? `${accountId}-${encabezado.idEstable}`
+          : `${accountId}-${encabezado.uid}`,
         title: encabezado.asunto,
         description: descripcionDeCorreo(encabezado, ''),
         status: 'pendiente',
