@@ -2023,6 +2023,44 @@ export function construirRutas(
     return { estado: estadoBarrido, corrida };
   };
 
+  /** Aviso de campana por cada consulta ARIA que sí se creó en el calendario. */
+  const avisarConsultasAgendadas = async (
+    agendadas: DatosCorreo['agendadasAria']
+  ): Promise<void> => {
+    if (agendadas.length === 0) {
+      return;
+    }
+    let avisos = datos.avisos.leer();
+    let cambio = false;
+    const en = new Date().toISOString();
+    for (const junta of agendadas) {
+      const titulo = `Consulta agendada: ${junta.nombre} · ${junta.empresa}`;
+      if (avisos.some((a) => a.titulo === titulo)) {
+        continue;
+      }
+      const aviso: Aviso = {
+        id: randomBytes(8).toString('hex'),
+        tipo: 'sistema',
+        persona: 'ARIA',
+        tareaId: '',
+        titulo,
+        accion: 'agendó',
+        texto: new Date(junta.inicio).toLocaleString('es-MX', {
+          dateStyle: 'short',
+          timeStyle: 'short',
+          timeZone: 'America/Mexico_City'
+        }),
+        en,
+        leido: false
+      };
+      avisos = [aviso, ...avisos].slice(0, 200);
+      cambio = true;
+    }
+    if (cambio) {
+      await datos.avisos.escribir(avisos);
+    }
+  };
+
   const leido = (cuenta: ConfiguracionCorreo) =>
     cache.obtener(`correo:${cuenta.id}`, ttl.correo, async () => {
       const ia = opcionesIa();
@@ -2030,6 +2068,9 @@ export function construirRutas(
         cuenta.proveedor === 'microsoft'
           ? await leerCorreoMicrosoft(cuenta, new Date(), ia)
           : await leerCorreo(cuenta, new Date(), ia);
+      if (cuenta.proveedor === 'microsoft') {
+        await avisarConsultasAgendadas(lectura.agendadasAria);
+      }
       const empresa = empresaDeCuenta(cuenta.id);
       const detectados = [
         ...lectura.pendientes.map((t) => ({

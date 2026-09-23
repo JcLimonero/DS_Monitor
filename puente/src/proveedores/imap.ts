@@ -36,6 +36,11 @@ export interface OpcionesImap {
 
 export interface EncabezadoCorreo {
   uid: number;
+  /**
+   * Id estable del mensaje cuando el uid no lo es (Graph: contador de la
+   * pagina). Huella corta; el uid numerico se conserva para el resto.
+   */
+  idEstable?: string;
   /** Fecha del encabezado `Date`, en ISO. Sin fecha valida queda vacio. */
   fecha: string;
   /** Remitente tal cual viene, por ejemplo `Zoom <no-reply@zoom.us>`. */

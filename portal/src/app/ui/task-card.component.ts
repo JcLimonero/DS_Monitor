@@ -114,9 +114,6 @@ const ESPERA_BORRAR_MS = 5000;
               (click)="open.set(!open())">
               {{ titulo() }}
             </button>
-            @if (task().company; as company) {
-              <span class="chip" [class]="companyClass()">{{ company }}</span>
-            }
             @if (task().unread; as u) {
               <!-- Llegó un correo del hilo, contestó el equipo, o es un
                    pendiente nuevo (junta Fireflies); se quita al abrir. -->
@@ -379,6 +376,9 @@ const ESPERA_BORRAR_MS = 5000;
             <span class="chip" [class]="priorityClass()">{{
               priorityLabel()
             }}</span>
+            @if (task().company; as company) {
+              <span class="chip" [class]="companyClass()">{{ company }}</span>
+            }
             <pt-account-chip
               [accountId]="task().accountId"
               [sufijo]="origenCorto()" />
@@ -403,7 +403,7 @@ const ESPERA_BORRAR_MS = 5000;
                 {{ senderLabel[kind] }}
               </button>
             }
-            @if (task().project; as project) {
+            @if (proyectoVisible(); as project) {
               <span class="chip" [class]="projectClass()">{{ project }}</span>
             }
           </div>
@@ -1300,6 +1300,19 @@ export class TaskCardComponent {
     return company
       ? ACCOUNT_CHIP_CLASS[this.catalogo.colorDe(company)]
       : 'bg-surface-muted text-ink-muted';
+  });
+  /**
+   * El proyecto no se repite cuando, ya recortado, es la misma empresa.
+   * Si es distinto (p. ej. «Correo» y «Dealer Solutions») sí se muestra.
+   */
+  readonly proyectoVisible = computed(() => {
+    const project = this.task().project;
+    const recortado = project?.trim().toLowerCase();
+    if (!project || !recortado) {
+      return undefined;
+    }
+    const empresa = this.task().company?.trim().toLowerCase() ?? '';
+    return recortado === empresa ? undefined : project;
   });
   readonly projectClass = computed(() => {
     const project = this.task().project;
