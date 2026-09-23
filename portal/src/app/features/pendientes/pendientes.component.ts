@@ -116,21 +116,23 @@ export class PendientesComponent {
       }
     });
     // Llegar desde un aviso (o desde una liga en el correo) abre ese
-    // pendiente aunque este hecho o no pase los filtros.
-    const params = inject(ActivatedRoute).snapshot.queryParamMap;
-    if (params.get('owner') === 'nadie') {
-      this.owner.set('nadie');
-      this.filtrosAbiertos.set(true);
-    }
-    if (params.get('vista') === 'personales') {
-      this.vista.set('personales');
-    }
-    const abrir = params.get('abrir');
-    if (abrir) {
-      this.avisos.abrir.set(abrir);
-      this.abrirId.set(abrir);
-      this.clearFiltersSuave();
-    }
+    // pendiente en el diálogo del shell aunque este hecho o no pase filtros.
+    const ruta = inject(ActivatedRoute);
+    ruta.queryParamMap.subscribe((params) => {
+      if (params.get('owner') === 'nadie') {
+        this.owner.set('nadie');
+        this.filtrosAbiertos.set(true);
+      }
+      if (params.get('vista') === 'personales') {
+        this.vista.set('personales');
+      }
+      const abrir = params.get('abrir');
+      if (abrir) {
+        this.avisos.abrirEnDialogo(abrir);
+        this.abrirId.set(abrir);
+        this.clearFiltersSuave();
+      }
+    });
     effect(() => guardarMostrarHechos(this.includeDone()));
   }
 

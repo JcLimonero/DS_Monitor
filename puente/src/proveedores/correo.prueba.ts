@@ -193,6 +193,20 @@ describe('pendientes deducidos del correo', () => {
     );
   });
 
+  it('con idEstable el pendiente usa esa huella y no el uid', () => {
+    const encabezado = {
+      ...correo(
+        'SendGrid <billing@sendgrid.com>',
+        'Action needed - Your payment to SendGrid has failed (P-9)',
+        '2026-09-10T15:00:00Z'
+      ),
+      idEstable: 'k7ab'
+    };
+    const [pendiente] = detectarPendientes([encabezado], 'correo-itech', AHORA);
+    assert.equal(pendiente?.id, 'correo-itech-k7ab');
+    assert.notEqual(pendiente?.id, `correo-itech-${encabezado.uid}`);
+  });
+
   it('un dominio por renovar es de prioridad media con una semana', () => {
     const [pendiente] = detectarPendientes(
       [
@@ -385,6 +399,27 @@ describe('candidatosParaIa', () => {
     assert.deepEqual(
       candidatos.map((c) => c.encabezado.asunto),
       ['Formulario de Javier']
+    );
+  });
+
+  it('deja fuera los avisos ARIA de consulta agendada', () => {
+    const candidatos = candidatosParaIa(
+      [
+        correo(
+          'ARIA — Plataforma central de iTechDev <avisos@meet.itechdev.com.mx>',
+          'Nueva consulta agendada: Fernanda López · jue 24 sep · 12:15 p.m.',
+          '2026-09-16T17:20:00Z'
+        ),
+        correo('Ken <ken@cliente.com>', 'Propuesta', '2026-09-16T11:00:00Z')
+      ],
+      new Set(),
+      'correo-itech',
+      opciones,
+      AHORA
+    );
+    assert.deepEqual(
+      candidatos.map((c) => c.encabezado.asunto),
+      ['Propuesta']
     );
   });
 });

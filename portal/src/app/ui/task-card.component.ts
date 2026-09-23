@@ -114,9 +114,6 @@ const ESPERA_BORRAR_MS = 5000;
               (click)="open.set(!open())">
               {{ titulo() }}
             </button>
-            @if (task().company; as company) {
-              <span class="chip" [class]="companyClass()">{{ company }}</span>
-            }
             @if (task().unread; as u) {
               <!-- Llegó un correo del hilo, contestó el equipo, o es un
                    pendiente nuevo (junta Fireflies); se quita al abrir. -->
@@ -230,7 +227,25 @@ const ESPERA_BORRAR_MS = 5000;
           <!-- Orden fijo: fecha, estado, responsable, prioridad, cuenta · origen. -->
           <div
             class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
-            @if (task().dueDate; as due) {
+            @if (puedeFecha()) {
+              <label class="inline-flex items-center gap-1">
+                <input
+                  class="h-10 rounded border border-line bg-surface px-1 text-xs text-ink lg:h-8"
+                  type="date"
+                  [disabled]="saving()"
+                  [ngModel]="fechaValor()"
+                  (ngModelChange)="cambiarFecha($event)"
+                  name="fecha-{{ task().id }}"
+                  aria-label="Fecha del pendiente" />
+                @if (task().dueDate) {
+                  <span
+                    class="font-medium"
+                    [class]="done() ? 'text-ink-subtle' : clasePlazo()">
+                    {{ textoPlazo() }}
+                  </span>
+                }
+              </label>
+            } @else if (task().dueDate; as due) {
               <span
                 class="inline-flex items-center gap-1 font-medium"
                 [class]="done() ? 'text-ink-subtle' : clasePlazo()">
@@ -361,6 +376,9 @@ const ESPERA_BORRAR_MS = 5000;
             <span class="chip" [class]="priorityClass()">{{
               priorityLabel()
             }}</span>
+            @if (task().company; as company) {
+              <span class="chip" [class]="companyClass()">{{ company }}</span>
+            }
             <pt-account-chip
               [accountId]="task().accountId"
               [sufijo]="origenCorto()" />
@@ -385,7 +403,7 @@ const ESPERA_BORRAR_MS = 5000;
                 {{ senderLabel[kind] }}
               </button>
             }
-            @if (task().project; as project) {
+            @if (proyectoVisible(); as project) {
               <span class="chip" [class]="projectClass()">{{ project }}</span>
             }
           </div>
@@ -1109,6 +1127,8 @@ export class TaskCardComponent {
   private readonly sesion = inject(SesionService);
 
   readonly task = input.required<TaskItem>();
+  /** En el diálogo de un aviso la tarjeta nace abierta. */
+  readonly abierta = input(false);
   readonly maxFotos = MAX_FOTOS;
   private readonly fotosRef = viewChild(FotosPendienteComponent);
 
@@ -1281,6 +1301,19 @@ export class TaskCardComponent {
       ? ACCOUNT_CHIP_CLASS[this.catalogo.colorDe(company)]
       : 'bg-surface-muted text-ink-muted';
   });
+  /**
+   * El proyecto no se repite cuando, ya recortado, es la misma empresa.
+   * Si es distinto (p. ej. «Correo» y «Dealer Solutions») sí se muestra.
+   */
+  readonly proyectoVisible = computed(() => {
+    const project = this.task().project;
+    const recortado = project?.trim().toLowerCase();
+    if (!project || !recortado) {
+      return undefined;
+    }
+    const empresa = this.task().company?.trim().toLowerCase() ?? '';
+    return recortado === empresa ? undefined : project;
+  });
   readonly projectClass = computed(() => {
     const project = this.task().project;
     return project
@@ -1358,6 +1391,16 @@ export class TaskCardComponent {
         }
       });
     });
+    effect(() => {
+      if (this.abierta()) {
+        this.open.set(true);
+      }
+    });
+    effect(() => {
+      if (this.abierta()) {
+        this.open.set(true);
+      }
+    });
     // Si este es el pendiente que un aviso pidio abrir, se abre y se enseña.
     effect(() => {
       if (this.avisos.abrir() === this.task().id) {
@@ -1404,6 +1447,49 @@ export class TaskCardComponent {
       );
       select?.focus();
     });
+  }
+
+  /** "YYYY-MM-DD" de la fecha del pendiente, para el selector de la tarjeta. */
+  readonly fechaValor = computed(() => {
+    const fecha = this.task().dueDate;
+    return fecha ? aLocal(fecha).slice(0, 10) : '';
+  });
+
+  /** La fecha se elige en la tarjeta si hay puente o es un pendiente propio. */
+  puedeFecha(): boolean {
+    return this.ia.disponible || this.task().origin === 'local';
+  }
+
+  cambiarFecha(fecha: string): void {
+    if (fecha === this.fechaValor()) {
+      return;
+    }
+    const actual = this.task().dueDate;
+    const hora =
+      fecha && this.task().dueHasTime && actual
+        ? aLocal(actual).slice(11, 16)
+        : '';
+    const cambios = {
+      dueDate: fecha
+        ? new Date(`${fecha}T${hora || '12:00'}:00`).toISOString()
+        : undefined,
+      dueHasTime: !!(fecha && hora)
+    };
+    if (!this.ia.disponible) {
+      if (this.task().origin === 'local') {
+        this.local.patch(this.task().id, {
+          dueDate: cambios.dueDate,
+          dueHasTime: cambios.dueHasTime || undefined
+        });
+        this.store.refreshTasks();
+      }
+      return;
+    }
+    this.guardar({ cambios }, () =>
+      this.message.set({
+        texto: fecha ? 'Fecha actualizada.' : 'Fecha quitada.'
+      })
+    );
   }
 
   /** El estado se elige del selector; Hecho y reabrir son dos de sus valores. */
