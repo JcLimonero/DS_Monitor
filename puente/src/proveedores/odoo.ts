@@ -1,4 +1,5 @@
 import type { ConfiguracionOdoo } from '../config/entorno.js';
+import { empresaDeCuenta } from '../datos/empresas.js';
 import type {
   CrmActivity,
   CrmActivityType,
@@ -299,12 +300,16 @@ export async function crmOdoo(
  * actividad programada en el CRM es un pendiente igual que cualquier otro, y
  * quien la tiene asignada la quiere ver junto con los del tablero de Ops, no en
  * una pantalla aparte.
+ *
+ * Toda actividad de Odoo es de Itech Dev (la cuenta `itech` del catalogo);
+ * se etiqueta aqui para que el chip de empresa salga sin pasar por la IA.
  */
 export function actividadesComoPendientes(
   actividades: CrmActivity[],
   accountId: string,
   ahora = new Date()
 ): TaskItem[] {
+  const company = empresaDeCuenta(accountId) ?? 'Itech Dev';
   return actividades.map((actividad) => ({
     id: `odoo-${actividad.id}`,
     title: actividad.summary,
@@ -317,6 +322,7 @@ export function actividadesComoPendientes(
     assignee: actividad.responsible,
     accountId,
     origin: 'odoo',
+    company,
     project: 'CRM',
     url: actividad.url,
     tags: ['crm', actividad.type],

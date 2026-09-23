@@ -108,12 +108,30 @@ describe('actividades del CRM vistas como pendientes', () => {
     assert.equal(pendiente?.id, 'odoo-7');
     assert.equal(pendiente?.title, 'Llamar a compras');
     assert.equal(pendiente?.origin, 'odoo');
+    assert.equal(pendiente?.company, 'Itech Dev');
     assert.equal(pendiente?.status, 'pendiente');
     assert.equal(pendiente?.priority, 'alta');
     assert.equal(pendiente?.assignee?.name, 'Juan Carlos');
     assert.equal(pendiente?.description, 'Integración de inventario');
     assert.equal(pendiente?.url, 'https://odoo.example.com/odoo/crm/42');
     assert.deepEqual(pendiente?.tags, ['crm', 'llamada']);
+  });
+
+  it('toda actividad de Odoo lleva empresa Itech Dev', () => {
+    const [pendiente] = actividadesComoPendientes(
+      [
+        {
+          id: '9',
+          summary: 'Seguimiento',
+          type: 'tarea',
+          dueDate: ahora.toISOString(),
+          accountId: 'itech'
+        }
+      ],
+      'itech',
+      ahora
+    );
+    assert.equal(pendiente?.company, 'Itech Dev');
   });
 
   it('el identificador no choca con los de otras fuentes', () => {
