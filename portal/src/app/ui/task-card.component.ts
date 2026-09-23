@@ -230,7 +230,25 @@ const ESPERA_BORRAR_MS = 5000;
           <!-- Orden fijo: fecha, estado, responsable, prioridad, cuenta · origen. -->
           <div
             class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
-            @if (task().dueDate; as due) {
+            @if (puedeFecha()) {
+              <label class="inline-flex items-center gap-1">
+                <input
+                  class="h-10 rounded border border-line bg-surface px-1 text-xs text-ink lg:h-8"
+                  type="date"
+                  [disabled]="saving()"
+                  [ngModel]="fechaValor()"
+                  (ngModelChange)="cambiarFecha($event)"
+                  name="fecha-{{ task().id }}"
+                  aria-label="Fecha del pendiente" />
+                @if (task().dueDate) {
+                  <span
+                    class="font-medium"
+                    [class]="done() ? 'text-ink-subtle' : clasePlazo()">
+                    {{ textoPlazo() }}
+                  </span>
+                }
+              </label>
+            } @else if (task().dueDate; as due) {
               <span
                 class="inline-flex items-center gap-1 font-medium"
                 [class]="done() ? 'text-ink-subtle' : clasePlazo()">
@@ -1416,6 +1434,49 @@ export class TaskCardComponent {
       );
       select?.focus();
     });
+  }
+
+  /** "YYYY-MM-DD" de la fecha del pendiente, para el selector de la tarjeta. */
+  readonly fechaValor = computed(() => {
+    const fecha = this.task().dueDate;
+    return fecha ? aLocal(fecha).slice(0, 10) : '';
+  });
+
+  /** La fecha se elige en la tarjeta si hay puente o es un pendiente propio. */
+  puedeFecha(): boolean {
+    return this.ia.disponible || this.task().origin === 'local';
+  }
+
+  cambiarFecha(fecha: string): void {
+    if (fecha === this.fechaValor()) {
+      return;
+    }
+    const actual = this.task().dueDate;
+    const hora =
+      fecha && this.task().dueHasTime && actual
+        ? aLocal(actual).slice(11, 16)
+        : '';
+    const cambios = {
+      dueDate: fecha
+        ? new Date(`${fecha}T${hora || '12:00'}:00`).toISOString()
+        : undefined,
+      dueHasTime: !!(fecha && hora)
+    };
+    if (!this.ia.disponible) {
+      if (this.task().origin === 'local') {
+        this.local.patch(this.task().id, {
+          dueDate: cambios.dueDate,
+          dueHasTime: cambios.dueHasTime || undefined
+        });
+        this.store.refreshTasks();
+      }
+      return;
+    }
+    this.guardar({ cambios }, () =>
+      this.message.set({
+        texto: fecha ? 'Fecha actualizada.' : 'Fecha quitada.'
+      })
+    );
   }
 
   /** El estado se elige del selector; Hecho y reabrir son dos de sus valores. */
