@@ -12,9 +12,19 @@ import {
   detectarPendientesConEvidencia,
   montoDelRecibo,
   type CandidatoIa,
+  type ConsultaAgendadaAria,
   type DatosCorreo,
   type OpcionesIa
 } from './correo.js';
+import { huella } from './ia.js';
+import {
+  encabezadosAria,
+  esCuentaItech,
+  juntaDesdeAria,
+  parsearConsultaAria,
+  textoPlanoDeCuerpo,
+  yaAgendadaAria
+} from './aria.js';
 import type { EncabezadoCorreo } from './imap.js';
 import { sinEtiquetas } from './mime.js';
 
@@ -287,6 +297,7 @@ export async function leerCorreoMicrosoft(
     ahora.getTime() - config.diasAtras * 86_400_000
   ).toISOString();
   const encabezados: EncabezadoCorreo[] = [];
+  const agendadasAria: ConsultaAgendadaAria[] = [];
   const idPorUid = new Map<number, string>();
   const vistaPorUid = new Map<number, string>();
   let siguiente: string | undefined =
@@ -302,6 +313,7 @@ export async function leerCorreoMicrosoft(
       vistaPorUid.set(uid, mensaje.bodyPreview ?? '');
       encabezados.push({
         uid,
+        idEstable: huella(mensaje.id),
         fecha: mensaje.receivedDateTime ?? '',
         remitente: direccion(mensaje.from),
         asunto: mensaje.subject ?? '',
@@ -424,12 +436,84 @@ export async function leerCorreoMicrosoft(
     siguienteEvento = pagina['@odata.nextLink'];
   }
 
+  // --- ARIA → calendario iTechDev ---
+  // Tras leer el calendario: si el buzón es itech, crear juntas de
+  // «Nueva consulta agendada» que aún no estén en el calendario.
+  if (esCuentaItech(config.id) || esCuentaItech(config.accountId)) {
+    for (const encabezado of encabezadosAria(encabezados)) {
+      const idMensaje = idPorUid.get(encabezado.uid);
+      if (!idMensaje) {
+        continue;
+      }
+      try {
+        const mensaje = await graph<{
+          body?: { content?: string; contentType?: string };
+        }>(token, `/me/messages/${idMensaje}?$select=body`);
+        const plano = textoPlanoDeCuerpo(
+          mensaje.body?.content ?? '',
+          mensaje.body?.contentType
+        );
+        const consulta = parsearConsultaAria(
+          encabezado.asunto,
+          plano,
+          ahora.getFullYear()
+        );
+        if (!consulta) {
+          continue;
+        }
+        consulta.messageId = idMensaje;
+        if (yaAgendadaAria(juntas, consulta)) {
+          continue;
+        }
+        const creada = await crearEventoMicrosoft(
+          config,
+          juntaDesdeAria(consulta)
+        );
+        agendadasAria.push({
+          nombre: consulta.nombre,
+          empresa: consulta.empresa,
+          inicio: consulta.inicio
+        });
+        console.log(
+          `[puente] ARIA: junta creada «${consulta.nombre}» ${consulta.inicio} → ${creada.id}`
+        );
+        juntas.push({
+          id: `${config.accountId}-${creada.id}`,
+          title: `Consulta ARIA: ${consulta.nombre} · ${consulta.empresa}`,
+          start: consulta.inicio,
+          end: consulta.fin,
+          allDay: false,
+          accountId: config.accountId,
+          status: 'confirmada',
+          attendees: consulta.correo
+            ? [
+                {
+                  id: consulta.correo,
+                  name: consulta.nombre,
+                  email: consulta.correo
+                }
+              ]
+            : [],
+          location: consulta.teamsUrl || 'Microsoft Teams',
+          joinUrl: creada.joinUrl ?? consulta.teamsUrl,
+          notes: consulta.messageId
+        });
+      } catch (error) {
+        console.warn(
+          `[puente] ARIA: no se pudo agendar «${encabezado.asunto}»:`,
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
+  }
+
   return {
     licencias: evidencias.map((e) => e.licencia),
     pendientes: pendientes.map((p) => p.tarea),
     juntas: juntas.sort((a, b) => a.start.localeCompare(b.start)),
     leidos: encabezados.length,
-    paraIa
+    paraIa,
+    agendadasAria
   };
 }
 
