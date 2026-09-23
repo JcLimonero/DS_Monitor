@@ -74,6 +74,9 @@ export class PortalStore {
   private readonly repoSources = inject(REPO_SOURCES);
 
   private readonly tasksSignal = signal<TaskItem[]>([]);
+  /** Incluye personales: el diálogo de un aviso tiene que encontrarlos. */
+  private readonly tasksTodasSignal = signal<TaskItem[]>([]);
+  private readonly tareasListasSignal = signal(false);
   private readonly rawMeetingsSignal = signal<Meeting[]>([]);
   private readonly targetsSignal = signal<MonitorTarget[]>([]);
   private readonly opportunitiesSignal = signal<CrmOpportunity[]>([]);
@@ -86,6 +89,9 @@ export class PortalStore {
   private readonly lastRefreshSignal = signal<string | undefined>(undefined);
 
   readonly tasks = this.tasksSignal.asReadonly();
+  readonly tasksTodas = this.tasksTodasSignal.asReadonly();
+  /** La primera lectura de pendientes ya contestó (aunque venga vacía). */
+  readonly tareasListas = this.tareasListasSignal.asReadonly();
   /** Las juntas ya homologadas: la misma junta en dos cuentas sale una vez. */
   readonly meetings = computed(() => mergeMeetings(this.rawMeetingsSignal()));
   /** Cuentas que traen calendario, para saber dónde falta una junta. */
@@ -225,7 +231,11 @@ export class PortalStore {
     // Lo personal no es del negocio: se queda en su módulo y no entra al
     // tablero, al carrusel ni a los resúmenes.
     this.collect(this.taskSources, (source) => source.fetchTasks()).subscribe(
-      (tasks) => this.tasksSignal.set(tasks.filter((task) => !task.personal))
+      (tasks) => {
+        this.tasksTodasSignal.set(tasks);
+        this.tasksSignal.set(tasks.filter((task) => !task.personal));
+        this.tareasListasSignal.set(true);
+      }
     );
   }
 
