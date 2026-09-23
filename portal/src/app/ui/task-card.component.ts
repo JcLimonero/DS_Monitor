@@ -1127,6 +1127,8 @@ export class TaskCardComponent {
   private readonly sesion = inject(SesionService);
 
   readonly task = input.required<TaskItem>();
+  /** En el diálogo de un aviso la tarjeta nace abierta. */
+  readonly abierta = input(false);
   readonly maxFotos = MAX_FOTOS;
   private readonly fotosRef = viewChild(FotosPendienteComponent);
 
@@ -1375,6 +1377,16 @@ export class TaskCardComponent {
           this.vistoEnviado = false;
         }
       });
+    });
+    effect(() => {
+      if (this.abierta()) {
+        this.open.set(true);
+      }
+    });
+    effect(() => {
+      if (this.abierta()) {
+        this.open.set(true);
+      }
     });
     // Si este es el pendiente que un aviso pidio abrir, se abre y se enseña.
     effect(() => {
