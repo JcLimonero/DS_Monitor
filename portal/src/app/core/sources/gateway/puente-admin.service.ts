@@ -498,6 +498,18 @@ export class PuenteAdminService {
     }>(this.url('/respaldo'), { headers: this.headers() });
   }
 
+  /**
+   * Olvida la caché de despliegues (Vercel) y portales (Coolify) en el puente
+   * para volver a pedir la lista cuando se agregó o quitó un proyecto.
+   */
+  refrescarDespliegues(): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(
+      this.url('/despliegues/refrescar'),
+      {},
+      { headers: this.headers() }
+    );
+  }
+
   /** La última corrida de cada integración, las que están mal primero. */
   ejecuciones(): Observable<Ejecucion[]> {
     return this.http.get<Ejecucion[]>(this.url('/ejecuciones'));
