@@ -189,9 +189,25 @@ const JUNTA_AVISO_MIN = 15;
           </header>
           <div class="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5">
             @if (pendienteDialogo(); as tarea) {
-              <pt-task-card [task]="tarea" />
-            } @else {
+              <pt-task-card [task]="tarea" [abierta]="true" />
+            } @else if (!store.tareasListas()) {
               <p class="text-sm text-ink-muted">Cargando el pendiente…</p>
+            } @else if (avisoDialogo(); as aviso) {
+              <h3 class="text-base font-semibold text-ink">
+                {{ aviso.titulo }}
+              </h3>
+              <p class="mt-2 text-sm text-ink-muted">
+                {{ aviso.persona }}
+                {{ aviso.accion ?? 'actualizó este pendiente' }}
+                @if (aviso.texto) {
+                  · “{{ aviso.texto }}”
+                }
+              </p>
+              <p class="mt-3 text-sm text-ink-subtle">
+                Ya no está en la lista (se archivó o se fusionó con otro).
+              </p>
+            } @else {
+              <p class="text-sm text-ink-muted">No encontré ese pendiente.</p>
             }
           </div>
         </div>
@@ -206,7 +222,7 @@ export class AvisosCampanaComponent {
   readonly tv = input(false);
 
   readonly avisos = inject(AvisosService);
-  private readonly store = inject(PortalStore);
+  readonly store = inject(PortalStore);
   private readonly locales = inject(LocalTaskStore);
   private readonly router = inject(Router);
 
@@ -221,10 +237,30 @@ export class AvisosCampanaComponent {
     if (!id) {
       return undefined;
     }
-    return (
-      this.store.tasks().find((t) => t.id === id) ??
-      this.locales.tasks().find((t) => t.id === id)
-    );
+    const listas = [this.store.tasksTodas(), this.locales.tasks()];
+    for (const lista of listas) {
+      const exacta = lista.find((t) => t.id === id);
+      if (exacta) {
+        return exacta;
+      }
+    }
+    // El mismo correo en dos buzones se sirve con otro id; el aviso guarda el viejo.
+    const titulo = this.avisos
+      .avisos()
+      .find((a) => a.tareaId === id)
+      ?.titulo?.trim();
+    if (!titulo) {
+      return undefined;
+    }
+    return listas
+      .flat()
+      .filter((t) => t.title.trim() === titulo)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  });
+
+  readonly avisoDialogo = computed(() => {
+    const id = this.avisos.dialogoId();
+    return id ? this.avisos.avisos().find((a) => a.tareaId === id) : undefined;
   });
 
   readonly pendienteDialogo = computed(() =>
