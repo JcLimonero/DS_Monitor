@@ -15,7 +15,8 @@
         </h1>
       </div>
 
-      <div class="flex shrink-0 items-end gap-6">
+      <div class="flex shrink-0 items-end gap-4 sm:gap-6">
+        <pt-avisos-campana #campana [kiosco]="true" [tv]="true" />
         <p class="text-right">
           <span class="tv-label block">GDL · MTY</span>
           <span
@@ -116,9 +117,55 @@
   </footer>
 </div>
 
+<!--
+  Esquinas del kiosco: clic izquierda = pantalla anterior, derecha = siguiente.
+  Solo las esquinas, no toda la franja, para no tapar listas del centro.
+  La inferior derecha queda mas arriba para no cubrir los controles flotantes.
+-->
+<button
+  type="button"
+  class="group fixed left-0 top-0 z-20 hidden h-[10rem] w-[10rem] cursor-pointer items-center justify-center border-0 bg-transparent disabled:pointer-events-none sm:flex"
+  aria-label="Pantalla anterior"
+  [disabled]="enDialogo()"
+  (click)="alClicEsquina(-1)">
+  <pt-icon
+    name="anterior"
+    class="pointer-events-none h-10 w-10 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-40 group-focus-visible:opacity-40" />
+</button>
+<button
+  type="button"
+  class="group fixed right-0 top-0 z-20 hidden h-[10rem] w-[10rem] cursor-pointer items-center justify-center border-0 bg-transparent disabled:pointer-events-none sm:flex"
+  aria-label="Pantalla siguiente"
+  [disabled]="enDialogo()"
+  (click)="alClicEsquina(1)">
+  <pt-icon
+    name="siguiente"
+    class="pointer-events-none h-10 w-10 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-40 group-focus-visible:opacity-40" />
+</button>
+<button
+  type="button"
+  class="group fixed bottom-24 left-0 z-20 hidden h-[10rem] w-[10rem] cursor-pointer items-center justify-center border-0 bg-transparent disabled:pointer-events-none sm:flex"
+  aria-label="Pantalla anterior"
+  [disabled]="enDialogo()"
+  (click)="alClicEsquina(-1)">
+  <pt-icon
+    name="anterior"
+    class="pointer-events-none h-10 w-10 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-40 group-focus-visible:opacity-40" />
+</button>
+<button
+  type="button"
+  class="group fixed bottom-40 right-0 z-20 hidden h-32 w-[10rem] cursor-pointer items-center justify-center border-0 bg-transparent disabled:pointer-events-none sm:flex"
+  aria-label="Pantalla siguiente"
+  [disabled]="enDialogo()"
+  (click)="alClicEsquina(1)">
+  <pt-icon
+    name="siguiente"
+    class="pointer-events-none h-10 w-10 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-40 group-focus-visible:opacity-40" />
+</button>
+
 <!-- Los controles solo salen si alguien se acerca al equipo. -->
 <div
-  class="fixed bottom-24 right-8 flex items-center gap-2 rounded-full border border-line bg-surface/95 p-1.5 shadow-card transition-opacity"
+  class="fixed bottom-24 right-8 z-30 flex items-center gap-2 rounded-full border border-line bg-surface/95 p-1.5 shadow-card transition-opacity"
   [class.opacity-0]="!controlesVisibles()"
   [class.pointer-events-none]="!controlesVisibles()">
   <button
@@ -169,7 +216,7 @@
 
 @if (pausado()) {
   <p
-    class="fixed bottom-24 left-8 chip bg-accent-soft px-3 py-1.5 text-base text-ink">
+    class="fixed bottom-24 left-8 z-30 chip bg-accent-soft px-3 py-1.5 text-base text-ink">
     <pt-icon name="pausa" class="h-4 w-4" />
     En pausa · barra espaciadora para continuar
   </p>

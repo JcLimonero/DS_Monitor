@@ -13,6 +13,7 @@ import { interval } from 'rxjs';
 import { PortalStore } from '../../core/state/portal.store';
 import { ThemeService } from '../../core/theme/theme.service';
 import { formatLongDay } from '../../core/util/date.util';
+import { AvisosCampanaComponent } from '../../ui/avisos-campana.component';
 import { BrandLogoComponent } from '../../ui/brand-logo.component';
 import { IconComponent, IconName } from '../../ui/icon.component';
 import {
@@ -54,6 +55,7 @@ const CONTROLES_MS = 5000;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     AgendaSlideComponent,
+    AvisosCampanaComponent,
     BrandLogoComponent,
     DesplieguesSlideComponent,
     EjecucionesSlideComponent,
@@ -101,10 +103,15 @@ export class CarruselComponent {
    */
   private readonly enPantalla =
     viewChild<DiapositivaConContenido>('diapositiva');
+  private readonly campana = viewChild('campana', {
+    read: AvisosCampanaComponent
+  });
   readonly vacia = computed(() => this.enPantalla()?.vacia() ?? false);
-  /** Alguien edita algo en un dialogo de la diapositiva: no se avanza. */
+  /** Alguien edita algo en un dialogo o tiene la campana abierta: no se avanza. */
   readonly enDialogo = computed(
-    () => this.enPantalla()?.enDialogo?.() ?? false
+    () =>
+      (this.enPantalla()?.enDialogo?.() ?? false) ||
+      (this.campana()?.ocupado() ?? false)
   );
   /** Segundos que dura la diapositiva actual: menos si no tiene contenido. */
   readonly duracion = computed(() =>
@@ -209,6 +216,18 @@ export class CarruselComponent {
     this.ultimoMovimiento.set(Date.now());
   }
 
+  /**
+   * Clic en una esquina del kiosco. Izquierda atras, derecha adelante.
+   * Con un dialogo abierto no se cambia de pantalla.
+   */
+  alClicEsquina(pasos: number): void {
+    this.despertarControles();
+    if (this.enDialogo()) {
+      return;
+    }
+    this.avanzar(pasos);
+  }
+
   async pantallaCompleta(): Promise<void> {
     try {
       if (document.fullscreenElement) {
@@ -223,6 +242,17 @@ export class CarruselComponent {
 
   alTeclear(event: KeyboardEvent): void {
     this.despertarControles();
+    if (event.key === 'Escape') {
+      const c = this.campana();
+      if (c?.panelAbierto()) {
+        c.cerrarPanel();
+        return;
+      }
+      if (c?.ocupado()) {
+        c.cerrarDialogo();
+        return;
+      }
+    }
     // Con un dialogo abierto las teclas son suyas: la barra espaciadora va
     // al comentario, no a la pausa.
     if (this.enDialogo()) {

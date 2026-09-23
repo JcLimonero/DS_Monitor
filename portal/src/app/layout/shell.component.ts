@@ -5,14 +5,15 @@ import {
   VentanaIaBotonComponent,
   VentanaIaComponent
 } from '../features/ia/ventana-ia.component';
-import { Aviso, AvisosService } from '../core/avisos/avisos.service';
-import { Router } from '@angular/router';
+import { AvisosCampanaComponent } from '../ui/avisos-campana.component';
+import { AvisosService } from '../core/avisos/avisos.service';
 import {
   ChangeDetectionStrategy,
   Component,
   computed,
   inject,
-  signal
+  signal,
+  viewChild
 } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { SesionService } from '../core/acceso/sesion.service';
@@ -61,6 +62,7 @@ const NAV: NavItem[] = [
   imports: [
     VentanaIaBotonComponent,
     VentanaIaComponent,
+    AvisosCampanaComponent,
     BrandLogoComponent,
     IconComponent,
     RelativePipe,
@@ -77,9 +79,8 @@ export class ShellComponent {
   readonly store = inject(PortalStore);
   readonly sesion = inject(SesionService);
   readonly avisos = inject(AvisosService);
-  private readonly router = inject(Router);
+  private readonly campana = viewChild(AvisosCampanaComponent);
   readonly nav = NAV;
-  readonly avisosAbiertos = signal(false);
   /** Menu de tema y salir en pantallas chicas; en escritorio van sueltos. */
   readonly menuUsuarioAbierto = signal(false);
 
@@ -120,32 +121,20 @@ export class ShellComponent {
       : 'Cambiar a tema oscuro'
   );
 
-  /** Marca el aviso leído y lleva al pendiente, abierto en su detalle. */
-  irAlAviso(a: Aviso): void {
-    this.avisos.marcarLeidos([a.id]);
-    this.avisosAbiertos.set(false);
-    if (a.tipo === 'sistema' || !a.tareaId) {
-      // Un aviso del monitor (el lunes de "sin asignar") lleva a la vista, no
-      // a un pendiente.
-      void this.router.navigate(['/pendientes'], {
-        queryParams: { owner: 'nadie' }
-      });
-      return;
-    }
-    this.avisos.abrir.set(a.tareaId);
-    void this.router.navigate(['/pendientes'], {
-      queryParams: { abrir: a.tareaId }
-    });
-  }
-
   toggleTheme(): void {
     this.theme.toggle();
   }
 
-  /** Escape cierra lo que este desplegado en la cabecera. */
+  /** Escape cierra menús de cabecera y el diálogo de la campana. */
   cerrarMenus(): void {
-    this.avisosAbiertos.set(false);
     this.menuUsuarioAbierto.set(false);
+    const c = this.campana();
+    if (c?.panelAbierto()) {
+      c.cerrarPanel();
+    }
+    if (this.avisos.dialogoId()) {
+      c?.cerrarDialogo();
+    }
   }
 
   salir(): void {
