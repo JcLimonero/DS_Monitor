@@ -249,6 +249,14 @@ export class PortalStore {
     );
   }
 
+  /**
+   * Saca un pendiente de la lista en memoria al instante (p. ej. al borrar),
+   * sin esperar a que el puente confirme y refresque.
+   */
+  quitarTarea(id: string): void {
+    this.tasksSignal.update((tasks) => tasks.filter((task) => task.id !== id));
+  }
+
   refreshMeetings(): void {
     const today = startOfDay(new Date());
     const range = {

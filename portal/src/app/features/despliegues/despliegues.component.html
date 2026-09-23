@@ -1,6 +1,6 @@
 <pt-page-header title="Despliegues" [subtitle]="subtitle()">
-  @if (conFiltros()) {
-    <div class="flex flex-wrap items-center gap-2">
+  <div class="flex flex-wrap items-center gap-2">
+    @if (conFiltros()) {
       <select
         class="field w-auto"
         [ngModel]="proyecto()"
@@ -24,8 +24,29 @@
       <button type="button" class="btn" (click)="limpiarFiltros()">
         Limpiar
       </button>
-    </div>
-  }
+    }
+    <a
+      class="btn h-10 gap-1.5 px-2.5 text-xs lg:h-8"
+      [href]="urlPortal"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Abre el portal de DS Monitor en una pestaña nueva"
+      aria-label="Abrir el portal en una pestaña nueva">
+      <pt-icon name="externo" class="h-3.5 w-3.5" />
+      Portal
+    </a>
+    @if (disponible) {
+      <button
+        type="button"
+        class="btn px-2"
+        title="Volver a pedir Vercel y Coolify"
+        aria-label="Refrescar despliegues y portales"
+        [disabled]="refrescando()"
+        (click)="refrescar()">
+        <pt-icon name="refrescar" class="h-4 w-4" />
+      </button>
+    }
+  </div>
 </pt-page-header>
 
 <div class="mb-4">
@@ -127,26 +148,34 @@
 
           <!-- Las ligas no abren el renglon -->
           <div
-            class="flex shrink-0 items-center gap-1"
+            class="flex shrink-0 flex-wrap items-center justify-end gap-1.5"
             (click)="$event.stopPropagation()">
-            <a
-              class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
-              [href]="despliegue.url"
-              target="_blank"
-              rel="noopener"
-              [attr.aria-label]="'Abrir ' + despliegue.project">
-              <pt-icon name="externo" class="h-4 w-4" />
-            </a>
             @if (despliegue.inspectorUrl; as inspector) {
               <a
-                class="rounded p-1 text-ink-subtle transition hover:bg-surface-muted hover:text-ink"
+                class="btn h-10 gap-1.5 px-2.5 text-xs lg:h-8"
                 [href]="inspector"
                 target="_blank"
-                rel="noopener"
-                [attr.aria-label]="'Ver el detalle de ' + despliegue.project">
-                <pt-icon name="despliegue" class="h-4 w-4" />
+                rel="noopener noreferrer"
+                title="Abre el detalle en Vercel u otro proveedor"
+                [attr.aria-label]="
+                  'Abrir el despliegue de ' +
+                  despliegue.project +
+                  ' en una pestaña nueva'
+                ">
+                <pt-icon name="despliegue" class="h-3.5 w-3.5" />
+                Abrir despliegue
               </a>
             }
+            <a
+              class="btn h-10 gap-1.5 px-2.5 text-xs lg:h-8"
+              [href]="despliegue.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Abre la URL publicada de este despliegue"
+              [attr.aria-label]="'Abrir el sitio de ' + despliegue.project">
+              <pt-icon name="externo" class="h-3.5 w-3.5" />
+              Sitio
+            </a>
           </div>
         </div>
       </li>
@@ -244,13 +273,7 @@
                     </span>
                     <span class="mt-0.5 block truncate text-xs text-ink-muted">
                       @if (p.url) {
-                        <a
-                          class="hover:underline"
-                          [href]="p.url"
-                          target="_blank"
-                          rel="noopener"
-                          >{{ p.url }}</a
-                        >
+                        <span>{{ p.url }}</span>
                       }
                       @if (p.project) {
                         · {{ p.project
@@ -269,6 +292,18 @@
                       </span>
                     }
                   </span>
+                  @if (p.url) {
+                    <a
+                      class="btn h-10 shrink-0 gap-1.5 px-2.5 text-xs lg:h-8"
+                      [href]="p.url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Abre este portal en una pestaña nueva"
+                      [attr.aria-label]="'Abrir el portal ' + p.name">
+                      <pt-icon name="externo" class="h-3.5 w-3.5" />
+                      Abrir portal
+                    </a>
+                  }
                 </li>
               }
             </ul>

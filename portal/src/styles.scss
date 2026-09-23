@@ -109,6 +109,12 @@ body {
       dark:border-rose-500/40 dark:text-rose-200 dark:hover:bg-rose-500/10;
   }
 
+  /* Marcar hecho: verde suave (ok/emerald), sin el cyan del primario. */
+  .btn-ok {
+    @apply border-transparent bg-emerald-100 text-emerald-800 hover:bg-emerald-200
+      dark:bg-emerald-500/20 dark:text-emerald-200 dark:hover:bg-emerald-500/30;
+  }
+
   /*
    * Avisos de pagina (demo, puente reiniciando, fuente sin conexion). Una sola
    * forma para todos; el tono dice que tan grave es.

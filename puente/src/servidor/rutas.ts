@@ -1382,6 +1382,15 @@ export function construirRutas(
 
   router.get('/portales', () => portales());
 
+  // Olvida la caché de Vercel y Coolify para volver a pedir la lista fresca.
+  // Sirve cuando se agregó o quitó un proyecto o un portal.
+  router.post('/despliegues/refrescar', async () => {
+    cache.olvidar('vercel:despliegues');
+    cache.olvidar('vercel:estado');
+    cache.olvidar('coolify:portales');
+    return { ok: true };
+  });
+
   // --- Servidores: la lista, cada uno con su Prometheus ---
 
   // Si la lista esta vacia pero hay PROMETHEUS_URL en el entorno, esos
