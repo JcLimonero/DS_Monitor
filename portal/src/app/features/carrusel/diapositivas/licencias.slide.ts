@@ -16,6 +16,7 @@ import {
   licensesNeedingAttention
 } from '../../../core/state/portal.selectors';
 import { PortalStore } from '../../../core/state/portal.store';
+import { LICENSE_SOURCES } from '../../../core/sources/source.contracts';
 import { plural } from '../../../core/util/text.util';
 import { IconComponent } from '../../../ui/icon.component';
 import { DiapositivaConContenido } from '../carrusel.model';
@@ -106,8 +107,22 @@ const RENGLONES = 24;
 })
 export class LicenciasSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
+  /**
+   * Cada proveedor es un kind distinto (Anthropic, Cursor, dominios, buzones…).
+   * Hay que esperarlos todos.
+   */
+  private readonly licenciasFuente = inject(LICENSE_SOURCES);
 
-  readonly vacia = computed(() => this.store.licenses().length === 0);
+  readonly vacia = computed(() => {
+    for (const kind of new Set(
+      this.licenciasFuente.map((fuente) => fuente.kind)
+    )) {
+      if (!this.store.fuenteContestada(kind)) {
+        return false;
+      }
+    }
+    return this.store.licenses().length === 0;
+  });
 
   /** Lo que necesita atención se ve primero. */
   readonly licencias = computed(() => {

@@ -4,6 +4,7 @@ import {
   Observable,
   catchError,
   combineLatest,
+  finalize,
   interval,
   map,
   of,
@@ -28,6 +29,7 @@ import {
   MonitorTarget,
   PlatformStatus,
   RepoStatus,
+  SourceKind,
   SyncState,
   TaskItem
 } from '../models';
@@ -130,6 +132,15 @@ export class PortalStore {
     this.syncStates().filter((state) => state.status === 'error')
   );
 
+  /**
+   * Peticiones abiertas por fuente. El estado de sincronización es uno solo
+   * por fuente aunque pida varias cosas (correo: pendientes, agenda y
+   * licencias). La primera que contesta lo deja en `lista` mientras las otras
+   * siguen en camino; este conteo evita dar la fuente por contestada antes.
+   */
+  private readonly enVuelo = new Map<string, number>();
+  private readonly enVueloVersion = signal(0);
+
   /** True mientras al menos una fuente siga entregando datos inventados. */
   readonly hasDemoSources = computed(() =>
     this.syncStates().some((state) => state.demo)
@@ -141,6 +152,66 @@ export class PortalStore {
 
   accountOf(accountId: string): Account | undefined {
     return this.accountIndex().get(accountId);
+  }
+
+  /**
+   * True cuando hay al menos una fuente de ese kind y todas ya contestaron
+   * (`lista` o `error`). Si alguna sigue `sincronizando`, todavía no aparece
+   * o tiene una petición en curso, es false: un array vacío inicial no es
+   * "no hay datos".
+   */
+  fuenteContestada(kind: SourceKind): boolean {
+    this.enVueloVersion();
+    const ids = this.idsDeKind(kind);
+    if (ids.size === 0) {
+      return false;
+    }
+    const porId = new Map(
+      this.syncStates()
+        .filter((estado) => ids.has(estado.sourceId))
+        .map((estado) => [estado.sourceId, estado] as const)
+    );
+    if (porId.size < ids.size) {
+      return false;
+    }
+    for (const id of ids) {
+      if ((this.enVuelo.get(id) ?? 0) > 0) {
+        return false;
+      }
+      const estado = porId.get(id);
+      if (estado?.status !== 'lista' && estado?.status !== 'error') {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private idsDeKind(kind: SourceKind): Set<string> {
+    const ids = new Set<string>();
+    for (const fuente of [
+      ...this.taskSources,
+      ...this.calendarSources,
+      ...this.monitorSources,
+      ...this.crmSources,
+      ...this.licenseSources,
+      ...this.deploymentSources,
+      ...this.repoSources
+    ]) {
+      if (fuente.kind === kind) {
+        ids.add(fuente.id);
+      }
+    }
+    return ids;
+  }
+
+  private anotarVuelo(sourceId: string, delta: number): void {
+    const siguiente = (this.enVuelo.get(sourceId) ?? 0) + delta;
+    if (siguiente <= 0) {
+      this.enVuelo.delete(sourceId);
+    } else {
+      this.enVuelo.set(sourceId, siguiente);
+    }
+    this.enVueloVersion.update((version) => version + 1);
   }
 
   private readonly http = inject(HttpClient);
@@ -281,9 +352,13 @@ export class PortalStore {
     // Las actividades comparten fuente con las oportunidades, así que su estado
     // de sincronización ya quedó marcado arriba; aquí solo se piden los datos.
     this.crmSources.forEach((source) => {
+      this.anotarVuelo(source.id, 1);
       source
         .fetchActivities()
-        .pipe(catchError(() => of([] as CrmActivity[])))
+        .pipe(
+          catchError(() => of([] as CrmActivity[])),
+          finalize(() => this.anotarVuelo(source.id, -1))
+        )
         .subscribe((items) => this.activitiesSignal.set(items));
     });
   }
@@ -301,9 +376,13 @@ export class PortalStore {
     // El estado de la plataforma comparte fuente con los despliegues, asi que
     // su sincronización ya quedó marcada arriba; aqui solo se piden los datos.
     this.deploymentSources.forEach((source) => {
+      this.anotarVuelo(source.id, 1);
       source
         .fetchPlatformStatus()
-        .pipe(catchError(() => of([] as PlatformStatus[])))
+        .pipe(
+          catchError(() => of([] as PlatformStatus[])),
+          finalize(() => this.anotarVuelo(source.id, -1))
+        )
         .subscribe((estados) => this.platformStatusSignal.set(estados));
     });
   }
@@ -336,6 +415,7 @@ export class PortalStore {
     }
     const clave = (source: S) => `${source.kind}:${source.id}`;
     const calls = sources.map((source) => {
+      this.anotarVuelo(source.id, 1);
       this.markSync(source, 'sincronizando');
       return request(source).pipe(
         timeout(ESPERA_MAXIMA_MS),
@@ -347,6 +427,7 @@ export class PortalStore {
           this.markSync(source, 'error', describeError(error));
           return of((this.previos.get(clave(source)) ?? []) as T[]);
         }),
+        finalize(() => this.anotarVuelo(source.id, -1)),
         startWith((this.previos.get(clave(source)) ?? []) as T[])
       );
     });

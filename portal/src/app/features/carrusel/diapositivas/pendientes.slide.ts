@@ -16,6 +16,7 @@ import {
 } from '../../../core/models';
 import { byUrgency, openTasks } from '../../../core/state/portal.selectors';
 import { PortalStore } from '../../../core/state/portal.store';
+import { TASK_SOURCES } from '../../../core/sources/source.contracts';
 import { dueBucket, isOverdue } from '../../../core/util/date.util';
 import {
   PUNTO_PLAZO,
@@ -43,6 +44,8 @@ interface Columna {
   titulo: string;
   tareas: TaskItem[];
   restantes: number;
+  /** Esta columna muestra todas sus tareas, no solo el tope. */
+  ampliada: boolean;
 }
 
 /**
@@ -53,8 +56,9 @@ interface Columna {
  *
  * Al tocar un renglon se abre el pendiente en un dialogo encima del carrusel,
  * con la misma tarjeta de la lista ya desplegada, para comentar, reasignar o
- * marcar hecho sin salir de la pantalla. Mientras el dialogo esta abierto el
- * carrusel no avanza (`enDialogo`).
+ * marcar hecho sin salir de la pantalla. Mientras el dialogo esta abierto,
+ * o una columna está ampliada con «ver menos», el carrusel no avanza
+ * (`enDialogo`).
  */
 /** Clase en <html> mientras el dialogo esta abierto. */
 const CLASE_DIALOGO = 'con-dialogo';
@@ -177,10 +181,17 @@ const CLASE_DIALOGO = 'con-dialogo';
                 </li>
               }
             </ul>
-            @if (col.restantes > 0) {
-              <p class="mt-2 shrink-0 text-center text-base text-ink-muted">
-                y {{ col.restantes }} más
-              </p>
+            @if (col.ampliada || col.restantes > 0) {
+              <button
+                type="button"
+                class="mt-2 flex min-h-11 w-full shrink-0 items-center justify-center border-0 bg-transparent text-center text-base text-ink-muted"
+                (click)="alternarColumna(col.id)">
+                @if (col.ampliada) {
+                  ver menos
+                } @else {
+                  y {{ col.restantes }} más
+                }
+              </button>
             }
           } @else {
             <div
@@ -243,11 +254,29 @@ export class PendientesSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
   private readonly avisos = inject(AvisosService);
   private readonly destroyRef = inject(DestroyRef);
+  /** Buzones, Odoo y locales: cada kind tiene que haber contestado. */
+  private readonly fuentesTareas = inject(TASK_SOURCES);
 
-  /** Ninguna de las tres columnas tiene algo. */
-  readonly vacia = computed(() =>
-    this.columnas().every((col) => col.tareas.length === 0)
-  );
+  /** Columnas que muestran todas sus tareas, no solo las primeras 12. */
+  private readonly ampliadas = signal<ReadonlySet<Columna['id']>>(new Set());
+
+  /**
+   * Ninguna de las tres columnas tiene algo. Mientras algún kind de tareas
+   * no haya contestado, las columnas vacías son la carga, no el dato.
+   * Sin fuentes, el vacío es real.
+   */
+  readonly vacia = computed(() => {
+    for (const kind of new Set(
+      this.fuentesTareas.map((fuente) => fuente.kind)
+    )) {
+      if (!this.store.fuenteContestada(kind)) {
+        return false;
+      }
+    }
+    return this.columnas().every(
+      (col) => col.tareas.length + col.restantes === 0
+    );
+  });
 
   /**
    * El id del pendiente abierto en el dialogo. Se guarda el id y no el objeto
@@ -269,8 +298,13 @@ export class PendientesSlideComponent implements DiapositivaConContenido {
     this.seleccionadaId() ? (this.enStore() ?? this.respaldo()) : undefined
   );
 
-  /** Le dice al carrusel que no avance mientras alguien edita. */
-  readonly enDialogo = computed(() => !!this.seleccionada());
+  /**
+   * Le dice al carrusel que no avance mientras alguien edita un pendiente
+   * o tiene una columna ampliada.
+   */
+  readonly enDialogo = computed(
+    () => !!this.seleccionada() || this.ampliadas().size > 0
+  );
 
   constructor() {
     // Cada vez que el store trae el pendiente, se actualiza el respaldo.
@@ -284,6 +318,24 @@ export class PendientesSlideComponent implements DiapositivaConContenido {
     this.destroyRef.onDestroy(() =>
       document.documentElement.classList.remove(CLASE_DIALOGO)
     );
+    // Si se vacía la columna ampliada (por ejemplo al marcar todo hecho),
+    // el botón «ver menos» desaparece: hay que soltarla para que el carrusel
+    // pueda seguir.
+    effect(() => {
+      const sinTareas = this.columnas()
+        .filter((col) => col.ampliada && col.tareas.length === 0)
+        .map((col) => col.id);
+      if (sinTareas.length === 0) {
+        return;
+      }
+      this.ampliadas.update((actual) => {
+        const siguiente = new Set(actual);
+        for (const id of sinTareas) {
+          siguiente.delete(id);
+        }
+        return siguiente;
+      });
+    });
   }
 
   /**
@@ -300,6 +352,19 @@ export class PendientesSlideComponent implements DiapositivaConContenido {
     // En celular el carrusel achica la raiz; con el dialogo abierto vuelve
     // al tamaño normal (ver styles.scss).
     document.documentElement.classList.add(CLASE_DIALOGO);
+  }
+
+  /** Muestra todas las tareas de la columna, o vuelve al tope de 12. */
+  alternarColumna(id: Columna['id']): void {
+    this.ampliadas.update((actual) => {
+      const siguiente = new Set(actual);
+      if (siguiente.has(id)) {
+        siguiente.delete(id);
+      } else {
+        siguiente.add(id);
+      }
+      return siguiente;
+    });
   }
 
   cerrar(): void {
@@ -336,16 +401,21 @@ export class PendientesSlideComponent implements DiapositivaConContenido {
     const sinFecha = abiertos
       .filter((t) => !t.dueDate)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const abierta = this.ampliadas();
     const columna = (
       id: Columna['id'],
       titulo: string,
       tareas: TaskItem[]
-    ): Columna => ({
-      id,
-      titulo,
-      tareas: tareas.slice(0, RENGLONES),
-      restantes: Math.max(0, tareas.length - RENGLONES)
-    });
+    ): Columna => {
+      const ampliada = abierta.has(id);
+      return {
+        id,
+        titulo,
+        ampliada,
+        tareas: ampliada ? tareas : tareas.slice(0, RENGLONES),
+        restantes: ampliada ? 0 : Math.max(0, tareas.length - RENGLONES)
+      };
+    };
     return [
       columna('hoy', 'Hoy', hoy),
       columna('proximos', 'Por venir', proximos),
