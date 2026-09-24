@@ -217,6 +217,22 @@ export class CarruselComponent {
   }
 
   /**
+   * Clic en el encabezado: pausa o continúa. La campana y los enlaces
+   * no cuentan: siguen abriendo lo suyo.
+   */
+  alClicEncabezado(event: MouseEvent): void {
+    const objetivo = event.target;
+    if (
+      objetivo instanceof Element &&
+      objetivo.closest('button, a, pt-avisos-campana')
+    ) {
+      return;
+    }
+    this.despertarControles();
+    this.alternarPausa();
+  }
+
+  /**
    * Clic en una esquina del kiosco. Izquierda atras, derecha adelante.
    * Con un dialogo abierto no se cambia de pantalla.
    */
