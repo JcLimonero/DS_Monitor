@@ -15,6 +15,7 @@ import {
   weightedPipeline
 } from '../../../core/state/portal.selectors';
 import { PortalStore } from '../../../core/state/portal.store';
+import { CRM_SOURCES } from '../../../core/sources/source.contracts';
 import { isOverdue } from '../../../core/util/date.util';
 import { plural } from '../../../core/util/text.util';
 import { IconComponent } from '../../../ui/icon.component';
@@ -139,13 +140,24 @@ const ACTIVIDADES = 5;
 })
 export class EmbudoSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
+  /** El CRM del portal es Odoo. */
+  private readonly crms = inject(CRM_SOURCES);
 
-  /** Sin oportunidades ni actividades no hay embudo que enseñar. */
-  readonly vacia = computed(
-    () =>
+  /**
+   * Sin oportunidades ni actividades no hay embudo que enseñar.
+   * Hasta que Odoo conteste, las listas vacías son la carga, no el dato.
+   */
+  readonly vacia = computed(() => {
+    for (const kind of new Set(this.crms.map((fuente) => fuente.kind))) {
+      if (!this.store.fuenteContestada(kind)) {
+        return false;
+      }
+    }
+    return (
       this.store.opportunities().length === 0 &&
       this.store.activities().length === 0
-  );
+    );
+  });
 
   readonly porEtapa = POR_ETAPA;
 

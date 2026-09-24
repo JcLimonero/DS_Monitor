@@ -11,6 +11,7 @@ import {
   meetingsOn
 } from '../../../core/state/portal.selectors';
 import { PortalStore } from '../../../core/state/portal.store';
+import { CALENDAR_SOURCES } from '../../../core/sources/source.contracts';
 import { addDays } from '../../../core/util/date.util';
 import { ACCOUNT_BAR_CLASS } from '../../../ui/account-colors';
 import { IconComponent } from '../../../ui/icon.component';
@@ -80,6 +81,8 @@ const RENGLONES = 6;
 })
 export class AgendaSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
+  /** Google, Microsoft e IMAP: cada buzón trae su calendario. */
+  private readonly calendarios = inject(CALENDAR_SOURCES);
 
   private readonly hoy = computed(() =>
     meetingsOn(this.store.meetings(), new Date())
@@ -88,10 +91,18 @@ export class AgendaSlideComponent implements DiapositivaConContenido {
     meetingsOn(this.store.meetings(), addDays(new Date(), 1))
   );
 
-  /** Ni hoy ni mañana hay juntas. */
-  readonly vacia = computed(
-    () => this.hoy().length === 0 && this.manana().length === 0
-  );
+  /**
+   * Ni hoy ni mañana hay juntas. Mientras algún calendario no conteste,
+   * el array sigue en [] y no cuenta como vacía.
+   */
+  readonly vacia = computed(() => {
+    for (const kind of new Set(this.calendarios.map((fuente) => fuente.kind))) {
+      if (!this.store.fuenteContestada(kind)) {
+        return false;
+      }
+    }
+    return this.hoy().length === 0 && this.manana().length === 0;
+  });
 
   readonly columnas = computed(() => [
     {
