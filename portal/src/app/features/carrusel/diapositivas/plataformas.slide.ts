@@ -11,6 +11,7 @@ import {
   MonitorTarget
 } from '../../../core/models';
 import { PortalStore } from '../../../core/state/portal.store';
+import { MONITOR_SOURCES } from '../../../core/sources/source.contracts';
 import { IconComponent } from '../../../ui/icon.component';
 import { SparklineComponent } from '../../../ui/sparkline.component';
 import { DiapositivaConContenido } from '../carrusel.model';
@@ -109,8 +110,17 @@ const CLASE_ESTADO: Record<MonitorStatus, string> = {
 })
 export class PlataformasSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
+  /** Los sitios vigilados salen de la fuente `monitor`. */
+  private readonly monitores = inject(MONITOR_SOURCES);
 
-  readonly vacia = computed(() => this.store.targets().length === 0);
+  readonly vacia = computed(() => {
+    for (const kind of new Set(this.monitores.map((fuente) => fuente.kind))) {
+      if (!this.store.fuenteContestada(kind)) {
+        return false;
+      }
+    }
+    return this.store.targets().length === 0;
+  });
 
   readonly destinos = computed(() =>
     [...this.store.targets()].sort(

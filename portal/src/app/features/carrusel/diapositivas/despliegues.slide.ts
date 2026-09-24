@@ -20,6 +20,7 @@ import {
 } from '../../../core/state/portal.selectors';
 import { PortalesService } from '../../../core/portales/portales.service';
 import { PortalStore } from '../../../core/state/portal.store';
+import { DEPLOYMENT_SOURCES } from '../../../core/sources/source.contracts';
 import { PortalChipComponent } from '../../../ui/portal-chip.component';
 import { plural } from '../../../core/util/text.util';
 import { IconComponent } from '../../../ui/icon.component';
@@ -201,14 +202,28 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
 })
 export class DesplieguesSlideComponent implements DiapositivaConContenido {
   private readonly store = inject(PortalStore);
+  /** Vercel (y cualquier otra fuente de despliegues registrada). */
+  private readonly fuentesDespliegue = inject(DEPLOYMENT_SOURCES);
   readonly coolify = inject(PortalesService);
 
-  /** Ni despliegues en Vercel ni portales en Coolify. */
-  readonly vacia = computed(
-    () =>
-      this.store.deployments().length === 0 &&
-      (this.coolify.lista() ?? []).length === 0
-  );
+  /**
+   * Ni despliegues en Vercel ni portales en Coolify.
+   * `lista()` en undefined es Coolify todavía cargando; [] ya contestó vacío.
+   */
+  readonly vacia = computed(() => {
+    for (const kind of new Set(
+      this.fuentesDespliegue.map((fuente) => fuente.kind)
+    )) {
+      if (!this.store.fuenteContestada(kind)) {
+        return false;
+      }
+    }
+    const portales = this.coolify.lista();
+    if (portales === undefined) {
+      return false;
+    }
+    return this.store.deployments().length === 0 && portales.length === 0;
+  });
 
   /** Los portales de Coolify, lo que no corre primero. */
   readonly portales = computed(() =>

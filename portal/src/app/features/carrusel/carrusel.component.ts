@@ -3,6 +3,7 @@ import {
   Component,
   DestroyRef,
   computed,
+  effect,
   inject,
   signal,
   viewChild
@@ -18,6 +19,7 @@ import { BrandLogoComponent } from '../../ui/brand-logo.component';
 import { IconComponent, IconName } from '../../ui/icon.component';
 import {
   DIAPOSITIVAS,
+  Diapositiva,
   DiapositivaConContenido,
   SEGUNDOS_MAXIMO,
   SEGUNDOS_MINIMO,
@@ -41,6 +43,15 @@ const TIC_MS = 100;
 
 /** Cuanto tardan en esconderse los controles despues del ultimo movimiento. */
 const CONTROLES_MS = 5000;
+
+/** Pantalla y pausa del kiosco, para recuperarlas al recargar. */
+const CLAVE_CARRUSEL = 'ds-monitor-carrusel';
+
+/**
+ * Resumen y equipo no dicen si estan vacias: no se saltan. El resto sí,
+ * en cuanto el componente está montado.
+ */
+const SIN_VACIA = new Set<Diapositiva['id']>(['resumen', 'equipo']);
 
 /**
  * Carrusel para el monitor de la oficina.
@@ -85,9 +96,20 @@ export class CarruselComponent {
   readonly store = inject(PortalStore);
   readonly diapositivas = DIAPOSITIVAS;
 
-  readonly indice = signal(0);
-  readonly pausado = signal(false);
+  private readonly recuerdo = leerCarrusel();
+  readonly indice = signal(this.recuerdo.indice);
+  readonly pausado = signal(this.recuerdo.pausado);
   readonly segundos = signal(SEGUNDOS_POR_DEFECTO);
+
+  /**
+   * La pantalla la eligieron con los puntos del pie. Aunque esté vacía se
+   * queda el tiempo corto; el avance automático (flechas, esquinas, fin de
+   * tiempo) limpia la marca y sí puede saltarla.
+   */
+  private readonly elegida = signal(false);
+
+  /** Vacías saltadas seguidas. Si ya son todas menos una, no se cicla. */
+  private saltosSeguidos = 0;
 
   /** Milisegundos que lleva la pantalla actual. Mueve la barra de avance. */
   private readonly transcurrido = signal(0);
@@ -99,7 +121,7 @@ export class CarruselComponent {
 
   /**
    * La diapositiva que esta en pantalla (solo una vive a la vez por el
-   * @switch). Las que saben decir si estan vacias acortan su turno.
+   * @switch). Las que saben decir si estan vacias se saltan solas.
    */
   private readonly enPantalla =
     viewChild<DiapositivaConContenido>('diapositiva');
@@ -152,6 +174,16 @@ export class CarruselComponent {
       );
     }
 
+    effect(() => {
+      const id = this.diapositivas[this.indice()].id;
+      const pausado = this.pausado();
+      try {
+        localStorage.setItem(CLAVE_CARRUSEL, JSON.stringify({ id, pausado }));
+      } catch {
+        // Sin almacenamiento el recorrido no se recuerda al recargar.
+      }
+    });
+
     void this.pantalla.iniciar();
     this.destroyRef.onDestroy(() => void this.pantalla.detener());
 
@@ -176,6 +208,9 @@ export class CarruselComponent {
         if (this.pausado() || this.enDialogo()) {
           return;
         }
+        if (this.saltarSiVacia()) {
+          return;
+        }
         const siguiente = this.transcurrido() + TIC_MS;
         if (siguiente >= this.duracion() * 1000) {
           this.avanzar(1);
@@ -195,11 +230,36 @@ export class CarruselComponent {
     if (siguiente === 0 && pasos > 0) {
       this.store.refreshAll();
     }
+    this.elegida.set(false);
     this.indice.set(siguiente);
     this.transcurrido.set(0);
   }
 
+  /**
+   * Avanza ya si la pantalla actual está vacía y nadie la eligió. Si ya se
+   * saltaron todas las demás, o si la eligieron con los puntos, se queda
+   * el tiempo corto (`duracion`). Devuelve true cuando ya cambió de pantalla.
+   */
+  private saltarSiVacia(): boolean {
+    const esperaMontaje =
+      !SIN_VACIA.has(this.actual().id) && !this.enPantalla();
+    if (esperaMontaje) {
+      return false;
+    }
+    if (!this.vacia()) {
+      this.saltosSeguidos = 0;
+      return false;
+    }
+    if (this.elegida() || this.saltosSeguidos >= this.diapositivas.length - 1) {
+      return false;
+    }
+    this.saltosSeguidos += 1;
+    this.avanzar(1);
+    return true;
+  }
+
   irA(indice: number): void {
+    this.elegida.set(true);
     this.indice.set(indice);
     this.transcurrido.set(0);
   }
@@ -311,6 +371,34 @@ export class CarruselComponent {
     } catch {
       // Sin red no hay version nueva que cargar.
     }
+  }
+}
+
+function leerCarrusel(): { indice: number; pausado: boolean } {
+  const vacio = { indice: 0, pausado: false };
+  try {
+    const crudo = localStorage.getItem(CLAVE_CARRUSEL);
+    if (!crudo) {
+      return vacio;
+    }
+    const dato: unknown = JSON.parse(crudo);
+    if (!dato || typeof dato !== 'object') {
+      return vacio;
+    }
+    const id = 'id' in dato ? dato.id : undefined;
+    const pausado = 'pausado' in dato ? dato.pausado : undefined;
+    if (typeof id !== 'string' || typeof pausado !== 'boolean') {
+      return vacio;
+    }
+    const indice = DIAPOSITIVAS.findIndex(
+      (diapositiva) => diapositiva.id === id
+    );
+    if (indice < 0) {
+      return vacio;
+    }
+    return { indice, pausado };
+  } catch {
+    return vacio;
   }
 }
 

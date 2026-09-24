@@ -3,8 +3,8 @@ import { IconName } from '../../ui/icon.component';
 
 /**
  * Lo que una diapositiva le dice al carrusel: si no tiene nada que enseñar
- * (`vacia`), el carrusel la deja menos tiempo en pantalla en vez de dejar
- * un "sin datos" veinte segundos frente a la oficina. Si alguien tiene un
+ * (`vacia`), el avance automatico la salta. Si todas las pantallas estan
+ * vacias, se queda el tiempo corto para no ciclar. Si alguien tiene un
  * dialogo abierto encima (`enDialogo`), el carrusel se queda quieto hasta
  * que lo cierre, sin tocar la pausa que maneja el usuario.
  */
