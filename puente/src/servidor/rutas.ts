@@ -230,6 +230,8 @@ import { consumoOpenRouter } from '../proveedores/openrouter.js';
 import { esCorreoAria } from '../proveedores/aria.js';
 import {
   esCorreoDeTotalOne,
+  esAvisoDeSistema,
+  esRebote,
   leerCorreo,
   type CandidatoIa,
   type DatosCorreo
@@ -1648,7 +1650,9 @@ export function construirRutas(
     const excluidosIa = lectura.paraIa.filter(
       (c) =>
         esCorreoDeTotalOne(c.encabezado.asunto, c.texto) ||
-        esCorreoAria(c.encabezado.asunto, c.encabezado.remitente)
+        esCorreoAria(c.encabezado.asunto, c.encabezado.remitente) ||
+        esRebote(c.encabezado.asunto, c.encabezado.remitente, c.texto) ||
+        esAvisoDeSistema(c.encabezado.asunto, c.texto)
     );
     const paraIa = lectura.paraIa.filter((c) => !excluidosIa.includes(c));
     let resultados: Clasificacion[] = excluidosIa.map((c) => ({
@@ -1656,7 +1660,11 @@ export function construirRutas(
       esPendiente: false,
       motivo: esCorreoAria(c.encabezado.asunto, c.encabezado.remitente)
         ? 'Aviso de ARIA (iTechDev)'
-        : 'Aviso de Total One',
+        : esRebote(c.encabezado.asunto, c.encabezado.remitente, c.texto)
+          ? 'Rebote del servidor de correo'
+          : esAvisoDeSistema(c.encabezado.asunto, c.texto)
+            ? 'Aviso automático del DMS'
+            : 'Aviso de Total One',
       analizadoEn: ahora.toISOString()
     }));
     // Lo que ya esta registrado en esta cuenta: por asunto se reconoce la
@@ -2099,7 +2107,9 @@ export function construirRutas(
         lista.filter(
           (t) =>
             !esCorreoDeTotalOne(t.title, t.description ?? '') &&
-            !esCorreoAria(t.title, t.description ?? '')
+            !esCorreoAria(t.title, t.description ?? '') &&
+            !esRebote(t.title, '', t.description ?? '') &&
+            !esAvisoDeSistema(t.title, t.description ?? '')
         );
       const registro = datos.registroCorreo.leer();
       const actual = registrar(

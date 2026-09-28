@@ -396,6 +396,8 @@ export function candidatosParaIa(
         !SIN_RESPUESTA.test(e.remitente) &&
         !DEL_MONITOR.test(e.asunto) &&
         !esCorreoDeTotalOne(e.asunto) &&
+        !esRebote(e.asunto, e.remitente) &&
+        !esAvisoDeSistema(e.asunto) &&
         !esCorreoAria(e.asunto, e.remitente)
     )
     .sort((a, b) => b.fecha.localeCompare(a.fecha))
@@ -440,6 +442,78 @@ export function esCorreoDeTotalOne(asunto: string, texto = ''): boolean {
     ASUNTO_TOTAL_ONE.test(asunto) ||
     CUERPO_TOTAL_ONE.test(texto) ||
     ASUNTO_EN_DESCRIPCION.test(texto)
+  );
+}
+
+/**
+ * Rebotes del servidor de correo ("No se puede entregar: …", "Undeliverable",
+ * "Delivery has failed"): avisan que un correo no llego, casi siempre a una
+ * direccion que ya no existe. No son un pendiente: si hay que corregir algo,
+ * se ve en el sistema que mando el correo, no aqui. Se reconocen por el
+ * asunto, por el remitente del sistema (postmaster, Mail Delivery, el buzon
+ * de Exchange) o por las frases fijas del cuerpo.
+ */
+const ASUNTO_REBOTE_CLARO =
+  /^\s*(re:\s*|rv:\s*|fwd?:\s*)*(no se puede entregar\s*:|undeliverable|delivery status notification|delivery has failed|mail delivery (failed|subsystem)|returned mail|failure notice|address not found)/i;
+const REMITENTE_REBOTE =
+  /microsoftexchange[0-9a-f]{20,}@|postmaster@|mailer-daemon@|^mail delivery (subsystem|system)\b|<mail ?delivery/i;
+const CUERPO_REBOTE =
+  /no se pudo entregar (el mensaje|a estos destinatarios)|your message (couldn't be|wasn't) delivered|recipient address rejected|\b550[ -]?5\.[0-9]\.[0-9]/i;
+/** En un pendiente ya registrado el asunto original va en la descripcion. */
+const ASUNTO_REBOTE_EN_DESCRIPCION = new RegExp(
+  `^Asunto:\\s*${ASUNTO_REBOTE_CLARO.source.replace(/^\^\\s\*/, '')}`,
+  'im'
+);
+/** Y el remitente, como "De: Nombre <correo>". */
+const REMITENTE_REBOTE_EN_DESCRIPCION =
+  /^De:.*(microsoftexchange[0-9a-f]{20,}@|postmaster@|mailer-daemon@|mail ?delivery)/im;
+
+/**
+ * Un rebote del servidor de correo. Sirve tanto para el correo entrante
+ * (asunto, remitente y cuerpo) como para un pendiente ya registrado
+ * (titulo + descripcion, donde el asunto y el remitente originales quedaron
+ * escritos aunque la IA le haya puesto otro titulo).
+ *
+ * Los asuntos inequivocos bastan solos; los ambiguos necesitan ademas una
+ * señal del sistema (remitente o cuerpo de rebote), para no tirar correo de
+ * verdad como el de la paqueteria.
+ */
+export function esRebote(asunto: string, remitente = '', texto = ''): boolean {
+  // El buzon de Exchange, postmaster y mailer-daemon solo mandan rebotes:
+  // basta con el remitente. El asunto ambiguo necesita una de esas señales.
+  const senalDeSistema =
+    REMITENTE_REBOTE.test(remitente) ||
+    REMITENTE_REBOTE_EN_DESCRIPCION.test(texto) ||
+    CUERPO_REBOTE.test(texto);
+  return (
+    senalDeSistema ||
+    ASUNTO_REBOTE_CLARO.test(asunto) ||
+    ASUNTO_REBOTE_EN_DESCRIPCION.test(texto)
+  );
+}
+
+/**
+ * Avisos automaticos que manda el propio DMS (Total One / NexDMS) a sus
+ * usuarios: alertas de stock, resumenes del taller, recordatorios de cita.
+ * Llegan a los buzones porque Carlos es el remitente o esta en copia, pero
+ * no son pendientes suyos: lo que haya que hacer se atiende en el sistema
+ * que los genera.
+ */
+const ASUNTO_AVISO_DMS =
+  /^\s*(re:\s*|rv:\s*|fwd?:\s*)*(alerta de stock|stock m[ií]nimo|resumen diario del taller|cita[_ ]recordatorio|recordatorio de cita|no lleg[oó] a su cita)/i;
+/** El mismo asunto, dentro de la descripcion de un pendiente ya registrado. */
+const ASUNTO_AVISO_DMS_EN_DESCRIPCION = new RegExp(
+  `^Asunto:\\s*${ASUNTO_AVISO_DMS.source.replace(/^\^\\s\*/, '')}`,
+  'im'
+);
+
+/**
+ * Un aviso automatico del DMS, por su asunto (o por el asunto original que
+ * quedo escrito en la descripcion de un pendiente ya registrado).
+ */
+export function esAvisoDeSistema(asunto: string, texto = ''): boolean {
+  return (
+    ASUNTO_AVISO_DMS.test(asunto) || ASUNTO_AVISO_DMS_EN_DESCRIPCION.test(texto)
   );
 }
 
