@@ -1,6 +1,6 @@
 import type { ConfiguracionGoogle } from '../config/entorno.js';
 import type { Meeting, MeetingStatus, Person } from '../nucleo/contrato.js';
-import { ErrorProveedor } from '../nucleo/errores.js';
+import { ErrorProveedor, ErrorReconectarGoogle } from '../nucleo/errores.js';
 import { conParametros, pedirJson } from '../nucleo/http.js';
 
 /**
@@ -12,15 +12,23 @@ import { conParametros, pedirJson } from '../nucleo/http.js';
  * con XOAUTH2 (sin contraseña de aplicacion) y leer el calendario completo con
  * la API de Google Calendar.
  *
- * Permisos que pide: `https://mail.google.com/` (IMAP) y
- * `calendar.readonly`. El primero es "restringido" para Google: mientras la
- * aplicacion este en modo de prueba, el refresh token vence a los siete dias
- * y hay que volver a conectar; publicarla requiere la verificacion de Google.
+ * Permisos que pide: `https://mail.google.com/` (IMAP), `calendar.readonly` y
+ * `drive.file` (solo los archivos que la propia aplicacion crea: la carpeta
+ * de las llamadas archivadas y sus Docs; no ve el resto del Drive). El primero
+ * es "restringido" para Google: mientras la aplicacion este en modo de prueba,
+ * el refresh token vence a los siete dias y hay que volver a conectar;
+ * publicarla requiere la verificacion de Google.
+ *
+ * Las cuentas conectadas antes de agregar `drive.file` no lo tienen: hay que
+ * volver a pasar por "Conectar con Google".
  */
+
+export const ALCANCE_DRIVE = 'https://www.googleapis.com/auth/drive.file';
 
 const ALCANCES = [
   'https://mail.google.com/',
   'https://www.googleapis.com/auth/calendar.readonly',
+  ALCANCE_DRIVE,
   'https://www.googleapis.com/auth/userinfo.email'
 ].join(' ');
 
@@ -54,6 +62,8 @@ interface RespuestaToken {
   access_token?: string;
   refresh_token?: string;
   expires_in?: number;
+  /** Los permisos que Google dice haber dado, separados por espacio. */
+  scope?: string;
   error?: string;
   error_description?: string;
 }
@@ -103,7 +113,10 @@ export async function canjearCodigoGoogle(
   };
 }
 
-const accesos = new Map<string, { token: string; venceEn: number }>();
+const accesos = new Map<
+  string,
+  { token: string; venceEn: number; alcance?: string }
+>();
 
 export async function tokenDeAccesoGoogle(
   id: string,
@@ -127,9 +140,38 @@ export async function tokenDeAccesoGoogle(
   const token = datos.access_token as string;
   accesos.set(id, {
     token,
-    venceEn: Date.now() + (datos.expires_in ?? 3600) * 1000
+    venceEn: Date.now() + (datos.expires_in ?? 3600) * 1000,
+    alcance: datos.scope
   });
   return token;
+}
+
+/**
+ * El token para Drive. Si Google dijo que a este refresh token no se le dio
+ * `drive.file` (cuenta conectada antes de pedirlo), falla de una vez con el
+ * aviso de reconectar, sin gastar una llamada a Drive.
+ */
+export async function tokenDeDriveGoogle(
+  id: string,
+  app: ConfiguracionGoogle
+): Promise<string> {
+  const token = await tokenDeAccesoGoogle(id, app);
+  const alcance = accesos.get(id)?.alcance;
+  if (alcance !== undefined && !alcance.split(' ').includes(ALCANCE_DRIVE)) {
+    throw new ErrorReconectarGoogle();
+  }
+  return token;
+}
+
+/**
+ * Si el ultimo token que entrego Google trae el permiso de Drive: `undefined`
+ * cuando todavia no se ha pedido ninguno (o Google no dijo los permisos).
+ */
+export function tienePermisoDrive(id: string): boolean | undefined {
+  const alcance = accesos.get(id)?.alcance;
+  return alcance === undefined
+    ? undefined
+    : alcance.split(' ').includes(ALCANCE_DRIVE);
 }
 
 export function olvidarAccesoGoogle(id: string): void {
@@ -257,4 +299,230 @@ function persona(
     return undefined;
   }
   return { id: email, name: d?.displayName || email, email };
+}
+
+// --- Google Drive ---------------------------------------------------------
+
+const DRIVE = 'https://www.googleapis.com/drive/v3';
+const DRIVE_SUBIDA = 'https://www.googleapis.com/upload/drive/v3';
+const MIME_CARPETA = 'application/vnd.google-apps.folder';
+const MIME_DOCUMENTO = 'application/vnd.google-apps.document';
+const TIEMPO_DRIVE_MS = 60_000;
+
+/** Lo que se sabe de un archivo de Drive (los campos que se piden). */
+export interface ArchivoDrive {
+  id: string;
+  name?: string;
+  mimeType?: string;
+  trashed?: boolean;
+  parents?: string[];
+  webViewLink?: string;
+  appProperties?: Record<string, string>;
+}
+
+/** Escapa un valor para ponerlo entre comillas simples en `q` de Drive. */
+export function escaparConsultaDrive(valor: string): string {
+  return valor.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+async function pedirDrive<T>(
+  token: string,
+  url: string,
+  init: { method?: string; body?: string; contentType?: string } = {}
+): Promise<T> {
+  let respuesta: Response;
+  try {
+    respuesta = await fetch(url, {
+      method: init.method ?? 'GET',
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: 'application/json',
+        ...(init.contentType ? { 'content-type': init.contentType } : {})
+      },
+      body: init.body,
+      signal: AbortSignal.timeout(TIEMPO_DRIVE_MS)
+    });
+  } catch (error) {
+    throw new ErrorProveedor(
+      'google',
+      `Drive no respondió: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  if (!respuesta.ok) {
+    const texto = await respuesta.text().catch(() => '');
+    let razon = '';
+    let mensaje = texto.slice(0, 200);
+    try {
+      const j = JSON.parse(texto) as {
+        error?: { message?: string; errors?: { reason?: string }[] };
+      };
+      razon = j.error?.errors?.[0]?.reason ?? '';
+      mensaje = j.error?.message ?? mensaje;
+    } catch {
+      // No era JSON: se queda el texto recortado.
+    }
+    if (
+      respuesta.status === 403 &&
+      (razon === 'insufficientPermissions' ||
+        /insufficient|scope/i.test(mensaje))
+    ) {
+      throw new ErrorReconectarGoogle(mensaje.slice(0, 120));
+    }
+    if (respuesta.status === 403 && razon === 'accessNotConfigured') {
+      throw new ErrorProveedor(
+        'google',
+        'la API de Google Drive no está activada en el proyecto de Google Cloud de la aplicación: actívala en APIs y servicios → Biblioteca'
+      );
+    }
+    throw new ErrorProveedor(
+      'google',
+      `Drive respondió ${respuesta.status}${mensaje ? ` · ${mensaje}` : ''}`,
+      502,
+      { http: respuesta.status }
+    );
+  }
+  return (await respuesta.json()) as T;
+}
+
+const CAMPOS_ARCHIVO =
+  'id,name,mimeType,trashed,parents,webViewLink,appProperties';
+
+/**
+ * La carpeta de la aplicacion con ese nombre; si no existe, la crea. Con el
+ * permiso `drive.file` solo se ven las carpetas que creo la propia
+ * aplicacion, asi que no hay riesgo de tomar una ajena.
+ */
+export async function carpetaDeDrive(
+  token: string,
+  nombre: string
+): Promise<string> {
+  const q = `mimeType='${MIME_CARPETA}' and name='${escaparConsultaDrive(nombre)}' and trashed=false`;
+  const lista = await pedirDrive<{ files?: ArchivoDrive[] }>(
+    token,
+    conParametros(`${DRIVE}/files`, {
+      q,
+      fields: 'files(id,name)',
+      spaces: 'drive',
+      pageSize: '1'
+    })
+  );
+  const existente = lista.files?.[0];
+  if (existente?.id) {
+    return existente.id;
+  }
+  const creada = await pedirDrive<ArchivoDrive>(
+    token,
+    conParametros(`${DRIVE}/files`, { fields: 'id' }),
+    {
+      method: 'POST',
+      contentType: 'application/json',
+      body: JSON.stringify({ name: nombre, mimeType: MIME_CARPETA })
+    }
+  );
+  if (!creada.id) {
+    throw new ErrorProveedor('google', 'Drive no devolvió el id de la carpeta');
+  }
+  return creada.id;
+}
+
+/**
+ * Sube un texto plano y Drive lo convierte en Google Doc (`mimeType` del
+ * documento en los metadatos). `propiedades` queda en el archivo y sirve para
+ * encontrarlo despues (por ejemplo, el id de la transcripcion).
+ */
+export async function subirComoDocumento(
+  token: string,
+  carpetaId: string,
+  nombre: string,
+  textoPlano: string,
+  propiedades: Record<string, string> = {}
+): Promise<{ id: string; webViewLink: string }> {
+  const frontera = `ds-monitor-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+  const metadatos = JSON.stringify({
+    name: nombre,
+    mimeType: MIME_DOCUMENTO,
+    parents: [carpetaId],
+    appProperties: propiedades
+  });
+  const cuerpo =
+    `--${frontera}\r\ncontent-type: application/json; charset=UTF-8\r\n\r\n${metadatos}\r\n` +
+    `--${frontera}\r\ncontent-type: text/plain; charset=UTF-8\r\n\r\n${textoPlano}\r\n` +
+    `--${frontera}--`;
+  const creado = await pedirDrive<{ id?: string; webViewLink?: string }>(
+    token,
+    conParametros(`${DRIVE_SUBIDA}/files`, {
+      uploadType: 'multipart',
+      fields: 'id,webViewLink'
+    }),
+    {
+      method: 'POST',
+      contentType: `multipart/related; boundary=${frontera}`,
+      body: cuerpo
+    }
+  );
+  if (!creado.id) {
+    throw new ErrorProveedor('google', 'Drive no devolvió el id del documento');
+  }
+  return {
+    id: creado.id,
+    webViewLink:
+      creado.webViewLink ??
+      `https://docs.google.com/document/d/${creado.id}/edit`
+  };
+}
+
+/** Los metadatos de un archivo; sirve para comprobar que quedo donde debe. */
+export async function archivoDeDrive(
+  token: string,
+  id: string
+): Promise<ArchivoDrive> {
+  return pedirDrive<ArchivoDrive>(
+    token,
+    conParametros(`${DRIVE}/files/${encodeURIComponent(id)}`, {
+      fields: CAMPOS_ARCHIVO
+    })
+  );
+}
+
+/** El documento de esa propiedad en la carpeta, si una corrida anterior ya lo subio. */
+export async function documentoPorPropiedad(
+  token: string,
+  carpetaId: string,
+  clave: string,
+  valor: string
+): Promise<ArchivoDrive | undefined> {
+  const q = `'${escaparConsultaDrive(carpetaId)}' in parents and trashed=false and appProperties has { key='${escaparConsultaDrive(clave)}' and value='${escaparConsultaDrive(valor)}' }`;
+  const lista = await pedirDrive<{ files?: ArchivoDrive[] }>(
+    token,
+    conParametros(`${DRIVE}/files`, {
+      q,
+      fields: `files(${CAMPOS_ARCHIVO})`,
+      spaces: 'drive',
+      pageSize: '1'
+    })
+  );
+  return lista.files?.[0];
+}
+
+/** El texto plano de un Google Doc, para comprobar que el contenido quedo completo. */
+export async function textoDeDocumento(
+  token: string,
+  id: string
+): Promise<string> {
+  const respuesta = await fetch(
+    conParametros(`${DRIVE}/files/${encodeURIComponent(id)}/export`, {
+      mimeType: 'text/plain'
+    }),
+    {
+      headers: { authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(TIEMPO_DRIVE_MS)
+    }
+  );
+  if (!respuesta.ok) {
+    throw new ErrorProveedor(
+      'google',
+      `Drive no exportó el documento (${respuesta.status})`
+    );
+  }
+  return respuesta.text();
 }

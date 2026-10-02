@@ -3,6 +3,7 @@ import type { ClienteIngesta } from '../config/entorno.js';
 import type { Ejecucion, Ejecuciones } from '../ingesta/ejecuciones.js';
 import type {
   Empresa,
+  LlamadaArchivada,
   Person,
   Proveedor,
   TaskItem
@@ -654,4 +655,42 @@ export const TABLA_PROVEEDORES: DefinicionTabla<Proveedor[]> = {
     sub: {}
   }),
   deFilas: (filas) => filas.map((f) => objeto<Proveedor>(f['datos']))
+};
+
+// --- Llamadas archivadas en Drive ---------------------------------------
+
+export const TABLA_LLAMADAS: DefinicionTabla<LlamadaArchivada[]> = {
+  clave: 'llamadas',
+  tabla: 'llamadas',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS llamadas (
+      id text PRIMARY KEY,
+      orden integer NOT NULL DEFAULT 0,
+      titulo text NOT NULL,
+      fecha timestamptz,
+      doc_id text NOT NULL,
+      doc_url text NOT NULL,
+      archivada_en timestamptz NOT NULL,
+      borrada_de_fireflies boolean NOT NULL DEFAULT false,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS llamadas_fecha ON llamadas (fecha);
+  `,
+  id: 'id',
+  orden: 'orden',
+  aFilas: (lista) => ({
+    principal: lista.map((l, i) => ({
+      id: l.id,
+      orden: i,
+      titulo: l.titulo,
+      fecha: fecha(l.fecha),
+      doc_id: l.docId,
+      doc_url: l.docUrl,
+      archivada_en: fecha(l.archivadaEn) ?? new Date().toISOString(),
+      borrada_de_fireflies: l.borradaDeFireflies,
+      datos: l
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<LlamadaArchivada>(f['datos']))
 };

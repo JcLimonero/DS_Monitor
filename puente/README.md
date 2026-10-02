@@ -182,6 +182,52 @@ así que el barrido puede alimentar los ocho buzones hasta que cada uno tenga su
 contraseña en el puente. Un buzón grande (decenas de miles de mensajes) tarda
 varios minutos; conviene programarlo cada hora con `launchd` o `cron`.
 
+## Llamadas de Fireflies archivadas en Drive
+
+El texto completo de cada llamada que graba Fireflies se guarda como **Google
+Doc** en una carpeta de Drive (por omisión "DS Monitor · Transcripciones", la
+crea la propia aplicación) y, solo después de comprobar que el Doc quedó, se
+**borra de Fireflies** para liberar espacio. El portal las lista en el módulo
+**Llamadas**, con una liga a cada Doc.
+
+El flujo, por cada transcripción (`src/llamadas/servicio.ts`):
+
+1. Si todavía no se procesó y trae acuerdos, primero se procesa (se crea el
+   pendiente de la junta, como hace el programable de juntas); las que tienen
+   menos de 12 horas se esperan para que Fireflies termine su resumen.
+2. Se baja la conversación completa (sin recortar) y se arma el documento:
+   encabezado (título, fecha en es-MX, duración, participantes, resumen y
+   acuerdos) y una línea por frase, `[mm:ss] Nombre: frase`.
+3. Se sube a Drive (`uploadType=multipart`, convertido a Google Doc) con el id
+   de Fireflies en `appProperties`, así una corrida repetida no duplica el Doc.
+4. Se **verifica**: el archivo es un Doc, no está en la papelera, está en la
+   carpeta y su texto exportado trae el final de la conversación.
+5. Se anota en la tabla `llamadas` y las ligas de Fireflies en los pendientes de
+   esa junta (y en lo editado a mano) pasan a apuntar al Doc.
+6. Se borra de Fireflies (`deleteTranscript`) y se marca `borradaDeFireflies`.
+
+Si algo falla antes del borrado la llamada se queda en Fireflies y se reintenta
+en la siguiente corrida; los borrados que fallaron también se reintentan. Una
+conversación de más de ~900 mil caracteres no cabe en un Google Doc: se queda en
+Fireflies con un aviso. Corre sola cada 6 horas (programable "llamadas a
+Drive") y se fuerza con `POST /llamadas/archivar` (cuerpo opcional `{ "id" }`;
+hace hasta 15 por corrida y dice cuántas quedan). Rutas de administrador:
+`GET /llamadas`, `GET /llamadas/estado`, `POST /llamadas/config`
+(`borrarDeFireflies`, `carpetaNombre`).
+
+- **Permiso nuevo de Google.** Se agregó `drive.file` a los permisos del OAuth
+  (solo ve lo que la aplicación misma crea, no el resto del Drive). Las cuentas
+  ya conectadas **hay que reconectarlas** (Integraciones → Correo → Conectar con
+  Google); mientras tanto el módulo Llamadas y "Probar" del buzón avisan que
+  falta el permiso. También hay que tener activada la API de Google Drive en el
+  proyecto de Google Cloud de la aplicación. Se usa la primera cuenta de Google
+  conectada.
+- **El borrado en Fireflies es irreversible.** Está encendido por omisión; se
+  apaga con el interruptor "Borrar de Fireflies al archivar" del módulo Llamadas
+  (`borrarDeFireflies: false`) y entonces solo se archiva. Si la API key o el
+  plan de Fireflies no permiten borrar, el Doc queda guardado, el error se
+  anota (y se muestra en el portal) y no se insiste en esa corrida.
+
 ## Acceso, equipo y dominios
 
 Con `ACCESO_CORREOS` y las cuatro variables de EmailJS (también capturables

@@ -1,0 +1,222 @@
+<pt-page-header title="Llamadas" [subtitle]="subtitle()">
+  <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+    <label class="relative block w-full sm:w-64">
+      <span class="sr-only">Buscar</span>
+      <pt-icon
+        name="buscar"
+        class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
+      <input
+        class="field pl-9"
+        type="search"
+        placeholder="Buscar título o participante"
+        [ngModel]="busqueda()"
+        (ngModelChange)="busqueda.set($event)"
+        name="buscar" />
+    </label>
+    <button
+      type="button"
+      class="btn btn-primary w-full sm:w-auto"
+      [disabled]="!puedeArchivar()"
+      (click)="archivar()">
+      <pt-icon
+        name="refrescar"
+        class="h-4 w-4"
+        [class.animate-spin]="archivando()" />
+      {{ archivando() ? "Archivando…" : "Archivar ahora" }}
+    </button>
+  </div>
+</pt-page-header>
+
+@if (!disponible) {
+  <section class="card">
+    <pt-empty-state
+      icon="alerta"
+      title="Sin conexión con el puente"
+      hint="Las llamadas se guardan desde el puente. Conéctalo en Integraciones para verlas aquí." />
+  </section>
+} @else {
+  <div class="space-y-3">
+    @if (error(); as mensaje) {
+      <p class="banner banner-danger" role="alert">
+        <pt-icon name="alerta" class="h-4 w-4 shrink-0" />
+        <span class="min-w-0">{{ mensaje }}</span>
+      </p>
+    }
+
+    @if (falta(); as mensaje) {
+      <p class="banner banner-warn">
+        <pt-icon name="alerta" class="h-4 w-4 shrink-0" />
+        <span class="min-w-0"
+          >{{ mensaje }}
+          <a class="font-bold underline" routerLink="/integraciones"
+            >Ir a Integraciones</a
+          ></span
+        >
+      </p>
+    }
+
+    @if (estado(); as e) {
+      @if (e.ultima?.reconectarGoogle) {
+        <p class="banner banner-danger" role="alert">
+          <pt-icon name="alerta" class="h-4 w-4 shrink-0" />
+          <span class="min-w-0"
+            >Google no dio permiso para usar Drive: reconecta la cuenta en
+            Integraciones → Correo (Conectar con Google).
+            <a
+              class="font-bold underline"
+              routerLink="/integraciones"
+              [queryParams]="{ tab: 'correo' }"
+              >Reconectar</a
+            ></span
+          >
+        </p>
+      }
+    }
+
+    @if (resumen(); as r) {
+      <section class="card card-pad text-sm" role="status">
+        <p class="font-semibold text-ink">
+          {{ plural(r.archivadas, "llamada archivada", "llamadas archivadas") }}
+          en Drive y {{ r.borradas }}
+          {{ r.borradas === 1 ? "borrada" : "borradas" }} de Fireflies.
+        </p>
+        @if (r.pendientes > 0) {
+          <p class="mt-1 text-ink-muted">
+            Quedan al menos {{ r.pendientes }} por archivar: vuelve a pulsar
+            “Archivar ahora” (se hacen por tandas).
+          </p>
+        }
+        @if (r.errores.length > 0) {
+          <ul class="mt-2 list-disc space-y-1 pl-5 text-ink-muted">
+            @for (mensaje of r.errores; track $index) {
+              <li class="break-words">{{ mensaje }}</li>
+            }
+          </ul>
+        }
+      </section>
+    }
+
+    @if (estado(); as e) {
+      <section
+        class="card card-pad flex flex-col gap-2 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <p class="min-w-0 text-ink-muted">
+          <span class="font-semibold text-ink">Carpeta de Drive:</span>
+          {{ e.carpeta }}
+          @if (e.cuenta) {
+            <span class="break-words"> · {{ e.cuenta }}</span>
+          }
+          @if (e.ultima; as u) {
+            <span class="block sm:inline">
+              · Última corrida {{ u.en | relativo }}</span
+            >
+          }
+        </p>
+        <div class="flex flex-col gap-0.5 text-ink">
+          <label
+            class="flex min-h-10 cursor-pointer items-center gap-2"
+            title="Borrar es irreversible: la conversación solo queda en Drive.">
+            <input
+              type="checkbox"
+              class="h-5 w-5 rounded border-line accent-brand focus:ring-brand"
+              [checked]="e.borrarDeFireflies"
+              [disabled]="guardandoConfig()"
+              (change)="cambiarBorrado($any($event.target).checked)"
+              name="borrar-de-fireflies" />
+            Borrar de Fireflies al archivar
+          </label>
+          <label class="flex min-h-10 cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              class="h-5 w-5 rounded border-line accent-brand focus:ring-brand"
+              [checked]="soloArchivar()"
+              (change)="soloArchivar.set($any($event.target).checked)"
+              name="solo-archivar" />
+            Solo archivar, sin borrar (esta vez)
+          </label>
+        </div>
+        <p class="text-xs text-ink-muted sm:basis-full">
+          El borrado en Fireflies es irreversible y también elimina el audio, el
+          video y las analíticas; el Doc guarda título, fecha, participantes,
+          resumen, acuerdos y la conversación.
+        </p>
+      </section>
+    }
+
+    @if (cargando() && !cargada()) {
+      <section class="card">
+        <p class="px-4 py-10 text-center text-sm text-ink-muted">Cargando…</p>
+      </section>
+    } @else if (visibles().length > 0) {
+      <section class="card">
+        <ul class="divide-y divide-line">
+          @for (llamada of visibles(); track llamada.id) {
+            <li
+              class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:gap-4 sm:px-5">
+              <div
+                class="shrink-0 text-xs text-ink-muted sm:w-24 sm:text-right">
+                <div class="text-sm font-medium tabular-nums text-ink">
+                  {{ llamada.fecha | dia }}
+                </div>
+                <div class="tabular-nums">
+                  {{ llamada.fecha | hora }}
+                  @if (duracion(llamada); as d) {
+                    · {{ d }}
+                  }
+                </div>
+              </div>
+
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h2 class="break-words text-sm font-medium text-ink">
+                    {{ llamada.titulo }}
+                  </h2>
+                  @if (!llamada.borradaDeFireflies) {
+                    <span
+                      class="chip bg-surface-muted text-ink-muted"
+                      title="Todavía no se borra de Fireflies">
+                      Aún en Fireflies
+                    </span>
+                  }
+                </div>
+                @if (participantes(llamada); as quienes) {
+                  <p class="mt-1 break-words text-xs text-ink-muted">
+                    {{ quienes }}
+                  </p>
+                }
+                @if (llamada.resumen) {
+                  <p class="mt-1 line-clamp-2 text-sm text-ink-muted">
+                    {{ llamada.resumen }}
+                  </p>
+                }
+              </div>
+
+              <a
+                class="btn w-full shrink-0 sm:w-auto"
+                [href]="llamada.docUrl"
+                target="_blank"
+                rel="noopener"
+                [attr.aria-label]="'Abrir en Drive: ' + llamada.titulo">
+                <pt-icon name="externo" class="h-4 w-4" />
+                Abrir en Drive
+              </a>
+            </li>
+          }
+        </ul>
+      </section>
+    } @else if (cargada() && !error()) {
+      <section class="card">
+        @if (llamadas().length > 0) {
+          <pt-empty-state
+            icon="buscar"
+            title="Ninguna llamada coincide"
+            hint="Prueba con otra parte del título o con el correo de un participante." />
+        } @else {
+          <pt-empty-state
+            icon="video"
+            title="Todavía no hay llamadas archivadas"
+            hint="Aquí quedan las conversaciones archivadas: se guardan en tu Drive y se borran de Fireflies. Las nuevas se archivan solas cada pocas horas; también puedes pulsar “Archivar ahora”." />
+        }
+      </section>
+    }
+  </div>
+}

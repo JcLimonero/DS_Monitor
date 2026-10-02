@@ -1,4 +1,4 @@
-import { ErrorProveedor } from '../nucleo/errores.js';
+import { ErrorBorradoNoPermitido, ErrorProveedor } from '../nucleo/errores.js';
 
 /**
  * Fireflies.ai: las notas de las juntas, directo de su API (GraphQL con
@@ -23,11 +23,24 @@ export interface Transcripcion {
   participantes: string[];
   /** Las primeras frases, para el modelo. */
   texto?: string;
+  /** Toda la conversacion, frase por frase (solo al pedir una transcripcion). */
+  frases?: Frase[];
+}
+
+export interface Frase {
+  texto: string;
+  hablante?: string;
+  /** Segundos desde el inicio de la llamada. */
+  inicioSeg?: number;
 }
 
 interface RespuestaGraphql<T> {
   data?: T;
-  errors?: { message?: string }[];
+  errors?: {
+    message?: string;
+    code?: string;
+    extensions?: { code?: string };
+  }[];
 }
 
 async function graphql<T>(
@@ -50,7 +63,13 @@ async function graphql<T>(
     throw new ErrorProveedor(
       'fireflies',
       datos.errors?.[0]?.message ?? `respondió ${respuesta.status}`,
-      respuesta.status === 401 || respuesta.status === 403 ? 503 : 502
+      respuesta.status === 401 || respuesta.status === 403 ? 503 : 502,
+      // El codigo del error (por ejemplo require_elevated_privilege) sirve
+      // para distinguir "no tienes permiso" de "fallo la red".
+      {
+        codigo: datos.errors?.[0]?.extensions?.code ?? datos.errors?.[0]?.code,
+        http: respuesta.status
+      }
     );
   }
   return datos.data;
@@ -69,11 +88,11 @@ interface TranscripcionCruda {
     keywords?: string[];
     shorthand_bullet?: string;
   };
-  sentences?: { text?: string; speaker_name?: string }[];
+  sentences?: { text?: string; speaker_name?: string; start_time?: number }[];
 }
 
-const LISTA = `query ($limit: Int, $fromDate: DateTime) {
-  transcripts(limit: $limit, fromDate: $fromDate) {
+const LISTA = `query ($limit: Int, $skip: Int, $fromDate: DateTime) {
+  transcripts(limit: $limit, skip: $skip, fromDate: $fromDate) {
     id title date duration transcript_url participants
     summary { overview action_items keywords shorthand_bullet }
   }
@@ -83,7 +102,7 @@ const UNA = `query ($id: String!) {
   transcript(id: $id) {
     id title date duration transcript_url participants
     summary { overview action_items keywords shorthand_bullet }
-    sentences { text speaker_name }
+    sentences { text speaker_name start_time }
   }
 }`;
 
@@ -109,21 +128,40 @@ function aTranscripcion(t: TranscripcionCruda): Transcripcion {
         (s) => `${s.speaker_name ? `${s.speaker_name}: ` : ''}${s.text ?? ''}`
       )
       .join('\n')
-      .slice(0, 12_000)
+      .slice(0, 12_000),
+    frases: t.sentences
+      ? t.sentences
+          .map((s) => ({
+            texto: (s.text ?? '').trim(),
+            hablante: s.speaker_name?.trim() || undefined,
+            inicioSeg:
+              typeof s.start_time === 'number' && Number.isFinite(s.start_time)
+                ? s.start_time
+                : undefined
+          }))
+          .filter((f) => f.texto !== '')
+      : undefined
   };
 }
 
-/** Las transcripciones recientes, sin el texto completo. */
+/**
+ * Las transcripciones recientes, sin el texto completo. Con `dias` en 0 no hay
+ * limite de fecha; `saltar` pagina (la API entrega hasta 50 por llamada).
+ */
 export async function transcripcionesRecientes(
   config: ConfiguracionFireflies,
   dias = 30,
-  limite = 50
+  limite = 50,
+  saltar = 0
 ): Promise<Transcripcion[]> {
-  const desde = new Date(Date.now() - dias * 86_400_000).toISOString();
+  const desde =
+    dias > 0
+      ? new Date(Date.now() - dias * 86_400_000).toISOString()
+      : undefined;
   const datos = await graphql<{ transcripts?: TranscripcionCruda[] }>(
     config,
     LISTA,
-    { limit: limite, fromDate: desde }
+    { limit: limite, skip: saltar || undefined, fromDate: desde }
   );
   return (datos.transcripts ?? []).map(aTranscripcion);
 }
@@ -141,6 +179,72 @@ export async function transcripcion(
     throw new ErrorProveedor('fireflies', 'no existe esa transcripción', 404);
   }
   return aTranscripcion(datos.transcript);
+}
+
+const BORRAR = `mutation ($id: String!) {
+  deleteTranscript(id: $id) { id title }
+}`;
+
+/** Codigos de Fireflies que significan "esta cuenta no puede borrar". */
+const CODIGOS_SIN_PERMISO = new Set([
+  'require_elevated_privilege',
+  'forbidden',
+  'unauthorized',
+  'paid_required',
+  'account_cancelled',
+  'api_key_missing',
+  'invalid_api_key'
+]);
+
+/**
+ * Decide si un fallo al borrar es de permisos/plan (no tiene caso insistir en
+ * esta corrida) y no de red o de un instante. Pura para poder probarla.
+ */
+export function esSinPermisoDeBorrado(error: unknown): boolean {
+  if (!(error instanceof ErrorProveedor)) {
+    return false;
+  }
+  const causa = error.causa as { codigo?: string; http?: number } | undefined;
+  if (causa?.codigo && CODIGOS_SIN_PERMISO.has(causa.codigo)) {
+    return true;
+  }
+  if (causa?.http === 401 || causa?.http === 403) {
+    return true;
+  }
+  return /privilege|permission|forbidden|not allowed|upgrade|plan|admin|owner/i.test(
+    error.message
+  );
+}
+
+/**
+ * Borra la transcripcion en Fireflies. Es irreversible. Si el plan o el
+ * usuario de la API key no pueden borrar, lanza `ErrorBorradoNoPermitido`
+ * (mensaje claro, sin tumbar el proceso: quien llama lo anota y sigue). Una
+ * transcripcion que ya no existe cuenta como borrada.
+ */
+export async function borrarTranscripcion(
+  config: ConfiguracionFireflies,
+  id: string
+): Promise<void> {
+  try {
+    await graphql<unknown>(config, BORRAR, { id });
+  } catch (error) {
+    if (error instanceof ErrorProveedor) {
+      const causa = error.causa as { codigo?: string } | undefined;
+      if (
+        causa?.codigo === 'object_not_found' ||
+        /not found|no existe/i.test(error.message)
+      ) {
+        return;
+      }
+      if (esSinPermisoDeBorrado(error)) {
+        throw new ErrorBorradoNoPermitido(
+          error.message.replace(/^fireflies:\s*/, '').slice(0, 160)
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 /**
