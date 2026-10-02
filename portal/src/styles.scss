@@ -222,7 +222,7 @@ body {
     grid-auto-rows: min-content;
     grid-template-columns: repeat(
       auto-fill,
-      minmax(min(100%, var(--tv-min, 12rem)), 1fr)
+      minmax(min(100%, calc(var(--tv-min, 12rem) * var(--tv-k, 1))), 1fr)
     );
     overscroll-behavior: contain;
   }
@@ -237,6 +237,23 @@ body {
 @media (min-width: 640px) {
   html.kiosco {
     font-size: clamp(13.5px, calc(0.5vw + 9px), 28px);
+  }
+}
+
+/*
+ * En television las tarjetas crecen ademas de la letra: el minimo de cada
+ * columna se multiplica por --tv-k para no llenar la pantalla de columnas
+ * angostas con el nombre cortado y media pantalla vacia debajo.
+ */
+@media (min-width: 1700px) {
+  html.kiosco .tv-rejilla {
+    --tv-k: 1.2;
+  }
+}
+
+@media (min-width: 2400px) {
+  html.kiosco .tv-rejilla {
+    --tv-k: 1.45;
   }
 }
 

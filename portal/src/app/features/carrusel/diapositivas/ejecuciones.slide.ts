@@ -83,7 +83,7 @@ const CLASE_ESTADO: Record<Estado, string> = {
         el nombre, el estado (con hace cuanto y cuanto tardo en la misma
         linea), de quien viene y cada cuanto corre, y el ultimo mensaje.
       -->
-      <div class="tv-rejilla" style="--tv-min: 11rem">
+      <div class="tv-rejilla" style="--tv-min: 10.5rem">
         @for (e of visibles(); track e.clave) {
           <article
             class="tv-card flex min-w-0 flex-col gap-0.5 px-3 py-2"
@@ -112,7 +112,7 @@ const CLASE_ESTADO: Record<Estado, string> = {
             </p>
 
             <p
-              class="tv-dato line-clamp-1 [@media(min-height:901px)]:line-clamp-2">
+              class="tv-dato line-clamp-1 [@media(min-height:1051px)]:line-clamp-2">
               {{ e.terminoEn | relativo }}
               @if (frecuencia(e)) {
                 · {{ frecuencia(e) }}
