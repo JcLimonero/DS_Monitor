@@ -4239,6 +4239,11 @@ export function construirRutas(
     if (id !== undefined && (typeof id !== 'string' || !id.trim())) {
       throw new ErrorPuente('El id de la llamada no es válido.', 400);
     }
+    // Estricto a proposito: un "true" de texto se ignoraria y se borraria de
+    // Fireflies cuando se pidio no borrar.
+    if (soloArchivar !== undefined && typeof soloArchivar !== 'boolean') {
+      throw new ErrorPuente('"soloArchivar" debe ser true o false.', 400);
+    }
     return correrArchivado({
       id: typeof id === 'string' ? id.trim() : undefined,
       soloArchivar: soloArchivar === true
