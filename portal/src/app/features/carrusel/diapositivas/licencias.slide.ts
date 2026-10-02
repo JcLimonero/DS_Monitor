@@ -101,8 +101,14 @@ const CLASE_DIALOGO = 'con-dialogo';
       }
     </div>
 
+    <!--
+      Los controles flotantes del carrusel ocupan el rincon inferior derecho
+      (seis botones de 44 px, ~310 px con su margen). Esta barra deja ese
+      espacio libre a partir de sm, en vez de pelearse con ellos por capas:
+      asi nada se tapa ni se vuelve intocable mientras estan visibles.
+    -->
     <div
-      class="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-1 rounded-xl border border-line bg-surface px-3 py-1.5">
+      class="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-1 rounded-xl border border-line bg-surface px-3 py-1.5 sm:mr-[324px]">
       <p class="flex items-baseline gap-2">
         <span class="tv-label">Gasto del periodo</span>
         <span class="text-2xl font-bold tabular-nums text-info">{{
@@ -119,14 +125,9 @@ const CLASE_DIALOGO = 'con-dialogo';
         }
         {{ textoAvisos() }}
       </p>
-      <!--
-        A la derecha y por encima (z-35) de los controles flotantes (z-30) y de las
-        esquinas del kiosco, que son
-        zonas de clic pegadas a los lados y taparian el boton. 44 px de alto:
-        es un iPad, se toca con el dedo.
-      -->
+      <!-- 44 px de alto: es un iPad, se toca con el dedo. -->
       <div
-        class="relative z-[35] ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+        class="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
         <pt-licencias-migracion [compacto]="true" />
         <button
           type="button"
