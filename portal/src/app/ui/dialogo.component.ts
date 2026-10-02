@@ -21,7 +21,8 @@ let seq = 0;
  * contenido se proyecta (`ng-content`); el pie opcional lleva `.dialogo-pie`.
  *
  * El host se mueve a `document.body` para que el overlay (z-50) quede encima
- * del nav sticky de Integraciones (z-10) y no se quede atrapado en la columna.
+ * del nav sticky de Integraciones (z-10) y no se quede atrapado en la columna;
+ * al destruirse se quita de ahi.
  */
 @Component({
   selector: 'pt-dialogo',
@@ -73,9 +74,12 @@ export class DialogoComponent {
   constructor() {
     const host = inject(ElementRef<HTMLElement>);
     document.documentElement.classList.add(CLASE_HTML);
-    inject(DestroyRef).onDestroy(() =>
-      document.documentElement.classList.remove(CLASE_HTML)
-    );
+    inject(DestroyRef).onDestroy(() => {
+      document.documentElement.classList.remove(CLASE_HTML);
+      // El host vive en <body>: si el dialogo va dentro de otro componente,
+      // Angular solo quita la raiz de ese componente y este nodo se quedaria.
+      host.nativeElement.remove();
+    });
     afterNextRender(() => {
       document.body.appendChild(host.nativeElement);
       const primero = host.nativeElement.querySelector(

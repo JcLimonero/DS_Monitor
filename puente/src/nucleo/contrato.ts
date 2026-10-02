@@ -338,11 +338,55 @@ export interface LicenseUsage {
   cost?: number;
   currency?: string;
   renewsAt?: string;
+  /** Cuando alguien confirmo que ya se renovo (ISO). */
+  renewedAt?: string;
+  /** Correo de quien confirmo la renovacion. */
+  renewalConfirmedBy?: string;
   manual: boolean;
   members: LicenseMember[];
   accountId: string;
   url?: string;
   updatedAt: string;
+}
+
+/** Cada cuanto se paga una licencia capturada a mano. */
+export type ManualLicensePeriod = 'mensual' | 'anual' | 'otro';
+
+/** Una licencia que se capturo a mano: vive en el puente, no en un navegador. */
+export interface ManualLicense extends LicenseUsage {
+  manual: true;
+  period: ManualLicensePeriod;
+  notes?: string;
+}
+
+/** Una confirmacion de renovacion, para el historial de la licencia. */
+export interface LicenseRenewal {
+  /** Cuando se confirmo (ISO). */
+  at: string;
+  /** Correo de quien la confirmo. */
+  by: string;
+  cost?: number;
+  currency?: string;
+  /** La fecha de la siguiente renovacion que quedo. */
+  renewsAt?: string;
+  note?: string;
+}
+
+/**
+ * Lo que se corrige o confirma de una licencia (de una fuente o manual) y
+ * queda en el puente, encima de lo que mande el proveedor.
+ */
+export interface LicenseAdjustment {
+  cost?: number;
+  currency?: string;
+  plan?: string;
+  renewsAt?: string;
+  /** True para sacarla del tablero sin borrarla de la fuente. */
+  hidden?: boolean;
+  renewedAt?: string;
+  confirmedBy?: string;
+  /** Las ultimas confirmaciones; la mas reciente al final (maximo 24). */
+  history: LicenseRenewal[];
 }
 
 // --- Despliegues ---

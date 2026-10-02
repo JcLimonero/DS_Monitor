@@ -287,6 +287,25 @@ tiene esa clave). Despliega el puente antes que el portal: un portal nuevo con
 un puente viejo no encuentra `/ajustes-portal` (404) y por eso se queda con sus
 ajustes locales.
 
+Las licencias a mano y la confirmación de renovaciones ya no viven en el
+navegador de quien las captura: están en el puente, para que la pantalla del
+carrusel y todas las computadoras vean lo mismo. `GET /licencias/manuales` y
+`GET /licencias/ajustes` leen; `POST /licencias/manuales/guardar {licencia}`
+(alta o edición; producto y cuenta obligatorios, costo ≥ 0, moneda de 3 letras,
+fecha ISO) y `/licencias/manuales/borrar {id}` manejan las que se agregan a
+mano. `POST /licencias/ajustes/guardar {id, cost?, currency?, plan?, renewsAt?,
+hidden?}` corrige cualquier licencia (de una fuente o manual; un campo en
+`null` quita la corrección) y `/licencias/ajustes/borrar {id}` la quita.
+`POST /licencias/renovar {id, costo?, moneda?, renuevaEn, nota?}` es "ya se
+renovó": guarda quién y cuándo lo confirmó, deja el costo y la fecha de la
+siguiente renovación y suma al historial (24 como máximo). Todas las escrituras
+piden sesión o token de administración. Las alertas y el resumen ya ven la fecha
+confirmada: el ajuste gana sobre la fecha que mande el proveedor mientras siga
+vigente; si vence y el proveedor ya manda una posterior, gana el proveedor. En
+un dominio, renovar mueve su `venceEn` y su costo (de ahí sale su licencia).
+`POST /licencias/migrar {manuales, ajustes}` sube lo que alguien tenía en su
+navegador sin pisar lo que el servidor ya tiene (por id).
+
 ## Dos maneras de traer datos
 
 **Ir por ellos**: el puente consulta la API del proveedor cada tanto. Es lo que

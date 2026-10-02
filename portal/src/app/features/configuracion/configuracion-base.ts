@@ -8,14 +8,12 @@ import {
 } from '../../core/config/gateway-override';
 import {
   ACCOUNT_COLORS,
-  LicenseEdit,
   correoCuentasLine,
   isMailKind
 } from '../../core/config/local-settings';
-import {
-  LocalSettingsStore,
-  NewManualLicense
-} from '../../core/config/local-settings.store';
+import { LocalSettingsStore } from '../../core/config/local-settings.store';
+import { LicenciasService } from '../../core/licencias/licencias.service';
+import { aplicarLicencias } from '../../core/licencias/licencias.util';
 import { PORTAL_CONFIG } from '../../core/config/portal-config.token';
 import {
   ConnectionMode,
@@ -25,6 +23,7 @@ import {
   Account,
   AccountColor,
   LICENSE_PROVIDER_LABEL,
+  LicenseAdjustment,
   LicenseProvider,
   LicenseUsage,
   Person,
@@ -105,9 +104,14 @@ const METODO_LABEL: Record<EstadoBuzon['metodo'], string> = {
 };
 
 interface LicenseRow {
+  /** Tal como llegó de la fuente. */
   license: LicenseUsage;
+  /** Con las correcciones y la renovación confirmada encima. */
+  vigente: LicenseUsage;
   account?: Account;
-  edit?: LicenseEdit;
+  edit?: LicenseAdjustment;
+  /** Tiene costo, moneda, plan o fecha corregidos (no solo una confirmación). */
+  corregida: boolean;
   hidden: boolean;
 }
 
@@ -964,28 +968,37 @@ export class ConfiguracionBase {
   }
 
   // --- Licencias ---
+  //
+  // Las correcciones y las licencias a mano viven en el puente (sin puente, en
+  // este navegador): `LicenciasService` decide dónde.
+
+  private readonly licenciasSvc = inject(LicenciasService);
 
   readonly licenseRows = computed<LicenseRow[]>(() => {
-    const edits = this.local.licenseEdits();
+    const edits = this.licenciasSvc.ajustes();
     return this.store.fetchedLicenses().map((license) => ({
       license,
+      vigente: aplicarLicencias([license], [], edits)[0] ?? license,
       account: this.store.accountOf(license.accountId),
       edit: edits[license.id],
+      corregida: corrigeAlgo(edits[license.id]),
       hidden: edits[license.id]?.hidden === true
     }));
   });
 
-  readonly manualLicenses = computed(() =>
-    this.local.manualLicenses().map((license) => ({
-      license,
+  readonly manualLicenses = computed(() => {
+    const edits = this.licenciasSvc.ajustes();
+    return this.licenciasSvc.manuales().map((license) => ({
+      license: aplicarLicencias([], [license], edits)[0] ?? license,
       account: this.store.accountOf(license.accountId)
-    }))
-  );
+    }));
+  });
 
-  /** Cuentas a las que se puede colgar una licencia capturada a mano. */
-  readonly licenseAccounts = computed(() =>
-    this.config.accounts.filter((account) => account.enabled)
-  );
+  /** Lo capturado en este navegador que falta subir al puente. */
+  readonly licenciasPendientesDeSubir = this.licenciasSvc.pendientesDeSubir;
+
+  /** Error al guardar una corrección, para mostrarlo en la página. */
+  readonly licenseError = signal<string | undefined>(undefined);
 
   readonly editing = signal<string | undefined>(undefined);
   readonly draft = signal<LicenseDraft>({
@@ -1015,84 +1028,53 @@ export class ConfiguracionBase {
     // El input numérico entrega un número con ngModel, no texto.
     const costText = String(draft.cost ?? '').trim();
     const cost = costText === '' ? undefined : Number(costText);
-    this.local.editLicense(row.license.id, {
-      cost: cost !== undefined && Number.isFinite(cost) ? cost : undefined,
-      currency:
-        cost !== undefined ? draft.currency.trim().toUpperCase() : undefined,
-      plan:
-        draft.plan.trim() !== row.license.plan ? draft.plan.trim() : undefined,
-      renewsAt:
-        draft.renewsAt && draft.renewsAt !== row.license.renewsAt?.slice(0, 10)
-          ? new Date(`${draft.renewsAt}T12:00:00`).toISOString()
-          : undefined,
-      hidden: row.hidden
-    });
-    this.editing.set(undefined);
+    const hayCosto = cost !== undefined && Number.isFinite(cost);
+    // `null` quita esa corrección; lo que no cambió respecto a la fuente no se guarda.
+    this.licenseError.set(undefined);
+    this.licenciasSvc
+      .guardarAjuste(row.license.id, {
+        cost: hayCosto ? cost : null,
+        currency: hayCosto ? draft.currency.trim().toUpperCase() : null,
+        plan:
+          draft.plan.trim() !== (row.license.plan ?? '')
+            ? draft.plan.trim() || null
+            : null,
+        renewsAt:
+          draft.renewsAt &&
+          draft.renewsAt !== row.license.renewsAt?.slice(0, 10)
+            ? draft.renewsAt
+            : null,
+        hidden: row.hidden
+      })
+      .subscribe({
+        next: () => this.editing.set(undefined),
+        error: (e: unknown) => this.licenseError.set(describeHttp(e))
+      });
   }
 
   setHidden(row: LicenseRow, hidden: boolean): void {
-    this.local.editLicense(row.license.id, { ...row.edit, hidden });
+    this.licenseError.set(undefined);
+    this.licenciasSvc.guardarAjuste(row.license.id, { hidden }).subscribe({
+      error: (e: unknown) => this.licenseError.set(describeHttp(e))
+    });
   }
 
   clearEdit(row: LicenseRow): void {
-    this.local.clearLicenseEdit(row.license.id);
+    this.licenseError.set(undefined);
+    this.licenciasSvc.quitarAjuste(row.license.id).subscribe({
+      error: (e: unknown) => this.licenseError.set(describeHttp(e))
+    });
   }
 
   updateDraft(patch: Partial<LicenseDraft>): void {
     this.draft.update((current) => ({ ...current, ...patch }));
   }
 
-  // --- Alta de licencia a mano ---
-
-  readonly newLicense = signal<NewManualLicense>({
-    product: '',
-    provider: 'otro',
-    accountId: '',
-    plan: '',
-    cost: undefined,
-    currency: 'MXN',
-    period: 'mensual',
-    renewsAt: '',
-    url: ''
-  });
-  readonly newLicenseCost = signal('');
-
-  readonly canAddLicense = computed(
-    () =>
-      this.newLicense().product.trim().length > 0 &&
-      this.newLicense().accountId.length > 0
-  );
-
-  updateNewLicense(patch: Partial<NewManualLicense>): void {
-    this.newLicense.update((current) => ({ ...current, ...patch }));
-  }
-
-  addLicense(): void {
-    if (!this.canAddLicense()) {
-      return;
-    }
-    const costText = String(this.newLicenseCost() ?? '').trim();
-    const cost = Number(costText);
-    const input = this.newLicense();
-    this.local.addManualLicense({
-      ...input,
-      cost: costText !== '' && Number.isFinite(cost) ? cost : undefined,
-      renewsAt: input.renewsAt
-        ? new Date(`${input.renewsAt}T12:00:00`).toISOString()
-        : undefined
-    });
-    this.newLicense.update((current) => ({
-      ...current,
-      product: '',
-      plan: '',
-      renewsAt: '',
-      url: ''
-    }));
-    this.newLicenseCost.set('');
-  }
-
   removeManualLicense(id: string): void {
-    this.local.removeManualLicense(id);
+    this.licenseError.set(undefined);
+    this.licenciasSvc.borrarManual(id).subscribe({
+      error: (e: unknown) => this.licenseError.set(describeHttp(e))
+    });
   }
 
   // --- Puente ---
@@ -1146,6 +1128,16 @@ export class ConfiguracionBase {
   refresh(): void {
     this.store.refreshAll();
   }
+}
+
+function corrigeAlgo(ajuste: LicenseAdjustment | undefined): boolean {
+  return (
+    !!ajuste &&
+    (ajuste.cost !== undefined ||
+      ajuste.currency !== undefined ||
+      ajuste.plan !== undefined ||
+      ajuste.renewsAt !== undefined)
+  );
 }
 
 /** El mensaje de un error HTTP tal como lo mandó el puente, si se puede. */

@@ -1,11 +1,19 @@
+<pt-licencias-migracion />
+
+@if (licenseError(); as error) {
+  <p class="banner banner-danger mt-4" role="alert">{{ error }}</p>
+}
+
 <section class="card card-pad mt-4">
   <h2 class="text-sm font-semibold text-ink">
     Licencias que llegan de las fuentes
   </h2>
   <p class="mt-1 max-w-3xl text-sm text-ink-muted">
     Lo que el correo o una API no traen —casi siempre el costo— se corrige aquí
-    y se guarda en este navegador. Ocultar una licencia la saca del tablero sin
-    borrarla de la fuente.
+    y se guarda en el puente, para que lo vean todos los dispositivos. Con
+    «Renovación…» confirmas que ya se renovó y dejas el costo y la fecha
+    vigentes. Ocultar una licencia la saca del tablero sin borrarla de la
+    fuente.
   </p>
 
   @if (licenseRows().length === 0) {
@@ -31,16 +39,22 @@
               @if (row.license.plan) {
                 <span>{{ row.license.plan }}</span>
               }
-              @if (row.license.renewsAt) {
-                <span>· renueva {{ row.license.renewsAt | dia }}</span>
+              @if (row.vigente.renewsAt) {
+                <span>· renueva {{ row.vigente.renewsAt | dia }}</span>
+              }
+              @if (row.vigente.renewedAt) {
+                <span class="font-semibold text-ok"
+                  >· renovada, confirmada el
+                  {{ row.vigente.renewedAt | dia }}</span
+                >
               }
             </p>
           </div>
           <div class="flex flex-wrap items-center gap-2 text-xs">
-            @if (row.edit?.cost ?? row.license.cost; as cost) {
+            @if (row.vigente.cost; as cost) {
               <span class="font-semibold tabular-nums text-ink">
                 {{ cost | number: "1.2-2" }}
-                {{ row.edit?.currency ?? row.license.currency }}
+                {{ row.vigente.currency }}
               </span>
             } @else {
               <span
@@ -48,7 +62,7 @@
                 Sin costo
               </span>
             }
-            @if (row.edit && !row.hidden) {
+            @if (row.corregida && !row.hidden) {
               <span
                 class="chip bg-sky-100 text-sky-700 dark:bg-stone-500/20 dark:text-stone-200">
                 Corregida
@@ -60,6 +74,13 @@
                 Oculta
               </span>
             }
+            <button
+              type="button"
+              class="btn"
+              aria-haspopup="dialog"
+              (click)="abrirRenovacion(row.vigente)">
+              Renovación…
+            </button>
             <button type="button" class="btn" (click)="startEdit(row)">
               Editar
             </button>
@@ -187,9 +208,14 @@
               @if (row.license.renewsAt) {
                 <span>· renueva {{ row.license.renewsAt | dia }}</span>
               }
+              @if (soloEnNavegador().has(row.license.id)) {
+                <span class="chip bg-warn/10 text-warn"
+                  >Solo en este navegador</span
+                >
+              }
             </p>
           </div>
-          <div class="flex items-center gap-3 text-xs">
+          <div class="flex flex-wrap items-center gap-2 text-xs">
             @if (row.license.cost !== undefined) {
               <span class="font-semibold tabular-nums text-ink">
                 {{ row.license.cost | number: "1.2-2" }}
@@ -198,11 +224,35 @@
             }
             <button
               type="button"
-              class="btn btn-danger"
-              (click)="removeManualLicense(row.license.id)">
-              <pt-icon name="basura" class="h-4 w-4" />
-              Quitar
+              class="btn"
+              aria-haspopup="dialog"
+              (click)="abrirRenovacion(row.license)">
+              Renovación…
             </button>
+            @if (quitando() === row.license.id) {
+              <!-- Borra para todos los dispositivos: se pregunta antes. -->
+              <span class="text-xs font-medium text-ink">¿Quitar?</span>
+              <button
+                type="button"
+                class="btn btn-danger"
+                (click)="quitarConfirmado(row.license.id)">
+                Sí
+              </button>
+              <button
+                type="button"
+                class="btn"
+                (click)="quitando.set(undefined)">
+                No
+              </button>
+            } @else {
+              <button
+                type="button"
+                class="btn btn-danger"
+                (click)="quitando.set(row.license.id)">
+                <pt-icon name="basura" class="h-4 w-4" />
+                Quitar
+              </button>
+            }
           </div>
         </li>
       }
@@ -211,136 +261,11 @@
 </section>
 
 @if (altaLicencia()) {
-  <pt-dialogo
-    titulo="Agregar una licencia a mano"
-    (cerrar)="cerrarAltaLicencia()">
-    <form
-      id="alta-licencia-form"
-      class="grid gap-3 sm:grid-cols-2"
-      (ngSubmit)="confirmarAltaLicencia()">
-      <label class="sm:col-span-2">
-        <span class="mb-1 block text-xs font-medium text-ink-muted"
-          >Producto</span
-        >
-        <input
-          class="field"
-          type="text"
-          name="producto"
-          placeholder="Por ejemplo: Claude Max"
-          [ngModel]="newLicense().product"
-          (ngModelChange)="updateNewLicense({ product: $event })" />
-      </label>
-      <label>
-        <span class="mb-1 block text-xs font-medium text-ink-muted"
-          >Proveedor</span
-        >
-        <select
-          class="field"
-          name="proveedor"
-          [ngModel]="newLicense().provider"
-          (ngModelChange)="updateNewLicense({ provider: $event })">
-          @for (option of providers; track option) {
-            <option [value]="option">{{ providerLabel[option] }}</option>
-          }
-        </select>
-      </label>
-      <label>
-        <span class="mb-1 block text-xs font-medium text-ink-muted"
-          >Cuenta</span
-        >
-        <select
-          class="field"
-          name="cuenta"
-          [ngModel]="newLicense().accountId"
-          (ngModelChange)="updateNewLicense({ accountId: $event })">
-          <option value="">Elige una cuenta</option>
-          @for (account of licenseAccounts(); track account.id) {
-            <option [value]="account.id">{{ account.label }}</option>
-          }
-        </select>
-      </label>
-      <label>
-        <span class="mb-1 block text-xs font-medium text-ink-muted">Costo</span>
-        <input
-          class="field"
-          type="number"
-          step="0.01"
-          min="0"
-          name="costo"
-          [ngModel]="newLicenseCost()"
-          (ngModelChange)="newLicenseCost.set($event)" />
-      </label>
-      <label>
-        <span class="mb-1 block text-xs font-medium text-ink-muted"
-          >Moneda</span
-        >
-        <input
-          class="field"
-          type="text"
-          name="moneda"
-          [ngModel]="newLicense().currency"
-          (ngModelChange)="updateNewLicense({ currency: $event })" />
-      </label>
-      <label>
-        <span class="mb-1 block text-xs font-medium text-ink-muted"
-          >Periodo</span
-        >
-        <select
-          class="field"
-          name="periodo"
-          [ngModel]="newLicense().period"
-          (ngModelChange)="updateNewLicense({ period: $event })">
-          <option value="mensual">Mensual</option>
-          <option value="anual">Anual</option>
-        </select>
-      </label>
-      <label>
-        <span class="mb-1 block text-xs font-medium text-ink-muted"
-          >Renueva el</span
-        >
-        <input
-          class="field"
-          type="date"
-          name="renueva"
-          [ngModel]="newLicense().renewsAt"
-          (ngModelChange)="updateNewLicense({ renewsAt: $event })" />
-      </label>
-      <label class="sm:col-span-2">
-        <span class="mb-1 block text-xs font-medium text-ink-muted"
-          >Plan o nota</span
-        >
-        <input
-          class="field"
-          type="text"
-          name="plan"
-          placeholder="Por ejemplo: plan personal, 1 asiento"
-          [ngModel]="newLicense().plan"
-          (ngModelChange)="updateNewLicense({ plan: $event })" />
-      </label>
-      <label class="sm:col-span-2">
-        <span class="mb-1 block text-xs font-medium text-ink-muted"
-          >Liga (opcional)</span
-        >
-        <input
-          class="field"
-          type="url"
-          name="url"
-          [ngModel]="newLicense().url"
-          (ngModelChange)="updateNewLicense({ url: $event })" />
-      </label>
-    </form>
-    <div class="dialogo-pie flex flex-wrap items-center gap-2">
-      <button
-        type="submit"
-        form="alta-licencia-form"
-        class="btn btn-primary"
-        [disabled]="!canAddLicense()">
-        <pt-icon name="mas" class="h-4 w-4" />
-        Agregar licencia
-      </button>
-      <button type="button" class="btn" (click)="cerrarAltaLicencia()">
-        Cancelar
-      </button>
-    </div>
-  </pt-dialogo>
+  <pt-licencia-alta-dialogo (cerrar)="cerrarAltaLicencia()" />
+}
+
+@if (renovando(); as licencia) {
+  <pt-licencia-renovacion-dialogo
+    [licencia]="licencia"
+    (cerrar)="cerrarRenovacion()" />
 }

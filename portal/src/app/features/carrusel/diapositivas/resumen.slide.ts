@@ -343,8 +343,13 @@ export class ResumenSlideComponent {
     }
     const dias = daysToRenewal(licencia);
     if (dias !== undefined && dias <= RENEWAL_WARN_DAYS) {
+      // Igual que el chip de Licencias: vencida solo si ya pasó; hoy es "hoy".
       motivos.push(
-        dias <= 0 ? 'renovación vencida' : `renueva en ${plural(dias, 'día')}`
+        dias < 0
+          ? 'renovación vencida'
+          : dias === 0
+            ? 'renueva hoy'
+            : `renueva en ${plural(dias, 'día')}`
       );
     }
     return motivos.join(' · ');

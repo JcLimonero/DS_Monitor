@@ -106,7 +106,9 @@ Otros comandos:
 4. **Plataformas** — todos los destinos vigilados, lo roto primero
 5. **Despliegues** — los últimos de Vercel y el estado de la plataforma
 6. **Embudo comercial** — etapas de Odoo y las siguientes actividades
-7. **Licencias y consumo** — cuánto se lleva usado de cada suscripción
+7. **Licencias y consumo** — cuánto se lleva usado de cada suscripción; un
+   clic en una licencia abre "¿Ya se renovó?" (costo, moneda y próxima fecha) y
+   hay un botón para agregar licencias a mano, sin salir de la pantalla
 8. **Equipo** — carga por persona
 
 Detalles pensados para una pantalla que nadie atiende:
@@ -262,6 +264,11 @@ Tres cosas que conviene tener presentes:
   pero el tope contratado, el costo y la fecha de renovación hay que capturarlos
   a mano. Por eso el modelo trae la bandera `manual`, y la interfaz marca esas
   licencias con **Capturado a mano** en vez de hacerlas pasar por dato vivo.
+- **Lo capturado a mano y las renovaciones confirmadas viven en el puente**
+  (`LicenciasService`), no en el navegador, para que la pantalla del carrusel
+  vea lo que se confirma en otra computadora. Sin puente se guardan en este
+  navegador como antes. Si un navegador trae licencias o correcciones de la
+  época anterior, Licencias ofrece subirlas con un clic.
 
 Se pueden conectar de una en una: mientras Odoo ya sea real, los calendarios
 pueden seguir en demostración sin que nada más cambie.

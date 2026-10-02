@@ -14,10 +14,8 @@ import {
   timeout
 } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
-import {
-  LocalSettingsStore,
-  applyLicenseSettings
-} from '../config/local-settings.store';
+import { LicenciasService } from '../licencias/licencias.service';
+import { aplicarLicencias } from '../licencias/licencias.util';
 import { PORTAL_CONFIG } from '../config/portal-config.token';
 import {
   Account,
@@ -66,7 +64,7 @@ const RECIEN_HECHO_MS = 8_000;
 @Injectable({ providedIn: 'root' })
 export class PortalStore {
   private readonly config = inject(PORTAL_CONFIG);
-  private readonly localSettings = inject(LocalSettingsStore);
+  private readonly licenciasService = inject(LicenciasService);
   private readonly taskSources = inject(TASK_SOURCES);
   private readonly calendarSources = inject(CALENDAR_SOURCES);
   private readonly monitorSources = inject(MONITOR_SOURCES);
@@ -107,9 +105,17 @@ export class PortalStore {
   readonly targets = this.targetsSignal.asReadonly();
   readonly opportunities = this.opportunitiesSignal.asReadonly();
   readonly activities = this.activitiesSignal.asReadonly();
-  /** Lo que llegó de las fuentes, con las correcciones y altas de Ajustes. */
+  /**
+   * Lo que llegó de las fuentes, con las correcciones, confirmaciones de
+   * renovación y altas a mano que guarda el puente (o este navegador, sin
+   * puente).
+   */
   readonly licenses = computed(() =>
-    applyLicenseSettings(this.licensesSignal(), this.localSettings.settings())
+    aplicarLicencias(
+      this.licensesSignal(),
+      this.licenciasService.manuales(),
+      this.licenciasService.ajustes()
+    )
   );
   /** Tal cual llegó de las fuentes, para que Ajustes muestre también lo oculto. */
   readonly fetchedLicenses = this.licensesSignal.asReadonly();
@@ -364,6 +370,8 @@ export class PortalStore {
   }
 
   refreshLicenses(): void {
+    // Lo que se confirmó o se agregó desde otro dispositivo.
+    this.licenciasService.cargar();
     this.collect(this.licenseSources, (source) =>
       source.fetchLicenses()
     ).subscribe((licencias) => this.licensesSignal.set(licencias));

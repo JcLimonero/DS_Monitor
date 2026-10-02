@@ -1,4 +1,11 @@
-import { Account, AccountColor, LicenseUsage, SourceKind } from '../models';
+import {
+  Account,
+  AccountColor,
+  LicenseAdjustment,
+  LicenseUsage,
+  SourceKind
+} from '../models';
+import { normalizarManual } from '../licencias/licencias.util';
 import {
   ConnectionMode,
   PortalConfig,
@@ -22,15 +29,14 @@ import {
 
 const STORAGE_KEY = 'ds-monitor.ajustes.v1';
 
-/** Lo que se puede corregir de una licencia que llegó de una fuente. */
-export interface LicenseEdit {
-  cost?: number;
-  currency?: string;
-  plan?: string;
-  renewsAt?: string;
-  /** True para sacarla del tablero sin borrarla de la fuente. */
-  hidden?: boolean;
-}
+/**
+ * Lo que se puede corregir de una licencia que llegó de una fuente. Es lo
+ * mismo que guarda el puente (`LicenseAdjustment`), con el historial opcional:
+ * sin puente, las confirmaciones de renovación también quedan aquí.
+ */
+export type LicenseEdit = Omit<LicenseAdjustment, 'history'> & {
+  history?: LicenseAdjustment['history'];
+};
 
 export interface LocalSettings {
   version: 1;
@@ -62,6 +68,87 @@ export const EMPTY_SETTINGS: LocalSettings = {
   manualLicenses: []
 };
 
+const esObjeto = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * Las licencias a mano de un localStorage que pudo corromperse: solo las que
+ * tienen id y producto, y con lo demás relleno (el portal no debe lanzar con
+ * un `manualLicenses` mal formado).
+ */
+export function limpiarManuales(valor: unknown): LicenseUsage[] {
+  if (!Array.isArray(valor)) {
+    return [];
+  }
+  return valor
+    .map((l) => normalizarManual(l))
+    .filter((l): l is NonNullable<typeof l> => l !== undefined);
+}
+
+const TEXTO_MAXIMO = 200;
+
+/** Una fecha ISO razonable (2000 a 2100); cualquier otra cosa se descarta. */
+function fechaSana(valor: unknown): string | undefined {
+  if (typeof valor !== 'string') {
+    return undefined;
+  }
+  const t = Date.parse(valor);
+  if (!Number.isFinite(t)) {
+    return undefined;
+  }
+  const anio = new Date(t).getUTCFullYear();
+  return anio >= 2000 && anio <= 2100 ? valor : undefined;
+}
+
+/**
+ * Una correccion de licencia de un localStorage que pudo corromperse (o que
+ * lo capturo la version vieja, que no validaba nada): solo se conserva lo que
+ * es seguro mostrar y sumar. Un costo negativo o no numerico, una moneda que
+ * no son tres letras o una fecha absurda se quitan, para que no descuadren el
+ * gasto del Resumen ni escondan una licencia.
+ */
+export function sanearEdicion(valor: unknown): LicenseEdit | undefined {
+  if (!esObjeto(valor)) {
+    return undefined;
+  }
+  const edicion: LicenseEdit = {};
+  const costo = valor['cost'];
+  if (typeof costo === 'number' && Number.isFinite(costo) && costo >= 0) {
+    edicion.cost = costo;
+  }
+  const moneda = valor['currency'];
+  if (typeof moneda === 'string' && /^[A-Za-z]{3}$/.test(moneda.trim())) {
+    edicion.currency = moneda.trim().toUpperCase();
+  }
+  const plan = valor['plan'];
+  if (typeof plan === 'string' && plan.trim()) {
+    edicion.plan = plan.trim().slice(0, TEXTO_MAXIMO);
+  }
+  const renueva = fechaSana(valor['renewsAt']);
+  if (renueva) {
+    edicion.renewsAt = renueva;
+  }
+  if (valor['hidden'] === true) {
+    edicion.hidden = true;
+  }
+  return edicion;
+}
+
+/** Las correcciones de un localStorage que pudo corromperse, ya saneadas. */
+export function limpiarEdiciones(valor: unknown): Record<string, LicenseEdit> {
+  if (!esObjeto(valor)) {
+    return {};
+  }
+  const limpias: Record<string, LicenseEdit> = {};
+  for (const [id, e] of Object.entries(valor)) {
+    const edicion = sanearEdicion(e);
+    if (edicion) {
+      limpias[id] = edicion;
+    }
+  }
+  return limpias;
+}
+
 export function readLocalSettings(): LocalSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -77,10 +164,8 @@ export function readLocalSettings(): LocalSettings {
         ? parsed.removedAccounts
         : [],
       connectionMode: parsed.connectionMode ?? {},
-      licenseEdits: parsed.licenseEdits ?? {},
-      manualLicenses: Array.isArray(parsed.manualLicenses)
-        ? parsed.manualLicenses
-        : []
+      licenseEdits: limpiarEdiciones(parsed.licenseEdits),
+      manualLicenses: limpiarManuales(parsed.manualLicenses)
     };
   } catch {
     return EMPTY_SETTINGS;

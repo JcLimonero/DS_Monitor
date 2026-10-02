@@ -54,6 +54,10 @@ export interface LicenseUsage {
   cost?: number;
   currency?: string;
   renewsAt?: string;
+  /** Cuándo alguien confirmó que ya se renovó (ISO). */
+  renewedAt?: string;
+  /** Correo de quien confirmó la renovación. */
+  renewalConfirmedBy?: string;
   /**
    * True cuando el dato lo capturó una persona porque el proveedor no lo
    * expone. Figma es el caso: su API no publica facturación ni asientos
@@ -64,6 +68,46 @@ export interface LicenseUsage {
   accountId: string;
   url?: string;
   updatedAt: string;
+}
+
+/** Cada cuánto se paga una licencia capturada a mano. */
+export type ManualLicensePeriod = 'mensual' | 'anual' | 'otro';
+
+/** Una licencia capturada a mano: vive en el puente, compartida por todos. */
+export interface ManualLicense extends LicenseUsage {
+  manual: true;
+  period: ManualLicensePeriod;
+  notes?: string;
+}
+
+/** Una confirmación de renovación, para el historial de la licencia. */
+export interface LicenseRenewal {
+  /** Cuándo se confirmó (ISO). */
+  at: string;
+  /** Correo de quien la confirmó. */
+  by: string;
+  cost?: number;
+  currency?: string;
+  /** La fecha de la siguiente renovación que quedó. */
+  renewsAt?: string;
+  note?: string;
+}
+
+/**
+ * Lo que se corrige o confirma de una licencia (de una fuente o manual) y
+ * queda en el puente, encima de lo que mande el proveedor.
+ */
+export interface LicenseAdjustment {
+  cost?: number;
+  currency?: string;
+  plan?: string;
+  renewsAt?: string;
+  /** True para sacarla del tablero sin borrarla de la fuente. */
+  hidden?: boolean;
+  renewedAt?: string;
+  confirmedBy?: string;
+  /** Las últimas confirmaciones; la más reciente al final (máximo 24). */
+  history: LicenseRenewal[];
 }
 
 /** Porcentaje consumido, de 0 a 100. Sin tope siempre devuelve 0. */
