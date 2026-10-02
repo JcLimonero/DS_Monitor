@@ -38,8 +38,6 @@ const PESO: Record<Estado, number> = {
 };
 
 /** Cuantas tarjetas caben sin scroll en una pantalla de televisión. */
-const MAXIMO = 12;
-
 const ETIQUETA: Record<Estado, string> = {
   ok: 'Bien',
   aviso: 'Con aviso',
@@ -80,17 +78,23 @@ const CLASE_ESTADO: Record<Estado, string> = {
   host: { class: 'flex h-full flex-col' },
   template: `
     @if (visibles().length > 0) {
+      <!--
+        Todas las tarjetas, con scroll: las filas miden lo que su contenido
+        (auto-rows-min) y la cuadricula desplaza el resto. Antes las filas se
+        encogian al alto de la pantalla y el texto se salia de la tarjeta.
+      -->
       <div
-        class="grid min-h-0 flex-1 grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
+        class="grid min-h-0 flex-1 auto-rows-min grid-cols-2 content-start gap-4 overflow-y-auto pr-1 lg:grid-cols-3 xl:grid-cols-4">
         @for (e of visibles(); track e.clave) {
           <article
-            class="tv-card flex min-h-0 flex-col justify-between gap-2 px-5 py-4"
+            class="tv-card flex min-h-[10rem] flex-col justify-between gap-2 px-5 py-4"
             [class]="claseTarjeta(e)">
             <div class="min-w-0">
-              <p class="truncate text-xl font-bold text-ink 2xl:text-2xl">
+              <p
+                class="line-clamp-2 break-words text-xl font-bold leading-tight text-ink 2xl:text-2xl">
                 {{ e.nombre }}
               </p>
-              <p class="truncate text-base text-ink-muted">
+              <p class="line-clamp-1 break-words text-base text-ink-muted">
                 {{ e.emisores }}
                 @if (frecuencia(e)) {
                   · {{ frecuencia(e) }}
@@ -115,7 +119,8 @@ const CLASE_ESTADO: Record<Estado, string> = {
             </p>
 
             @if (e.mensaje) {
-              <p class="line-clamp-2 text-base leading-snug text-ink-muted">
+              <p
+                class="line-clamp-2 break-words text-base leading-snug text-ink-muted">
                 {{ e.mensaje }}
               </p>
             }
@@ -130,11 +135,6 @@ const CLASE_ESTADO: Record<Estado, string> = {
           </article>
         }
       </div>
-      @if (restantes() > 0) {
-        <p class="mt-2 shrink-0 text-center text-base text-ink-muted">
-          y {{ restantes() }} más{{ restoBien() ? ', todas bien' : '' }}
-        </p>
-      }
     } @else {
       <div
         class="flex flex-1 flex-col items-center justify-center gap-2 text-center text-ink-subtle">
@@ -155,14 +155,8 @@ export class EjecucionesSlideComponent implements DiapositivaConContenido {
   readonly vacia = computed(() => this.lista()?.length === 0);
   /** Una tarjeta por integracion, lo malo primero. */
   readonly grupos = computed(() => agrupar(this.lista() ?? []));
-  readonly visibles = computed(() => this.grupos().slice(0, MAXIMO));
-  readonly restantes = computed(() =>
-    Math.max(0, this.grupos().length - MAXIMO)
-  );
-  /** Vienen ordenadas con lo malo primero: si la ultima visible esta bien, el resto tambien. */
-  readonly restoBien = computed(
-    () => this.visibles()[this.visibles().length - 1]?.estado === 'ok'
-  );
+  /** Todas, con lo malo primero; la cuadricula hace scroll. */
+  readonly visibles = computed(() => this.grupos());
 
   constructor() {
     this.servicio.cargar();
