@@ -120,7 +120,7 @@ export interface EstadoLlamadas {
 export interface ResumenLlamadas {
   archivadas: number;
   borradas: number;
-  /** Cuántas más quedan para la siguiente corrida. */
+  /** Cuántas más quedan para la siguiente corrida (al menos). */
   pendientes: number;
   errores: string[];
   /** Falta el permiso de Drive: hay que volver a conectar Google. */
@@ -462,11 +462,16 @@ export class PuenteAdminService {
     });
   }
 
-  /** Fuerza el archivado (una sola llamada si se da `id`). */
-  archivarLlamadas(id?: string): Observable<ResumenLlamadas> {
+  /**
+   * Fuerza el archivado (una sola llamada si se da `id`). Con `soloArchivar`
+   * sube los Docs pero no borra nada de Fireflies.
+   */
+  archivarLlamadas(
+    opciones: { id?: string; soloArchivar?: boolean } = {}
+  ): Observable<ResumenLlamadas> {
     return this.http.post<ResumenLlamadas>(
       this.url('/llamadas/archivar'),
-      id ? { id } : {},
+      opciones,
       { headers: this.headers() }
     );
   }

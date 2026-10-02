@@ -82,8 +82,8 @@
         </p>
         @if (r.pendientes > 0) {
           <p class="mt-1 text-ink-muted">
-            Quedan {{ r.pendientes }} por archivar: vuelve a pulsar “Archivar
-            ahora” (se hacen por tandas).
+            Quedan al menos {{ r.pendientes }} por archivar: vuelve a pulsar
+            “Archivar ahora” (se hacen por tandas).
           </p>
         }
         @if (r.errores.length > 0) {
@@ -98,7 +98,7 @@
 
     @if (estado(); as e) {
       <section
-        class="card card-pad flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+        class="card card-pad flex flex-col gap-2 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <p class="min-w-0 text-ink-muted">
           <span class="font-semibold text-ink">Carpeta de Drive:</span>
           {{ e.carpeta }}
@@ -111,18 +111,34 @@
             >
           }
         </p>
-        <label
-          class="flex min-h-10 cursor-pointer items-center gap-2 text-ink"
-          title="Borrar es irreversible: la conversación solo queda en Drive.">
-          <input
-            type="checkbox"
-            class="h-5 w-5 rounded border-line text-brand focus:ring-brand"
-            [checked]="e.borrarDeFireflies"
-            [disabled]="guardandoConfig()"
-            (change)="cambiarBorrado($any($event.target).checked)"
-            name="borrar-de-fireflies" />
-          Borrar de Fireflies al archivar
-        </label>
+        <div class="flex flex-col gap-0.5 text-ink">
+          <label
+            class="flex min-h-10 cursor-pointer items-center gap-2"
+            title="Borrar es irreversible: la conversación solo queda en Drive.">
+            <input
+              type="checkbox"
+              class="h-5 w-5 rounded border-line accent-brand focus:ring-brand"
+              [checked]="e.borrarDeFireflies"
+              [disabled]="guardandoConfig()"
+              (change)="cambiarBorrado($any($event.target).checked)"
+              name="borrar-de-fireflies" />
+            Borrar de Fireflies al archivar
+          </label>
+          <label class="flex min-h-10 cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              class="h-5 w-5 rounded border-line accent-brand focus:ring-brand"
+              [checked]="soloArchivar()"
+              (change)="soloArchivar.set($any($event.target).checked)"
+              name="solo-archivar" />
+            Solo archivar, sin borrar (esta vez)
+          </label>
+        </div>
+        <p class="text-xs text-ink-muted sm:basis-full">
+          El borrado en Fireflies es irreversible y también elimina el audio, el
+          video y las analíticas; el Doc guarda título, fecha, participantes,
+          resumen, acuerdos y la conversación.
+        </p>
       </section>
     }
 

@@ -3882,8 +3882,7 @@ export function construirRutas(
   // cada 15 min; /fireflies/procesar lo fuerza.
   const procesarTranscripcion = async (
     id: string,
-    ahora = new Date(),
-    avisar = true
+    ahora = new Date()
   ): Promise<{ titulo: string; pendientes: number; acuerdos: number }> => {
     const fireflies = cfg().fireflies;
     if (!fireflies) {
@@ -3923,8 +3922,6 @@ export function construirRutas(
     });
     if (agregados > 0) {
       cache.olvidar();
-    }
-    if (agregados > 0 && avisar) {
       void push.avisar({
         titulo: `Junta: ${completa.titulo}`,
         cuerpo:
@@ -4142,8 +4139,8 @@ export function construirRutas(
         await datos.llamadas.escribir(lista);
       },
       procesada: (id) => datos.firefliesProcesadas.leer()[id] !== undefined,
-      procesar: async (id, avisar) => {
-        await procesarTranscripcion(id, new Date(), avisar);
+      procesar: async (id) => {
+        await procesarTranscripcion(id);
       },
       reemplazarLiga: async (urlVieja, urlNueva) => {
         const pendientes = reemplazarLigaDeJunta(
@@ -4174,6 +4171,7 @@ export function construirRutas(
   const correrArchivado = async (opciones: {
     id?: string;
     maximo?: number;
+    soloArchivar?: boolean;
   }) => {
     if (archivandoLlamadas) {
       throw new ErrorPuente(
@@ -4234,12 +4232,16 @@ export function construirRutas(
 
   router.post('/llamadas/archivar', async (contexto) => {
     exigirAdmin(contexto, cfg(), acceso);
-    const { id } = (contexto.cuerpo ?? {}) as { id?: unknown };
+    const { id, soloArchivar } = (contexto.cuerpo ?? {}) as {
+      id?: unknown;
+      soloArchivar?: unknown;
+    };
     if (id !== undefined && (typeof id !== 'string' || !id.trim())) {
       throw new ErrorPuente('El id de la llamada no es válido.', 400);
     }
     return correrArchivado({
-      id: typeof id === 'string' ? id.trim() : undefined
+      id: typeof id === 'string' ? id.trim() : undefined,
+      soloArchivar: soloArchivar === true
     });
   });
 

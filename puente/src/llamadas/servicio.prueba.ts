@@ -213,38 +213,195 @@ describe('archivarLlamadas', () => {
     assert.ok(b.llamadas.every((l) => !l.borradaDeFireflies));
   });
 
-  it('reintenta los borrados pendientes de corridas anteriores', async () => {
-    const existente: LlamadaArchivada = {
-      id: 'vieja',
-      titulo: 'Vieja',
-      fecha: '2026-08-01T00:00:00Z',
-      participantes: [],
-      docUrl: 'u',
-      docId: 'd',
-      archivadaEn: '2026-08-02T00:00:00Z',
-      borradaDeFireflies: false
-    };
-    const { p, b } = armar([], { existentes: [existente] });
+  const sinBorrar: LlamadaArchivada = {
+    id: 'vieja',
+    titulo: 'Vieja',
+    fecha: '2026-08-01T00:00:00Z',
+    participantes: [],
+    docUrl: 'u',
+    docId: 'd',
+    archivadaEn: '2026-08-02T00:00:00Z',
+    borradaDeFireflies: false
+  };
+
+  it('reintenta los borrados pendientes, verificando antes el Doc', async () => {
+    const { p, b } = armar([trans('vieja')], { existentes: [sinBorrar] });
     const r = await archivarLlamadas(p);
     assert.equal(r.archivadas, 0);
     assert.equal(r.borradas, 1);
+    assert.deepEqual(b.eventos.slice(0, 3), [
+      'verificar:d',
+      'liga',
+      'borrar:vieja'
+    ]);
     assert.equal(b.llamadas[0]?.borradaDeFireflies, true);
   });
 
+  for (const [caso, falla] of [
+    [
+      'el Doc está en la papelera',
+      new Error('el Doc está en la papelera de Drive')
+    ],
+    [
+      'el Doc se borró de Drive',
+      new ErrorProveedor('google', 'Drive respondió 404')
+    ],
+    [
+      'el Doc no trae el contenido',
+      new Error('no trae el final de la conversación')
+    ]
+  ] as const) {
+    it(`el reintento no borra de Fireflies si ${caso}`, async () => {
+      const { p, b } = armar([trans('vieja')], {
+        existentes: [sinBorrar],
+        falla: { verificar: falla }
+      });
+      const r = await archivarLlamadas(p);
+      assert.equal(r.borradas, 0);
+      assert.ok(!b.eventos.some((e) => e.startsWith('borrar')));
+      assert.match(r.errores[0] as string, /no se pudo verificar el Doc/);
+      assert.equal(b.llamadas[0]?.borradaDeFireflies, false);
+    });
+  }
+
+  it('el reintento no borra si la cuenta perdió el permiso de Drive', async () => {
+    const { p, b } = armar([trans('vieja')], {
+      existentes: [sinBorrar],
+      falla: { carpeta: new ErrorReconectarGoogle() }
+    });
+    const r = await archivarLlamadas(p);
+    assert.equal(r.borradas, 0);
+    assert.ok(!b.eventos.some((e) => e.startsWith('borrar')));
+    assert.equal(r.reconectarGoogle, true);
+  });
+
+  it('si el paso de archivar corta por falta de permiso, tampoco reintenta borrados', async () => {
+    const { p, b } = armar([trans('a'), trans('vieja')], {
+      procesadas: ['a'],
+      existentes: [sinBorrar],
+      falla: { subir: new ErrorReconectarGoogle() }
+    });
+    const r = await archivarLlamadas(p);
+    assert.equal(r.archivadas, 0);
+    assert.equal(r.reconectarGoogle, true);
+    assert.ok(!b.eventos.some((e) => e.startsWith('borrar')));
+    assert.ok(!b.eventos.includes('verificar:d'));
+  });
+
+  it('si la llamada ya no está en Fireflies solo se anota como borrada', async () => {
+    const { p, b } = armar([], { existentes: [sinBorrar] });
+    p.fireflies.bajar = async () => {
+      throw new ErrorProveedor('fireflies', 'not found', 404);
+    };
+    const r = await archivarLlamadas(p);
+    assert.equal(r.borradas, 0);
+    assert.equal(r.errores.length, 0);
+    assert.equal(b.llamadas[0]?.borradaDeFireflies, true);
+    assert.ok(!b.eventos.some((e) => e.startsWith('borrar')));
+  });
+
+  it('con soloArchivar sube los Docs pero no borra ni reintenta borrados', async () => {
+    const { p, b } = armar([trans('a'), trans('vieja')], {
+      procesadas: ['a'],
+      existentes: [sinBorrar]
+    });
+    const r = await archivarLlamadas(p, { soloArchivar: true });
+    assert.equal(r.archivadas, 1);
+    assert.equal(r.borradas, 0);
+    assert.ok(!b.eventos.some((e) => e.startsWith('borrar')));
+    assert.ok(b.llamadas.every((l) => !l.borradaDeFireflies));
+  });
+
+  it('si no se pudo cambiar la liga en los pendientes no borra, y la próxima corrida sí', async () => {
+    const { p, b } = armar([trans('a')], { procesadas: ['a'] });
+    const liga = p.reemplazarLiga;
+    p.reemplazarLiga = async () => {
+      throw new Error('disco lleno');
+    };
+    const r1 = await archivarLlamadas(p);
+    assert.equal(r1.archivadas, 1);
+    assert.equal(r1.borradas, 0);
+    assert.match(r1.errores[0] as string, /no se borra de Fireflies todavía/);
+    assert.ok(!b.eventos.some((e) => e.startsWith('borrar')));
+    p.reemplazarLiga = liga;
+    const r2 = await archivarLlamadas(p);
+    assert.equal(r2.borradas, 1);
+  });
+
+  it('si falla guardar después de borrar, la corrida conserva su resumen', async () => {
+    const { p, b } = armar([trans('a')], { procesadas: ['a'] });
+    const guardar = p.guardar;
+    p.guardar = async (lista) => {
+      if (lista.some((l) => l.borradaDeFireflies)) {
+        throw new Error('sin espacio');
+      }
+      await guardar(lista);
+    };
+    const r = await archivarLlamadas(p);
+    assert.equal(r.archivadas, 1);
+    assert.equal(r.borradas, 1);
+    assert.ok(r.errores.some((e) => /no se pudo anotar/.test(e)));
+    assert.ok(b.eventos.includes('borrar:a'));
+  });
+
+  it('pagina saltando las ya archivadas para alcanzar las viejas', async () => {
+    const conocidas: LlamadaArchivada[] = Array.from(
+      { length: 120 },
+      (_, i) => ({
+        ...sinBorrar,
+        id: `k${i}`,
+        borradaDeFireflies: true
+      })
+    );
+    const todas = [...conocidas.map((c) => trans(c.id)), trans('nueva')];
+    const { p, b } = armar(todas, {
+      procesadas: ['nueva'],
+      existentes: conocidas
+    });
+    p.fireflies.listar = async (saltar, limite) =>
+      todas.slice(saltar, saltar + limite);
+    const r = await archivarLlamadas(p);
+    assert.equal(r.archivadas, 1);
+    assert.deepEqual(
+      b.llamadas.map((l) => l.id).filter((id) => id === 'nueva'),
+      ['nueva']
+    );
+  });
+
   it('una sin procesar y con acuerdos se procesa antes de archivar', async () => {
-    const { p, b } = armar([trans('a', { acuerdos: '**Ana**\nHacer algo' })]);
+    const { p, b } = armar([
+      trans('a', {
+        fecha: '2026-09-30T16:00:00Z',
+        acuerdos: '**Ana**\nHacer algo'
+      })
+    ]);
     const r = await archivarLlamadas(p);
     assert.equal(r.archivadas, 1);
     assert.ok(
       b.eventos.indexOf('procesar:a') <
-        b.eventos.indexOf('subir:a:2026-09-25 — Junta a')
+        b.eventos.indexOf('subir:a:2026-09-30 — Junta a')
     );
   });
 
+  it('una junta de 4 días con acuerdos se archiva sin crear pendientes', async () => {
+    const { p, b } = armar([
+      trans('a', {
+        fecha: '2026-09-27T16:00:00Z',
+        acuerdos: '**Ana**\nHacer algo'
+      })
+    ]);
+    const r = await archivarLlamadas(p);
+    assert.equal(r.archivadas, 1);
+    assert.ok(!b.eventos.some((e) => e.startsWith('procesar')));
+  });
+
   it('si no se pueden crear los pendientes de la junta no la archiva ni la borra', async () => {
-    const { p, b } = armar([trans('a', { acuerdos: 'algo' })], {
-      falla: { procesar: new Error('IA caída') }
-    });
+    const { p, b } = armar(
+      [trans('a', { fecha: '2026-09-30T16:00:00Z', acuerdos: 'algo' })],
+      {
+        falla: { procesar: new Error('IA caída') }
+      }
+    );
     const r = await archivarLlamadas(p);
     assert.equal(r.archivadas, 0);
     assert.ok(
@@ -339,6 +496,30 @@ describe('verificacionDeDoc', () => {
 
   it('acepta un Doc completo en su carpeta', async () => {
     await verificacionDeDoc(base)(doc, 'c', texto);
+  });
+
+  it('exige que el archivo sea el mismo y que traiga carpeta', async () => {
+    await assert.rejects(
+      verificacionDeDoc({
+        ...base,
+        archivo: async () => ({
+          id: 'otro',
+          mimeType: 'application/vnd.google-apps.document',
+          parents: ['c']
+        })
+      })(doc, 'c', texto),
+      /otro archivo/
+    );
+    await assert.rejects(
+      verificacionDeDoc({
+        ...base,
+        archivo: async () => ({
+          id: 'd',
+          mimeType: 'application/vnd.google-apps.document'
+        })
+      })(doc, 'c', texto),
+      /carpeta/
+    );
   });
 
   it('rechaza papelera, otro tipo, otra carpeta o contenido cortado', async () => {

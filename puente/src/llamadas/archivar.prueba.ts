@@ -165,6 +165,25 @@ describe('porArchivar', () => {
     );
   });
 
+  it('con acuerdos pero de más de 3 días solo se archiva, no se procesa', () => {
+    const r = porArchivar(
+      [
+        trans({
+          id: 'vieja',
+          fecha: '2026-09-27T16:00:00Z',
+          acuerdos: '**Ana**\nAlgo'
+        })
+      ],
+      [],
+      {},
+      { ahora: AHORA }
+    );
+    assert.deepEqual(
+      r.map((d) => d.accion),
+      ['archivar']
+    );
+  });
+
   it('forzar salta el reposo', () => {
     const reciente = new Date(AHORA.getTime() - 60_000).toISOString();
     const r = porArchivar(

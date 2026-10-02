@@ -58,6 +58,8 @@ export class LlamadasComponent {
   readonly guardandoConfig = signal(false);
   readonly resumen = signal<ResumenLlamadas | undefined>(undefined);
   readonly busqueda = signal('');
+  /** Primera pasada: subir los Docs sin borrar nada de Fireflies. */
+  readonly soloArchivar = signal(false);
 
   readonly visibles = computed(() =>
     filtrarLlamadas(this.llamadas(), this.busqueda())
@@ -142,17 +144,19 @@ export class LlamadasComponent {
     }
     this.archivando.set(true);
     this.resumen.set(undefined);
-    this.admin.archivarLlamadas().subscribe({
-      next: (resumen) => {
-        this.archivando.set(false);
-        this.resumen.set(resumen);
-        this.cargar();
-      },
-      error: (e: unknown) => {
-        this.archivando.set(false);
-        this.error.set(describe(e));
-      }
-    });
+    this.admin
+      .archivarLlamadas({ soloArchivar: this.soloArchivar() })
+      .subscribe({
+        next: (resumen) => {
+          this.archivando.set(false);
+          this.resumen.set(resumen);
+          this.cargar();
+        },
+        error: (e: unknown) => {
+          this.archivando.set(false);
+          this.error.set(describe(e));
+        }
+      });
   }
 
   cambiarBorrado(valor: boolean): void {

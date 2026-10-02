@@ -29,8 +29,13 @@ export const ESPERA_SIN_FRASES_HORAS = 48;
  */
 export const MAXIMO_CARACTERES_DOC = 900_000;
 
-/** Las transcripciones mas recientes que esto avisan con push al procesarlas. */
-export const DIAS_CON_AVISO = 3;
+/**
+ * Solo se procesan (se crean sus pendientes) las juntas de los ultimos dias,
+ * como el programable de juntas: las mas viejas solo se archivan. Si no, la
+ * primera corrida crearia decenas de pendientes viejos y una llamada a la IA
+ * por cada uno.
+ */
+export const DIAS_PARA_PROCESAR = 3;
 
 function formatoFecha(iso: string): string {
   const d = new Date(iso);
@@ -134,10 +139,11 @@ export interface OpcionesPorArchivar {
  * - Ya procesadas (sus pendientes ya existen): se archivan.
  * - Sin procesar y recientes (menos de `REPOSO_HORAS`): se esperan, para que
  *   Fireflies termine el resumen y la junta genere sus pendientes.
- * - Sin procesar y con acuerdos: primero se procesan (se crean los pendientes)
- *   y luego se archivan, para no perder lo que sale de la junta.
- * - Sin procesar y sin acuerdos: se archivan (nada que procesar; es lo mismo
- *   que hace el programable de juntas).
+ * - Sin procesar, con acuerdos y de los ultimos `DIAS_PARA_PROCESAR` dias:
+ *   primero se procesan (se crean los pendientes) y luego se archivan, para no
+ *   perder lo que sale de la junta.
+ * - Sin procesar y sin acuerdos, o mas viejas que eso: solo se archivan (es lo
+ *   mismo que hace el programable de juntas, que no mira lo viejo).
  */
 export function porArchivar(
   transcripciones: Transcripcion[],
@@ -165,9 +171,13 @@ export function porArchivar(
     ) {
       continue;
     }
+    const procesable =
+      !!t.acuerdos?.trim() &&
+      Number.isFinite(edadMs) &&
+      edadMs < DIAS_PARA_PROCESAR * 86_400_000;
     salida.push({
       transcripcion: t,
-      accion: t.acuerdos?.trim() ? 'procesar-y-archivar' : 'archivar'
+      accion: procesable ? 'procesar-y-archivar' : 'archivar'
     });
   }
   return salida;
