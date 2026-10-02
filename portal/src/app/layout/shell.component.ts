@@ -47,6 +47,7 @@ const NAV: NavItem[] = [
   { path: '/repos', label: 'Repositorios', icon: 'rama' },
   { path: '/crm', label: 'CRM', icon: 'crm' },
   { path: '/licencias', label: 'Licencias', icon: 'licencia' },
+  { path: '/dominios', label: 'Dominios', icon: 'globo' },
   // Lo que se configura.
   {
     path: '/integraciones',

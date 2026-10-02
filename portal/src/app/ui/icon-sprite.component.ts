@@ -157,6 +157,17 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
         <path d="M15 20h5v-5" />
         <path d="M9 20H4v-5" />
       </symbol>
+      <symbol id="i-globo" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M3 12h18" />
+        <path
+          d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z" />
+      </symbol>
+      <symbol id="i-copiar" viewBox="0 0 24 24">
+        <rect x="8.5" y="8.5" width="12" height="12" rx="2" />
+        <path
+          d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5" />
+      </symbol>
       <symbol id="i-licencia" viewBox="0 0 24 24">
         <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
         <path d="M2.5 10h19" />

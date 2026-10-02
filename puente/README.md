@@ -243,6 +243,24 @@ El equipo (`GET /equipo`, `POST /equipo/guardar`) y los dominios
 (`GET /dominios`, `POST /dominios/guardar`, y `GET /dominios/licenses` para el
 tablero) viven en `DATOS_DIRECTORIO` como JSON, junto con las sesiones.
 
+**Dominios desde Cloudflare.** Con `CLOUDFLARE_API_TOKEN` (y, si el token ve
+varias cuentas, `CLOUDFLARE_ACCOUNT_ID`; ambos también capturables en
+Integraciones → Servicios) el módulo Dominios del portal lista las zonas de
+Cloudflare junto a las capturadas a mano y, al tocar una, muestra sus
+subdominios (el DNS agrupado por host). El token debe ser de **solo lectura**
+con los permisos mínimos Zone → Zone → Read y Zone → DNS → Read; si además
+tiene Account → Registrar: Domains → Read, se traen las fechas de vencimiento.
+El puente nunca escribe en Cloudflare. Rutas (todas de administración, porque
+el DNS puede traer IPs internas): `GET /cloudflare/zonas` (con
+`?refrescar=1` salta la caché de `CACHE_CLOUDFLARE_SEGUNDOS`, 300 por omisión),
+`GET /cloudflare/zonas/:id/subdominios` y `POST /cloudflare/importar
+{nombres}`, que crea en `dominios` los que falten sin pisar los existentes y
+responde `{importados, existentes, sinFecha, invalidos}`. **La fecha de
+vencimiento solo existe para los dominios registrados en Cloudflare Registrar**;
+los demás se importan con `sinFecha: true` (sin alerta, sin costo y fuera de
+Licencias) hasta que se capture la fecha en Integraciones → Dominios.
+`CLOUDFLARE_API_URL` solo sirve para apuntar a un servidor falso en pruebas.
+
 Las empresas del grupo también son un catálogo editable (`GET /empresas`,
 `POST /empresas/guardar {empresas}` con la lista completa; Integraciones →
 Empresas en el portal). Cada una lleva nombre, descripción para la IA, color,

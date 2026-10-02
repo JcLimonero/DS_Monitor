@@ -127,6 +127,14 @@ export const routes: Routes = [
           )
       },
       {
+        path: 'dominios',
+        title: 'Dominios | DS Monitor',
+        loadComponent: () =>
+          import('./features/dominios/dominios.component').then(
+            (m) => m.DominiosComponent
+          )
+      },
+      {
         path: 'despliegues',
         title: 'Despliegues | DS Monitor',
         loadComponent: () =>
@@ -166,13 +174,6 @@ export const routes: Routes = [
         redirectTo: () =>
           inject(Router).createUrlTree(['/pendientes'], {
             queryParams: { vista: 'personales' }
-          })
-      },
-      {
-        path: 'dominios',
-        redirectTo: () =>
-          inject(Router).createUrlTree(['/integraciones'], {
-            queryParams: { tab: 'dominios' }
           })
       },
       {

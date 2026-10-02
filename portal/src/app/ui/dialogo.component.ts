@@ -67,6 +67,11 @@ let seq = 0;
 })
 export class DialogoComponent {
   readonly titulo = input.required<string>();
+  /**
+   * Enfoca el primer campo al abrir. Se apaga cuando el primero es un
+   * buscador: en una tableta abriría el teclado antes de ver nada.
+   */
+  readonly enfocar = input(true);
   readonly cerrar = output<void>();
 
   readonly tituloId = `dialogo-titulo-${++seq}`;
@@ -82,6 +87,9 @@ export class DialogoComponent {
     });
     afterNextRender(() => {
       document.body.appendChild(host.nativeElement);
+      if (!this.enfocar()) {
+        return;
+      }
       const primero = host.nativeElement.querySelector(
         'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
       ) as HTMLElement | null;

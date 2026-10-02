@@ -250,6 +250,19 @@ export interface ConfiguracionCoolify {
   accountId: string;
 }
 
+/** Cloudflare: las zonas (dominios) y sus registros DNS, solo lectura. */
+export interface ConfiguracionCloudflare {
+  /** Token de API (Zone → Zone → Read y Zone → DNS → Read). */
+  token: string;
+  /** Si se da, solo se leen las zonas de esa cuenta. */
+  accountId?: string;
+  /**
+   * Base de la API. Por omision la real; solo se cambia en pruebas
+   * (`CLOUDFLARE_API_URL`) para apuntar a un servidor falso.
+   */
+  apiUrl: string;
+}
+
 export interface ConfiguracionGithub {
   token: string;
   accountId: string;
@@ -271,6 +284,7 @@ export interface Configuracion {
     monitoreo: number;
     vps: number;
     coolify: number;
+    cloudflare: number;
     crm: number;
     repos: number;
     correo: number;
@@ -306,6 +320,7 @@ export interface Configuracion {
   fireflies?: ConfiguracionFireflies;
   prometheus?: ConfiguracionServidores;
   coolify?: ConfiguracionCoolify;
+  cloudflare?: ConfiguracionCloudflare;
   telegram?: ConfiguracionTelegram;
   /** La aplicacion OAuth de Google que usan todos los buzones de Gmail. */
   googleApp?: Omit<ConfiguracionGoogle, 'refreshToken' | 'conectadaComo'>;
@@ -516,6 +531,8 @@ function leer(): Configuracion {
       monitoreo: numeroCon('CACHE_MONITOREO_SEGUNDOS', 60),
       vps: numeroCon('CACHE_VPS_SEGUNDOS', 60),
       coolify: numeroCon('CACHE_COOLIFY_SEGUNDOS', 60),
+      // Las zonas y sus registros cambian poco y la API limita las peticiones.
+      cloudflare: numeroCon('CACHE_CLOUDFLARE_SEGUNDOS', 300),
       crm: numeroCon('CACHE_CRM_SEGUNDOS', 120),
       repos: numeroCon('CACHE_REPOS_SEGUNDOS', 120),
       // Leer un buzon completo por IMAP es lento y los proveedores limitan las
@@ -649,6 +666,16 @@ function leer(): Configuracion {
             accountId: 'coolify'
           }
         : undefined,
+    cloudflare: texto('CLOUDFLARE_API_TOKEN')
+      ? {
+          token: texto('CLOUDFLARE_API_TOKEN') as string,
+          accountId: texto('CLOUDFLARE_ACCOUNT_ID'),
+          apiUrl: (
+            texto('CLOUDFLARE_API_URL') ??
+            'https://api.cloudflare.com/client/v4'
+          ).replace(/\/+$/, '')
+        }
+      : undefined,
     fireflies: texto('FIREFLIES_API_KEY')
       ? { apiKey: texto('FIREFLIES_API_KEY') as string }
       : undefined,

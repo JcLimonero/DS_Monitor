@@ -22,9 +22,22 @@ export interface Dominio {
   /** Renovacion automatica activada con el registrador. */
   automatico?: boolean;
   notas?: string;
+  /**
+   * Se importo (de Cloudflare) sin saber cuando vence: `venceEn` trae una
+   * fecha provisional lejana (`FECHA_PROVISIONAL`). Mientras este en `true`
+   * no hay alerta de vencimiento, ni costo, ni licencia; al capturar la fecha
+   * real se quita.
+   */
+  sinFecha?: true;
 }
 
 const DIA_MS = 86_400_000;
+
+/** La fecha de relleno de un dominio sin fecha de vencimiento. */
+export const FECHA_PROVISIONAL = '9999-12-31T00:00:00.000Z';
+
+/** Tope de dominios que guarda el puente. */
+export const MAXIMO_DOMINIOS = 500;
 
 /** Un dominio bien formado, o el motivo por el que no. */
 export function validarDominio(crudo: unknown, donde: string): Dominio {
@@ -35,7 +48,12 @@ export function validarDominio(crudo: unknown, donde: string): Dominio {
     throw new Error(`${donde}.nombre debe ser un dominio, recibió "${nombre}"`);
   }
   const venceEn = typeof d['venceEn'] === 'string' ? d['venceEn'] : '';
-  if (Number.isNaN(Date.parse(venceEn))) {
+  // Sin fecha solo vale si no hay una fecha real: capturarla quita la marca.
+  const fechaReal =
+    !Number.isNaN(Date.parse(venceEn)) &&
+    new Date(venceEn).toISOString() !== FECHA_PROVISIONAL;
+  const sinFecha = d['sinFecha'] === true && !fechaReal;
+  if (!sinFecha && !fechaReal) {
     throw new Error(`${donde}.venceEn debe ser una fecha`);
   }
   const costo =
@@ -48,11 +66,13 @@ export function validarDominio(crudo: unknown, donde: string): Dominio {
   return {
     nombre,
     registrador: texto(d['registrador']),
-    venceEn: new Date(venceEn).toISOString(),
-    costo,
+    venceEn: sinFecha ? FECHA_PROVISIONAL : new Date(venceEn).toISOString(),
+    // Sin fecha tampoco hay costo que mostrar hasta que se capture.
+    costo: sinFecha ? undefined : costo,
     moneda: texto(d['moneda'])?.toUpperCase(),
     automatico: d['automatico'] === true,
-    notas: texto(d['notas'])
+    notas: texto(d['notas']),
+    ...(sinFecha ? { sinFecha: true as const } : {})
   };
 }
 
@@ -68,31 +88,35 @@ export function dominiosComoLicencias(
   accountId: string,
   ahora = new Date()
 ): LicenseUsage[] {
-  return dominios.map((dominio) => {
-    const vence = Date.parse(dominio.venceEn);
-    return {
-      id: `${accountId}-${dominio.nombre.replace(/[^a-z0-9]+/g, '-')}`,
-      provider: 'otro',
-      product: `Dominio ${dominio.nombre}`,
-      plan: [
-        dominio.registrador ?? 'dominio',
-        'anual',
-        dominio.automatico ? 'renovación automática' : undefined,
-        vence < ahora.getTime() ? 'VENCIDO' : undefined
-      ]
-        .filter(Boolean)
-        .join(' · '),
-      unit: 'dinero',
-      used: dominio.costo ?? 0,
-      periodStart: new Date(vence - 366 * DIA_MS).toISOString(),
-      periodEnd: dominio.venceEn,
-      cost: dominio.costo,
-      currency: dominio.moneda,
-      renewsAt: dominio.venceEn,
-      manual: true,
-      members: [],
-      accountId,
-      updatedAt: ahora.toISOString()
-    };
-  });
+  // Un dominio sin fecha de vencimiento no es una renovacion: no sale ni
+  // cuenta como vencido hasta que se capture su fecha.
+  return dominios
+    .filter((dominio) => dominio.sinFecha !== true)
+    .map((dominio) => {
+      const vence = Date.parse(dominio.venceEn);
+      return {
+        id: `${accountId}-${dominio.nombre.replace(/[^a-z0-9]+/g, '-')}`,
+        provider: 'otro',
+        product: `Dominio ${dominio.nombre}`,
+        plan: [
+          dominio.registrador ?? 'dominio',
+          'anual',
+          dominio.automatico ? 'renovación automática' : undefined,
+          vence < ahora.getTime() ? 'VENCIDO' : undefined
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        unit: 'dinero',
+        used: dominio.costo ?? 0,
+        periodStart: new Date(vence - 366 * DIA_MS).toISOString(),
+        periodEnd: dominio.venceEn,
+        cost: dominio.costo,
+        currency: dominio.moneda,
+        renewsAt: dominio.venceEn,
+        manual: true,
+        members: [],
+        accountId,
+        updatedAt: ahora.toISOString()
+      };
+    });
 }
