@@ -46,66 +46,75 @@ const CLASE_ESTADO: Record<MonitorStatus, string> = {
   selector: 'pt-slide-plataformas',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent, SparklineComponent],
-  host: { class: 'block h-full' },
+  host: { class: 'flex h-full flex-col' },
   template: `
-    <div class="grid h-full grid-cols-2 gap-4 xl:grid-cols-4">
-      @for (destino of destinos(); track destino.id) {
-        <article
-          class="tv-card flex min-h-0 flex-col justify-between gap-2 px-5 py-4"
-          [class]="claseTarjeta(destino)">
-          <div class="min-w-0">
+    @if (destinos().length > 0) {
+      <!--
+        Todas las tarjetas, con scroll: las filas miden lo que su contenido
+        (auto-rows-min) y la cuadricula desplaza el resto. Antes las filas se
+        encogian al alto de la pantalla y el nombre, el estado y la grafica se
+        salian de la tarjeta sin forma de verlos.
+      -->
+      <div
+        class="grid min-h-0 flex-1 auto-rows-min grid-cols-1 content-start gap-4 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-4">
+        @for (destino of destinos(); track destino.id) {
+          <article
+            class="tv-card flex min-h-[10rem] flex-col justify-between gap-2 px-5 py-4"
+            [class]="claseTarjeta(destino)">
+            <div class="min-w-0">
+              <p
+                class="line-clamp-2 break-words text-xl font-bold leading-tight text-ink 2xl:text-2xl">
+                {{ destino.name }}
+              </p>
+              <p class="line-clamp-1 break-words text-base text-ink-muted">
+                {{ entorno(destino) }}
+              </p>
+            </div>
+
             <p
-              class="break-all text-xl font-bold text-ink sm:truncate 2xl:text-2xl">
-              {{ destino.name }}
+              class="flex items-center gap-2 text-2xl font-bold 2xl:text-3xl"
+              [class]="claseEstado(destino)">
+              @if (destino.status === 'caido') {
+                <pt-icon name="alerta" class="h-7 w-7" />
+              } @else if (destino.status === 'operativo') {
+                <pt-icon name="ok" class="h-7 w-7" />
+              }
+              {{ etiqueta(destino) }}
             </p>
-            <p class="truncate text-base text-ink-muted">
-              {{ destino.environment }}
+
+            <div class="text-accent">
+              <pt-sparkline [checks]="destino.history" />
+            </div>
+
+            <p
+              class="flex items-baseline justify-between gap-2 text-lg text-ink-muted 2xl:text-xl">
+              <span class="tabular-nums">
+                {{
+                  destino.latencyMs !== undefined
+                    ? destino.latencyMs + ' ms'
+                    : 'sin respuesta'
+                }}
+              </span>
+              <span
+                class="font-bold tabular-nums"
+                [class]="claseDisponibilidad(destino)">
+                {{ destino.uptime24h }}%
+              </span>
             </p>
-          </div>
-
-          <p
-            class="flex items-center gap-2 text-2xl font-bold 2xl:text-3xl"
-            [class]="claseEstado(destino)">
-            @if (destino.status === 'caido') {
-              <pt-icon name="alerta" class="h-7 w-7" />
-            } @else if (destino.status === 'operativo') {
-              <pt-icon name="ok" class="h-7 w-7" />
-            }
-            {{ etiqueta(destino) }}
-          </p>
-
-          <div class="text-accent">
-            <pt-sparkline [checks]="destino.history" />
-          </div>
-
-          <p
-            class="flex items-baseline justify-between text-lg text-ink-muted 2xl:text-xl">
-            <span class="tabular-nums">
-              {{
-                destino.latencyMs !== undefined
-                  ? destino.latencyMs + ' ms'
-                  : 'sin respuesta'
-              }}
-            </span>
-            <span
-              class="font-bold tabular-nums"
-              [class]="claseDisponibilidad(destino)">
-              {{ destino.uptime24h }}%
-            </span>
-          </p>
-        </article>
-      } @empty {
-        <!-- Sin destinos vigilados no hay nada que pintar: se dice en grande. -->
-        <div
-          class="col-span-full flex h-full flex-col items-center justify-center gap-3 text-center">
-          <pt-icon name="ok" class="h-16 w-16 text-ok" />
-          <p class="tv-title">Sin plataformas vigiladas</p>
-          <p class="tv-row text-ink-muted">
-            Los sitios se dan de alta en Integraciones › Sitios
-          </p>
-        </div>
-      }
-    </div>
+          </article>
+        }
+      </div>
+    } @else {
+      <!-- Sin destinos vigilados no hay nada que pintar: se dice en grande. -->
+      <div
+        class="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+        <pt-icon name="ok" class="h-16 w-16 text-ok" />
+        <p class="tv-title">Sin plataformas vigiladas</p>
+        <p class="tv-row text-ink-muted">
+          Los sitios se dan de alta en Integraciones › Sitios
+        </p>
+      </div>
+    }
   `
 })
 export class PlataformasSlideComponent implements DiapositivaConContenido {

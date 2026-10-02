@@ -27,13 +27,6 @@ const CANTIDAD = new Intl.NumberFormat('es-MX', {
 });
 const MONTO = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 });
 
-/** Cuantas licencias caben en la rejilla sin apretarlas. */
-/**
- * Cuantas caben: tres columnas de renglones compactos. Con decenas de
- * suscripciones y dominios, seis tarjetas grandes escondian el resto.
- */
-const RENGLONES = 24;
-
 /** Consumo de las suscripciones: cuánto se lleva usado y qué renueva pronto. */
 @Component({
   selector: 'pt-slide-licencias',
@@ -42,14 +35,14 @@ const RENGLONES = 24;
   host: { class: 'flex h-full flex-col gap-4' },
   template: `
     <div
-      class="grid min-h-0 flex-1 auto-rows-min grid-cols-2 content-start gap-x-4 gap-y-2 overflow-y-auto xl:grid-cols-3">
+      class="grid min-h-0 flex-1 auto-rows-min grid-cols-1 content-start gap-x-4 gap-y-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
       @for (licencia of licencias(); track licencia.id) {
         <article
           class="tv-card flex items-center gap-4 px-4 py-2.5"
           [class.border-warn]="renuevaPronto(licencia)">
           <div class="min-w-0 flex-1">
             <p
-              class="truncate text-lg font-bold leading-tight text-ink 2xl:text-xl">
+              class="line-clamp-2 break-words text-lg font-bold leading-tight text-ink 2xl:text-xl">
               {{ licencia.product }}
             </p>
             <p
@@ -61,7 +54,7 @@ const RENGLONES = 24;
               {{ renovacion(licencia) }}
             </p>
           </div>
-          <div class="shrink-0 text-right">
+          <div class="max-w-[55%] shrink-0 break-words text-right">
             <p
               class="text-lg font-bold tabular-nums leading-tight text-ink 2xl:text-xl">
               {{
@@ -124,17 +117,15 @@ export class LicenciasSlideComponent implements DiapositivaConContenido {
     return this.store.licenses().length === 0;
   });
 
-  /** Lo que necesita atención se ve primero. */
+  /** Todas, lo que necesita atención primero; la rejilla hace scroll. */
   readonly licencias = computed(() => {
     const avisadas = new Set(this.conAviso().map((licencia) => licencia.id));
-    return [...this.store.licenses()]
-      .sort(
-        (a, b) =>
-          Number(avisadas.has(b.id)) - Number(avisadas.has(a.id)) ||
-          (a.renewsAt ?? '9').localeCompare(b.renewsAt ?? '9') ||
-          usagePercent(b) - usagePercent(a)
-      )
-      .slice(0, RENGLONES);
+    return [...this.store.licenses()].sort(
+      (a, b) =>
+        Number(avisadas.has(b.id)) - Number(avisadas.has(a.id)) ||
+        (a.renewsAt ?? '9').localeCompare(b.renewsAt ?? '9') ||
+        usagePercent(b) - usagePercent(a)
+    );
   });
 
   readonly conAviso = computed(() =>

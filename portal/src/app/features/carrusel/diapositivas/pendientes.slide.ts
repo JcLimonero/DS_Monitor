@@ -99,7 +99,8 @@ const CLASE_DIALOGO = 'con-dialogo';
                     class="mt-2 h-2.5 w-2.5 shrink-0 rounded-full"
                     [class]="punto(tarea)"></span>
                   <span class="min-w-0 flex-1">
-                    <span class="block tv-row font-bold leading-tight text-ink">
+                    <span
+                      class="line-clamp-3 break-words tv-row font-bold leading-tight text-ink">
                       {{ tarea.title }}
                     </span>
                     <span

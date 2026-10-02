@@ -18,9 +18,6 @@ import { IconComponent } from '../../../ui/icon.component';
 import { TimePipe } from '../../../ui/portal.pipes';
 import { DiapositivaConContenido } from '../carrusel.model';
 
-/** Cuantas juntas caben por columna sin apretar la pantalla. */
-const RENGLONES = 6;
-
 /** Hoy y mañana, lado a lado, con las cuentas distinguidas por color. */
 @Component({
   selector: 'pt-slide-agenda',
@@ -33,8 +30,14 @@ const RENGLONES = 6;
         <h2 class="shrink-0 tv-label">{{ columna.titulo }}</h2>
 
         @if (columna.juntas.length > 0) {
+          <!--
+            Todas las juntas, con scroll. Centradas con margenes automaticos en
+            el primero y el ultimo (no con justify-center): si la lista es mas
+            alta que la columna, justify-center corta el principio y ya no se
+            puede subir a verlo.
+          -->
           <ul
-            class="mt-3 flex min-h-0 flex-1 flex-col justify-center gap-2.5 overflow-y-auto">
+            class="mt-3 flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-1 [&>:first-child]:mt-auto [&>:last-child]:mb-auto">
             @for (junta of columna.juntas; track junta.id) {
               <li
                 class="tv-card relative flex shrink-0 items-center gap-4 overflow-hidden py-5 pl-6 pr-5">
@@ -45,12 +48,12 @@ const RENGLONES = 6;
                 </span>
                 <span class="min-w-0 flex-1">
                   <span
-                    class="block truncate text-xl font-bold text-ink 2xl:text-2xl"
+                    class="line-clamp-2 break-words text-xl font-bold leading-tight text-ink 2xl:text-2xl"
                     [class.line-through]="junta.status === 'cancelada'">
                     {{ junta.title }}
                   </span>
                   <span
-                    class="block truncate text-base text-ink-muted 2xl:text-lg">
+                    class="line-clamp-1 break-words text-base text-ink-muted 2xl:text-lg">
                     {{ nombreCuenta(junta) }}
                     @if (junta.location) {
                       · {{ junta.location }}
@@ -63,12 +66,6 @@ const RENGLONES = 6;
               </li>
             }
           </ul>
-
-          @if (columna.restantes > 0) {
-            <p class="mt-2 shrink-0 text-center text-lg text-ink-muted">
-              y {{ columna.restantes }} más
-            </p>
-          }
         } @else {
           <div
             class="mt-3 flex flex-1 items-center justify-center rounded-2xl border border-dashed border-line">
@@ -107,13 +104,11 @@ export class AgendaSlideComponent implements DiapositivaConContenido {
   readonly columnas = computed(() => [
     {
       titulo: 'Hoy',
-      juntas: this.hoy().slice(0, RENGLONES),
-      restantes: Math.max(0, this.hoy().length - RENGLONES)
+      juntas: this.hoy()
     },
     {
       titulo: 'Mañana',
-      juntas: this.manana().slice(0, RENGLONES),
-      restantes: Math.max(0, this.manana().length - RENGLONES)
+      juntas: this.manana()
     }
   ]);
 

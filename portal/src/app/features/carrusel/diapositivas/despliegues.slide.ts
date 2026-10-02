@@ -57,9 +57,11 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
         @for (incidente of incidentes(); track incidente.id) {
           <p
             class="flex items-center gap-3 tv-title text-amber-900 dark:text-amber-200">
-            <pt-icon name="alerta" class="h-7 w-7" />
-            {{ incidente.label }}: {{ etiquetaPlataforma(incidente) }} ·
-            {{ incidente.description }}
+            <pt-icon name="alerta" class="h-7 w-7 shrink-0" />
+            <span class="line-clamp-2 min-w-0 break-words">
+              {{ incidente.label }}: {{ etiquetaPlataforma(incidente) }} ·
+              {{ incidente.description }}
+            </span>
           </p>
         }
       </div>
@@ -85,9 +87,9 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
           <ul class="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
             @for (despliegue of despliegues(); track despliegue.id) {
               <li
-                class="flex shrink-0 items-center gap-4 rounded-lg border px-4 py-3"
+                class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border px-4 py-3 sm:flex-nowrap"
                 [class]="borde(despliegue)">
-                <span class="w-32 shrink-0">
+                <span class="w-28 shrink-0 sm:w-32">
                   <span
                     class="block text-lg font-bold 2xl:text-xl"
                     [class]="claseEstado(despliegue)">
@@ -97,20 +99,30 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
                     entorno(despliegue)
                   }}</span>
                 </span>
-                <span class="min-w-0 flex-1">
+                <span class="min-w-0 flex-1 basis-40">
                   <span
-                    class="block truncate text-lg font-bold leading-tight text-ink 2xl:text-xl"
+                    class="line-clamp-2 break-words text-lg font-bold leading-tight text-ink 2xl:text-xl"
                     >{{ despliegue.project }}</span
                   >
-                  <span class="block truncate text-base text-ink-muted">
+                  <span
+                    class="line-clamp-2 break-words text-base text-ink-muted">
                     {{ mensaje(despliegue) }}
                   </span>
                 </span>
-                <span class="shrink-0 text-right text-sm text-ink-muted">
+                <!--
+                  La rama se recorta con puntos suspensivos: sin tope, una
+                  rama larga empujaba el renglon fuera de la tarjeta.
+                -->
+                <span
+                  class="min-w-0 max-w-full shrink-0 text-right text-sm text-ink-muted sm:max-w-[13rem]">
                   <span
-                    class="flex items-center justify-end gap-1 text-base text-ink">
-                    <pt-icon name="rama" class="h-4 w-4 text-ink-subtle" />
-                    {{ despliegue.branch }}
+                    class="flex min-w-0 items-center justify-end gap-1 text-base text-ink">
+                    <pt-icon
+                      name="rama"
+                      class="h-4 w-4 shrink-0 text-ink-subtle" />
+                    <span class="min-w-0 truncate">{{
+                      despliegue.branch
+                    }}</span>
                   </span>
                   {{ despliegue.createdAt | relativo }}
                 </span>
@@ -150,7 +162,7 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
                   [class]="punto(p)"></span>
                 <span class="min-w-0 flex-1">
                   <span
-                    class="block truncate text-lg font-bold leading-tight text-ink 2xl:text-xl"
+                    class="line-clamp-2 break-words text-lg font-bold leading-tight text-ink 2xl:text-xl"
                     >{{ p.name }}</span
                   >
                   <span class="block truncate text-base text-ink-muted">
