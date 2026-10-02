@@ -53,6 +53,7 @@ import {
   FECHA_PROVISIONAL,
   MAXIMO_DOMINIOS,
   dominiosComoLicencias,
+  idLicenciaDeDominio,
   validarDominio,
   type Dominio
 } from '../datos/dominios.js';
@@ -1464,31 +1465,81 @@ export function construirRutas(
     })[];
     /** El Registrar contesto con dominios (si no, la fecha va a mano). */
     conFechas: boolean;
+    /** No se pudo consultar el Registrar (fallo pasajero): reintentar. */
+    registrarFallo: boolean;
   };
 
-  const zonasCloudflareCache = (): Promise<{
+  const soloZonasCloudflare = (): Promise<ZonaCloudflare[]> =>
+    cache.obtener('cloudflare:zonas', ttl.cloudflare, () =>
+      zonasCloudflare(exigir(cfg().cloudflare, 'cloudflare'))
+    );
+
+  /** Un fallo pasajero del Registrar: no se guarda en cache (ver abajo). */
+  class RegistrarTransitorio extends Error {
+    constructor(readonly parcial: DominioRegistrado[]) {
+      super('registrar transitorio');
+    }
+  }
+
+  /**
+   * Las fechas del Registrar. Sin permiso o sin Registrar es un resultado
+   * estable y se guarda en cache (`[]`); un fallo pasajero (red, 429, 5xx) NO
+   * se guarda, para que el siguiente intento vuelva a preguntar en vez de dejar
+   * los dominios sin fecha hasta que venza la cache.
+   */
+  const fechasDelRegistrar = async (
+    zonas: ZonaCloudflare[]
+  ): Promise<{ dominios: DominioRegistrado[]; fallo: boolean }> => {
+    const config = exigir(cfg().cloudflare, 'cloudflare');
+    try {
+      const dominios = await cache.obtener(
+        'cloudflare:registrar',
+        ttl.cloudflare,
+        async () => {
+          const r = await registradas(
+            config,
+            zonas
+              .map((z) => z.cuentaId)
+              .filter((c): c is string => c !== undefined)
+          );
+          if (r.transitorio) {
+            throw new RegistrarTransitorio(r.dominios);
+          }
+          return r.dominios;
+        }
+      );
+      return { dominios, fallo: false };
+    } catch (error) {
+      if (error instanceof RegistrarTransitorio) {
+        return { dominios: error.parcial, fallo: true };
+      }
+      throw error;
+    }
+  };
+
+  const zonasCloudflareCache = async (): Promise<{
     zonas: ZonaCloudflare[];
     registradas: DominioRegistrado[];
-  }> =>
-    cache.obtener('cloudflare:zonas', ttl.cloudflare, async () => {
-      const config = exigir(cfg().cloudflare, 'cloudflare');
-      const lista = await zonasCloudflare(config);
-      const cuentas = lista
-        .map((z) => z.cuentaId)
-        .filter((c): c is string => c !== undefined);
-      return { zonas: lista, registradas: await registradas(config, cuentas) };
-    });
+    registrarFallo: boolean;
+  }> => {
+    const zonas = await soloZonasCloudflare();
+    const r = await fechasDelRegistrar(zonas);
+    return { zonas, registradas: r.dominios, registrarFallo: r.fallo };
+  };
 
   router.get('/cloudflare/zonas', async (contexto) => {
     exigirAdmin(contexto, cfg(), acceso);
     if (contexto.parametros.get('refrescar') === '1') {
       cache.olvidar('cloudflare:zonas');
+      cache.olvidar('cloudflare:registrar');
     }
     try {
-      const { zonas, registradas } = await zonasCloudflareCache();
+      const { zonas, registradas, registrarFallo } =
+        await zonasCloudflareCache();
       const porNombre = new Map(registradas.map((r) => [r.nombre, r]));
       const salida: DatosZonas = {
-        zonas: zonas.map((z) => {
+        // La cuenta de Cloudflare no sale del puente: solo sirve para consultar.
+        zonas: zonas.map(({ cuentaId: _cuenta, ...z }) => {
           const r = porNombre.get(z.nombre);
           return r
             ? {
@@ -1497,7 +1548,8 @@ export function construirRutas(
               }
             : z;
         }),
-        conFechas: registradas.length > 0
+        conFechas: registradas.length > 0,
+        registrarFallo
       };
       return salida;
     } catch (error) {
@@ -1507,6 +1559,7 @@ export function construirRutas(
         return {
           zonas: [],
           conFechas: false,
+          registrarFallo: false,
           problema: { tipo: 'sin-permiso', mensaje: error.message }
         };
       }
@@ -1524,7 +1577,7 @@ export function construirRutas(
     }
     const config = exigir(cfg().cloudflare, 'cloudflare');
     // Solo zonas que esta cuenta ve: el id viene del cliente.
-    const { zonas } = await zonasCloudflareCache();
+    const zonas = await soloZonasCloudflare();
     const zona = zonas.find((z) => z.id === id);
     if (!zona) {
       throw new ErrorPuente('Esa zona no existe en Cloudflare.', 404);
@@ -1564,7 +1617,7 @@ export function construirRutas(
     const pedidos = [
       ...new Set((nombres as string[]).map((n) => n.trim().toLowerCase()))
     ];
-    const { zonas, registradas } = await zonasCloudflareCache();
+    const { zonas, registradas, registrarFallo } = await zonasCloudflareCache();
     const deCloudflare = new Set(zonas.map((z) => z.nombre));
     const fuera = pedidos.find((n) => !deCloudflare.has(n));
     if (fuera) {
@@ -1625,7 +1678,9 @@ export function construirRutas(
         importados: nuevos.map((d) => d.nombre),
         existentes,
         sinFecha,
-        invalidos
+        invalidos,
+        // Las que quedaron sin fecha pueden ser por esto: la pantalla lo avisa.
+        registrarFallo: registrarFallo && sinFecha.length > 0
       };
     });
   });
@@ -1696,6 +1751,19 @@ export function construirRutas(
       !datos.licenciasManuales.leer().some((m) => m.id === id)
     ) {
       throw new ErrorPuente('Esa licencia a mano no existe.', 404);
+    }
+    if (
+      id.startsWith('dominios-') &&
+      datos.dominios
+        .leer()
+        .some(
+          (d) => d.sinFecha && idLicenciaDeDominio('dominios', d.nombre) === id
+        )
+    ) {
+      throw new ErrorPuente(
+        'Ese dominio todavía no tiene fecha de vencimiento: captúrala en Dominios antes de renovarlo.',
+        400
+      );
     }
     if (
       id.startsWith('dominios-') &&

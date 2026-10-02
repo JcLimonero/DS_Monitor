@@ -41,11 +41,16 @@ import { DayPipe } from '../../ui/portal.pipes';
 /** Desde este ancho (lg) los subdominios se abren en la misma lista. */
 const CONSULTA_ANCHA = '(min-width: 1024px)';
 
+/** Cuántos hosts se pintan de una vez (y cuántos suma "Mostrar más"). */
+export const HOSTS_POR_PAGINA = 200;
+/** Lo que se espera tras la última tecla antes de filtrar. */
+const ESPERA_BUSQUEDA_MS = 200;
+
 /** Los tonos de la zona, con los tokens del tema. */
 const CLASE_TONO = {
-  ok: 'bg-ok/10 text-ok',
-  warn: 'bg-warn/10 text-warn',
-  danger: 'bg-danger/10 text-danger',
+  ok: 'bg-ok/5 text-ok',
+  warn: 'bg-warn/5 text-warn',
+  danger: 'bg-danger/5 text-danger',
   neutro: 'bg-surface-muted text-ink-muted'
 } as const;
 
@@ -84,7 +89,14 @@ export class DominiosComponent {
 
   /** El dominio abierto (su nombre). */
   readonly abierto = signal<string | undefined>(undefined);
+  /** Lo que hay escrito en el buscador (se filtra tras una pausa). */
+  readonly entrada = signal('');
+  /** El texto que ya se aplicó al filtro. */
   readonly busqueda = signal('');
+  /** Cuántos hosts se pintan. */
+  readonly limite = signal(HOSTS_POR_PAGINA);
+  /** Destinos abiertos completos (por id de registro). */
+  readonly expandidos = signal<ReadonlySet<string>>(new Set());
   readonly subs = signal<EstadoSubdominios | undefined>(undefined);
   /** El registro cuyo destino se acaba de copiar. */
   readonly copiado = signal<string | undefined>(undefined);
@@ -111,6 +123,13 @@ export class DominiosComponent {
       ? filtrarSubdominios(estado.datos.subdominios, this.busqueda())
       : [];
   });
+  /** Los primeros hosts de los que coinciden; el filtro ve todos. */
+  readonly visibles = computed(() =>
+    this.subdominios().slice(0, this.limite())
+  );
+  readonly restantes = computed(
+    () => this.subdominios().length - this.visibles().length
+  );
   readonly subtitulo = computed(() => {
     const total = this.lista().length;
     const enCloudflare = this.svc.zonas().length;
@@ -138,6 +157,8 @@ export class DominiosComponent {
     return partes.join(' · ');
   });
 
+  private pausaBusqueda: ReturnType<typeof setTimeout> | undefined;
+
   readonly urlParaAbrir = urlParaAbrir;
   readonly textoVencimiento = textoVencimiento;
   readonly claseVencimiento = claseVencimiento;
@@ -160,6 +181,7 @@ export class DominiosComponent {
         window.removeEventListener('resize', alCambiar);
       });
     }
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.pausaBusqueda));
     void this.svc.cargar();
   }
 
@@ -199,7 +221,7 @@ export class DominiosComponent {
       return;
     }
     this.abierto.set(d.nombre);
-    this.busqueda.set('');
+    this.reiniciarBusqueda();
     this.subs.set(undefined);
     if (d.zona) {
       void this.cargarSubdominios(d.zona.id, false);
@@ -209,6 +231,15 @@ export class DominiosComponent {
   cerrar(): void {
     this.abierto.set(undefined);
     this.subs.set(undefined);
+    this.reiniciarBusqueda();
+  }
+
+  private reiniciarBusqueda(): void {
+    clearTimeout(this.pausaBusqueda);
+    this.entrada.set('');
+    this.busqueda.set('');
+    this.limite.set(HOSTS_POR_PAGINA);
+    this.expandidos.set(new Set());
   }
 
   actualizarSubdominios(d: DominioUnificado): void {
@@ -236,13 +267,45 @@ export class DominiosComponent {
     }
   }
 
-  /** Al buscar, la lista vuelve arriba: lo primero que coincide es lo primero. */
+  /**
+   * Al escribir se espera una pausa antes de filtrar (con miles de hosts cada
+   * tecla costaba cientos de milisegundos); la lista vuelve arriba y a la
+   * primera página.
+   */
   buscar(texto: string): void {
-    this.busqueda.set(texto);
-    const lista = this.listaSubs()?.nativeElement;
-    if (lista) {
-      lista.scrollTop = 0;
-    }
+    this.entrada.set(texto);
+    clearTimeout(this.pausaBusqueda);
+    this.pausaBusqueda = setTimeout(() => {
+      this.busqueda.set(texto);
+      this.limite.set(HOSTS_POR_PAGINA);
+      const lista = this.listaSubs()?.nativeElement;
+      if (lista) {
+        lista.scrollTop = 0;
+      }
+    }, ESPERA_BUSQUEDA_MS);
+  }
+
+  mostrarMas(): void {
+    this.limite.update((n) => n + HOSTS_POR_PAGINA);
+  }
+
+  mostrarTodos(): void {
+    this.limite.set(Number.MAX_SAFE_INTEGER);
+  }
+
+  expandido(id: string): boolean {
+    return this.expandidos().has(id);
+  }
+
+  /** Un toque abre o cierra el destino completo (el `title` no sirve en iPad). */
+  alternarDestino(id: string): void {
+    this.expandidos.update((actual) => {
+      const nueva = new Set(actual);
+      if (!nueva.delete(id)) {
+        nueva.add(id);
+      }
+      return nueva;
+    });
   }
 
   async copiar(registro: RegistroDns): Promise<void> {

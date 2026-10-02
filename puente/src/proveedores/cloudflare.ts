@@ -7,8 +7,10 @@ import { ErrorProveedor } from '../nucleo/errores.js';
  *
  * Permisos minimos del token: Zone → Zone → Read y Zone → DNS → Read. Las
  * fechas de vencimiento solo existen para los dominios registrados EN
- * Cloudflare Registrar (Account → Registrar: Domains → Read); si el token no
- * llega a eso, se sigue sin ellas y la fecha se captura a mano.
+ * Cloudflare Registrar (`GET /accounts/{id}/registrar/registrations`; el permiso
+ * exacto de la API nueva NO esta confirmado: se pide "Cuenta · Registrar de
+ * dominios · Leer, si la cuenta lo ofrece"); si el token no llega a eso, se
+ * sigue sin ellas y la fecha se captura a mano.
  */
 
 const TIEMPO_LIMITE_MS = 15_000;
@@ -27,8 +29,19 @@ const MENSAJE_PERMISO =
 /** El token no alcanza (401/403): la pantalla lo distingue de otras fallas. */
 export class ErrorCloudflareSinPermiso extends ErrorProveedor {
   constructor() {
-    super('cloudflare', MENSAJE_PERMISO);
+    super('Cloudflare', MENSAJE_PERMISO);
     this.name = 'ErrorCloudflareSinPermiso';
+  }
+}
+
+/** Cloudflare contesto con un estado de error distinto de 401/403/429. */
+export class ErrorCloudflareHttp extends ErrorProveedor {
+  constructor(
+    readonly http: number,
+    mensaje: string
+  ) {
+    super('Cloudflare', mensaje);
+    this.name = 'ErrorCloudflareHttp';
   }
 }
 
@@ -38,6 +51,8 @@ interface Respuesta {
   result: unknown;
   paginas: number;
   total?: number;
+  /** Cursor de la pagina siguiente (paginacion por cursor), si hay. */
+  cursor?: string;
 }
 
 const texto = (v: unknown): string | undefined =>
@@ -93,8 +108,8 @@ async function pedir(
       });
     } catch (error) {
       throw new ErrorProveedor(
-        'cloudflare',
-        `No se pudo hablar con Cloudflare: ${error instanceof Error ? error.message : String(error)}`
+        'Cloudflare',
+        `no se pudo conectar (${error instanceof Error ? error.message : String(error)})`
       );
     } finally {
       clearTimeout(t);
@@ -108,8 +123,8 @@ async function pedir(
         continue;
       }
       throw new ErrorProveedor(
-        'cloudflare',
-        'Cloudflare limitó las peticiones (429). Espera un momento y vuelve a intentar.',
+        'Cloudflare',
+        'limitó las peticiones (429). Espera un momento y vuelve a intentar.',
         429
       );
     }
@@ -121,9 +136,9 @@ async function pedir(
     }
     const sobre = objeto(cuerpo);
     if (!r.ok || sobre?.['success'] === false) {
-      throw new ErrorProveedor(
-        'cloudflare',
-        `Cloudflare respondió ${r.status}${mensajeDe(cuerpo) ? `: ${mensajeDe(cuerpo)}` : ''}`
+      throw new ErrorCloudflareHttp(
+        r.status,
+        `respondió ${r.status}${mensajeDe(cuerpo) ? `: ${mensajeDe(cuerpo)}` : ''}`
       );
     }
     const info = objeto(sobre?.['result_info']);
@@ -132,7 +147,9 @@ async function pedir(
       paginas: Number(info?.['total_pages']) || 1,
       total: Number.isFinite(Number(info?.['total_count']))
         ? Number(info?.['total_count'])
-        : undefined
+        : undefined,
+      cursor:
+        texto(info?.['cursor']) ?? texto(objeto(info?.['cursors'])?.['after'])
     };
   }
 }
@@ -246,7 +263,7 @@ export async function registros(
 ): Promise<RegistrosDeZona> {
   if (!/^[a-f0-9]{32}$/i.test(zonaId)) {
     throw new ErrorProveedor(
-      'cloudflare',
+      'Cloudflare',
       'El id de la zona no es válido.',
       400
     );
@@ -296,46 +313,96 @@ export interface DominioRegistrado {
   autoRenovar: boolean;
 }
 
+export interface ResultadoRegistrar {
+  dominios: DominioRegistrado[];
+  /**
+   * Fallo una consulta por algo pasajero (red, 429, timeout, 5xx): el resultado
+   * puede estar incompleto y NO debe guardarse en cache. Sin permiso o sin
+   * Registrar no cuenta: eso es un fallo seguro y estable.
+   */
+  transitorio: boolean;
+}
+
+/** Por pagina en la paginacion por cursor del Registrar (acepta de 1 a 50). */
+const POR_PAGINA_REGISTRAR = 50;
+
+/** Estados que significan "esto no esta disponible para este token/cuenta". */
+const ESTADOS_NO_DISPONIBLE = new Set([400, 404, 410]);
+
 /**
- * Los dominios registrados EN Cloudflare Registrar, con su vencimiento. Es
- * opcional: si el token no tiene ese permiso, la cuenta no usa Registrar o la
- * API no contesta, devuelve `[]` sin error y la fecha se captura a mano.
+ * Los dominios registrados EN Cloudflare Registrar, con su vencimiento
+ * (`GET /accounts/{id}/registrar/registrations`, paginacion por cursor:
+ * `result_info.cursor` hasta que no venga). Es opcional: sin permiso o sin
+ * Registrar devuelve `[]` y la fecha se captura a mano. Se lee a la defensiva:
+ * el nombre puede venir como `domain_name` o `name`, y lo que no traiga una
+ * fecha valida se ignora (nunca se inventa una).
  * `cuentas` son las cuentas de las zonas, por si no se configuro
  * `CLOUDFLARE_ACCOUNT_ID`.
  */
 export async function registradas(
   config: ConfiguracionCloudflare,
   cuentas: string[] = []
-): Promise<DominioRegistrado[]> {
+): Promise<ResultadoRegistrar> {
   const ids = [
     ...new Set(config.accountId ? [config.accountId] : cuentas)
   ].filter((id) => /^[a-f0-9]{32}$/i.test(id));
   const salida = new Map<string, DominioRegistrado>();
+  let transitorio = false;
   for (const cuenta of ids) {
     try {
-      const { filas } = await pedirTodas(
-        config,
-        `/accounts/${cuenta}/registrar/domains`,
-        POR_PAGINA_ZONAS
-      );
-      for (const d of filas) {
-        const nombre = texto(d['name'])?.toLowerCase();
-        const vence = texto(d['expires_at']);
-        if (nombre && vence && !Number.isNaN(Date.parse(vence))) {
-          salida.set(nombre, {
-            nombre,
-            // Solo importa el dia: al mediodia UTC cae en el mismo dia en Mexico
-            // (igual que las fechas que captura el portal).
-            venceEn: `${new Date(vence).toISOString().slice(0, 10)}T12:00:00.000Z`,
-            autoRenovar: d['auto_renew'] === true
-          });
+      let cursor: string | undefined;
+      const vistos = new Set<string>();
+      for (let pagina = 0; pagina < MAXIMO_PAGINAS; pagina++) {
+        const r = await pedir(
+          config,
+          `/accounts/${cuenta}/registrar/registrations`,
+          {
+            per_page: String(POR_PAGINA_REGISTRAR),
+            ...(cursor ? { cursor } : {})
+          }
+        );
+        const lista = Array.isArray(r.result)
+          ? r.result
+          : (objeto(r.result)?.['registrations'] ?? []);
+        for (const fila of Array.isArray(lista) ? lista : []) {
+          const d = objeto(fila);
+          const nombre = (
+            texto(d?.['domain_name']) ?? texto(d?.['name'])
+          )?.toLowerCase();
+          const vence = texto(d?.['expires_at']);
+          if (d && nombre && vence && !Number.isNaN(Date.parse(vence))) {
+            salida.set(nombre, {
+              nombre,
+              // Solo importa el dia: al mediodia UTC cae en el mismo dia en
+              // Mexico (igual que las fechas que captura el portal).
+              venceEn: `${new Date(vence).toISOString().slice(0, 10)}T12:00:00.000Z`,
+              autoRenovar: d['auto_renew'] === true
+            });
+          }
         }
+        // Un cursor repetido seria un ciclo: se corta.
+        if (!r.cursor || vistos.has(r.cursor)) {
+          break;
+        }
+        vistos.add(r.cursor);
+        cursor = r.cursor;
       }
-    } catch {
-      // Sin permiso de Registrar (o sin Registrar): la fecha va a mano.
+    } catch (error) {
+      const estable =
+        error instanceof ErrorCloudflareSinPermiso ||
+        (error instanceof ErrorCloudflareHttp &&
+          ESTADOS_NO_DISPONIBLE.has(error.http));
+      if (!estable) {
+        transitorio = true;
+      }
     }
   }
-  return [...salida.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
+  return {
+    dominios: [...salida.values()].sort((a, b) =>
+      a.nombre.localeCompare(b.nombre)
+    ),
+    transitorio
+  };
 }
 
 // --- Subdominios ---------------------------------------------------------

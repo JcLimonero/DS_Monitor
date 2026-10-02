@@ -56,6 +56,8 @@ export class DominiosService {
   readonly mensajeCloudflare = signal<string | undefined>(undefined);
   /** El Registrar de Cloudflare contestó con fechas de vencimiento. */
   readonly conFechas = signal(false);
+  /** No se pudo consultar el Registrar (fallo pasajero): reintentar. */
+  readonly registrarFallo = signal(false);
 
   readonly unificados = computed(() =>
     unificarDominios(this.manuales(), this.zonas())
@@ -94,12 +96,14 @@ export class DominiosService {
     if (zonas.status === 'fulfilled') {
       this.zonas.set(zonas.value.zonas);
       this.conFechas.set(zonas.value.conFechas);
+      this.registrarFallo.set(zonas.value.registrarFallo === true);
       this.cloudflare.set(zonas.value.problema ? 'sin-permiso' : 'conectado');
       this.mensajeCloudflare.set(zonas.value.problema?.mensaje);
     } else {
       const http = zonas.reason as { status?: number };
       this.zonas.set([]);
       this.conFechas.set(false);
+      this.registrarFallo.set(false);
       this.cloudflare.set(http?.status === 503 ? 'sin-configurar' : 'error');
       this.mensajeCloudflare.set(
         http?.status === 503 ? undefined : mensajeDeError(zonas.reason)

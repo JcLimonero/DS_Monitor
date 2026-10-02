@@ -82,6 +82,8 @@ export interface RespuestaZonas {
   zonas: ZonaCloudflare[];
   /** El Registrar contestó con fechas de vencimiento. */
   conFechas: boolean;
+  /** No se pudo consultar el Registrar (fallo pasajero). */
+  registrarFallo?: boolean;
   /** El token no alcanza: se explica en pantalla, no es una falla. */
   problema?: { tipo: 'sin-permiso'; mensaje: string };
 }
@@ -129,6 +131,8 @@ export interface ResultadoImportacion {
   sinFecha: string[];
   /** Nombres que el puente no acepta como dominio. */
   invalidos: string[];
+  /** Quedaron sin fecha porque no se pudo consultar el Registrar. */
+  registrarFallo?: boolean;
 }
 
 /**

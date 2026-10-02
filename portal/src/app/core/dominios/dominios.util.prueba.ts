@@ -198,6 +198,18 @@ describe('subdominios', () => {
     assert.deepEqual(hosts('no-existe'), []);
   });
 
+  it('el filtro opera sobre todos los hosts, no solo sobre los primeros 200', () => {
+    const muchos = Array.from({ length: 5000 }, (_, i) =>
+      sub(`h${i}`, [reg('A', i === 4321 ? '10.99.99.99' : `10.0.${i % 250}.1`)])
+    );
+    const r = filtrarSubdominios(muchos, '10.99.99.99');
+    assert.deepEqual(
+      r.map((s) => s.host),
+      ['h4321']
+    );
+    assert.equal(filtrarSubdominios(muchos, '').length, 5000);
+  });
+
   it('solo se puede abrir lo que es web, sin comodin ni tecnico', () => {
     assert.equal(urlParaAbrir(lista[0]!), 'https://a.com');
     assert.equal(urlParaAbrir(lista[1]!), 'https://api.a.com');

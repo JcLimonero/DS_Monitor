@@ -31,7 +31,9 @@ const CUENTA = 'b'.repeat(32);
 const idZona = (n: number) => n.toString(16).padStart(32, '0');
 
 /** Tres zonas; solo `alfa.com` esta en Cloudflare Registrar. */
-function apiSimulada(opciones: { registrar?: 'ok' | 'permiso' } = {}) {
+function apiSimulada(
+  opciones: { registrar?: 'ok' | 'permiso' | 'transitorio' } = {}
+) {
   const llamados: string[] = [];
   globalThis.fetch = (async (url: string | URL) => {
     const u = new URL(String(url));
@@ -59,12 +61,15 @@ function apiSimulada(opciones: { registrar?: 'ok' | 'permiso' } = {}) {
         }))
       );
     }
-    if (u.pathname.endsWith('/registrar/domains')) {
+    if (u.pathname.endsWith('/registrar/registrations')) {
+      if (opciones.registrar === 'transitorio') {
+        return new Response('{}', { status: 503 });
+      }
       return opciones.registrar === 'permiso'
         ? new Response('{}', { status: 403 })
         : sobre([
             {
-              name: 'alfa.com',
+              domain_name: 'alfa.com',
               expires_at: '2027-05-01T00:00:00Z',
               auto_renew: true
             }
@@ -350,6 +355,91 @@ describe('rutas de Cloudflare', () => {
   });
 });
 
+describe('Registrar: fallos pasajeros y estables', () => {
+  const registrarLlamados = (l: string[]) =>
+    l.filter((p) => p.endsWith('/registrar/registrations')).length;
+
+  it('un fallo pasajero no se guarda en cache: el siguiente intento recupera las fechas', async () => {
+    const opciones: { registrar: 'ok' | 'permiso' | 'transitorio' } = {
+      registrar: 'transitorio'
+    };
+    const llamados = apiSimulada(opciones);
+    const { get } = await montar();
+    const primero = (await get('/cloudflare/zonas')) as {
+      zonas: { registro?: unknown }[];
+      registrarFallo: boolean;
+    };
+    assert.equal(primero.registrarFallo, true);
+    assert.ok(primero.zonas.every((z) => z.registro === undefined));
+    opciones.registrar = 'ok';
+    const segundo = (await get('/cloudflare/zonas')) as {
+      zonas: { nombre: string; registro?: { venceEn: string } }[];
+      registrarFallo: boolean;
+    };
+    assert.equal(segundo.registrarFallo, false);
+    assert.equal(
+      segundo.zonas[0]!.registro?.venceEn,
+      '2027-05-01T12:00:00.000Z'
+    );
+    assert.equal(registrarLlamados(llamados), 2);
+    // Ya con resultado bueno, ahora si queda en cache.
+    await get('/cloudflare/zonas');
+    assert.equal(registrarLlamados(llamados), 2);
+  });
+
+  it('sin permiso en el Registrar es estable y si se guarda en cache', async () => {
+    const llamados = apiSimulada({ registrar: 'permiso' });
+    const { get } = await montar();
+    const a = (await get('/cloudflare/zonas')) as { registrarFallo: boolean };
+    await get('/cloudflare/zonas');
+    assert.equal(a.registrarFallo, false);
+    assert.equal(registrarLlamados(llamados), 1);
+  });
+
+  it('importar con el Registrar caido avisa que quedaron sin fecha por eso', async () => {
+    apiSimulada({ registrar: 'transitorio' });
+    const { post, datos } = await montar();
+    const r = (await post('/cloudflare/importar', {
+      nombres: ['alfa.com']
+    })) as { sinFecha: string[]; registrarFallo: boolean };
+    assert.deepEqual(r.sinFecha, ['alfa.com']);
+    assert.equal(r.registrarFallo, true);
+    assert.equal(datos.dominios.leer()[0]!.sinFecha, true);
+  });
+
+  it('si todos traen fecha, importar no marca fallo aunque el Registrar este caido', async () => {
+    apiSimulada({ registrar: 'ok' });
+    const { post } = await montar();
+    const r = (await post('/cloudflare/importar', {
+      nombres: ['alfa.com']
+    })) as { registrarFallo: boolean };
+    assert.equal(r.registrarFallo, false);
+  });
+
+  it('la respuesta de zonas no trae la cuenta de Cloudflare', async () => {
+    apiSimulada();
+    const { get } = await montar();
+    const r = (await get('/cloudflare/zonas')) as { zonas: object[] };
+    assert.ok(r.zonas.every((z) => !('cuentaId' in z)));
+  });
+
+  it('renovar un dominio sin fecha pide capturarla primero (400)', async () => {
+    apiSimulada();
+    const { post } = await montar();
+    await post('/cloudflare/importar', { nombres: ['beta.com'] });
+    await assert.rejects(
+      () =>
+        post('/licencias/renovar', {
+          id: 'dominios-beta-com',
+          renuevaEn: '2027-01-01'
+        }),
+      (e: unknown) =>
+        estado(e) === 400 &&
+        /todavía no tiene fecha de vencimiento/.test(String(e))
+    );
+  });
+});
+
 describe('dominio sin fecha de vencimiento', () => {
   it('se valida sin fecha y sin costo, y al capturarla se quita la marca', () => {
     const sin = validarDominio(
@@ -358,7 +448,8 @@ describe('dominio sin fecha de vencimiento', () => {
     );
     assert.equal(sin.sinFecha, true);
     assert.equal(sin.venceEn, FECHA_PROVISIONAL);
-    assert.equal(sin.costo, undefined);
+    // El costo se conserva (no cuenta mientras no haya fecha).
+    assert.equal(sin.costo, 99);
     const con = validarDominio(
       { ...sin, venceEn: '2027-01-15', sinFecha: true, costo: 99 },
       'd'

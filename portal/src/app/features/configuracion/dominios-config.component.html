@@ -121,6 +121,17 @@
           name="dominio-costo"
           [ngModel]="borrador().costo"
           (ngModelChange)="cambiarBorrador({ costo: $event })" />
+        @if (
+          borrador().sinFecha &&
+          !borrador().venceEn &&
+          borrador().costo !== undefined &&
+          borrador().costo !== null &&
+          "" + borrador().costo !== ""
+        ) {
+          <span class="mt-1 block text-xs text-ink-muted">
+            El costo se guardará cuando captures la fecha.
+          </span>
+        }
       </label>
       <label>
         <span class="mb-1 block text-xs font-medium text-ink-muted"

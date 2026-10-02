@@ -92,12 +92,12 @@ export function claseVencimiento(
   switch (tonoPlazo(venceEn, ahora)) {
     case 'vencido':
     case 'hoy':
-      return 'bg-danger/10 text-danger';
+      return 'bg-danger/5 text-danger';
     case 'urgente':
     case 'pronto':
-      return 'bg-warn/10 text-warn';
+      return 'bg-warn/5 text-warn';
     default:
-      return 'bg-ok/10 text-ok';
+      return 'bg-ok/5 text-ok';
   }
 }
 

@@ -25,8 +25,8 @@ export interface Dominio {
   /**
    * Se importo (de Cloudflare) sin saber cuando vence: `venceEn` trae una
    * fecha provisional lejana (`FECHA_PROVISIONAL`). Mientras este en `true`
-   * no hay alerta de vencimiento, ni costo, ni licencia; al capturar la fecha
-   * real se quita.
+   * no hay alerta de vencimiento, ni licencia, y el costo (si lo hay) no
+   * cuenta; al capturar la fecha real se quita.
    */
   sinFecha?: true;
 }
@@ -67,8 +67,9 @@ export function validarDominio(crudo: unknown, donde: string): Dominio {
     nombre,
     registrador: texto(d['registrador']),
     venceEn: sinFecha ? FECHA_PROVISIONAL : new Date(venceEn).toISOString(),
-    // Sin fecha tampoco hay costo que mostrar hasta que se capture.
-    costo: sinFecha ? undefined : costo,
+    // Con "sin fecha" el costo se guarda pero no cuenta ni se muestra hasta
+    // que se capture la fecha.
+    costo,
     moneda: texto(d['moneda'])?.toUpperCase(),
     automatico: d['automatico'] === true,
     notas: texto(d['notas']),
@@ -80,6 +81,11 @@ function texto(valor: unknown): string | undefined {
   return typeof valor === 'string' && valor.trim() !== ''
     ? valor.trim()
     : undefined;
+}
+
+/** El id de la licencia de un dominio. */
+export function idLicenciaDeDominio(accountId: string, nombre: string): string {
+  return `${accountId}-${nombre.replace(/[^a-z0-9]+/g, '-')}`;
 }
 
 /** Los dominios como licencias anuales, para el tablero. */
@@ -95,7 +101,7 @@ export function dominiosComoLicencias(
     .map((dominio) => {
       const vence = Date.parse(dominio.venceEn);
       return {
-        id: `${accountId}-${dominio.nombre.replace(/[^a-z0-9]+/g, '-')}`,
+        id: idLicenciaDeDominio(accountId, dominio.nombre),
         provider: 'otro',
         product: `Dominio ${dominio.nombre}`,
         plan: [

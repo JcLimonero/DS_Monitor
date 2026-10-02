@@ -44,7 +44,11 @@ function simular(responder: (l: Llamado, n: number) => Response): Llamado[] {
   return llamados;
 }
 
-const sobre = (result: unknown, info?: Record<string, number>, status = 200) =>
+const sobre = (
+  result: unknown,
+  info?: Record<string, number | string>,
+  status = 200
+) =>
   new Response(
     JSON.stringify({ success: true, errors: [], result, result_info: info }),
     { status, headers: { 'content-type': 'application/json' } }
@@ -122,7 +126,8 @@ describe('zonas de Cloudflare', () => {
         () => zonas(config),
         (e: unknown) =>
           e instanceof ErrorCloudflareSinPermiso &&
-          /Zone:Read y DNS:Read/.test(e.message)
+          /Zone:Read y DNS:Read/.test(e.message) &&
+          e.message.startsWith('Cloudflare: ')
       );
     }
   });
@@ -238,53 +243,126 @@ describe('registros DNS', () => {
 });
 
 describe('Cloudflare Registrar', () => {
-  it('trae el vencimiento de los dominios registrados ahi', async () => {
-    const llamados = simular(() =>
-      sobre(
-        [
-          {
-            name: 'Dominio1.com',
-            expires_at: '2027-03-01T00:00:00Z',
-            auto_renew: true
-          },
-          { name: 'sinfecha.com' }
-        ],
-        { total_pages: 1 }
-      )
+  const ruta = `/client/v4/accounts/${CUENTA}/registrar/registrations`;
+
+  it('lee las paginas por cursor hasta que no venga cursor', async () => {
+    const llamados = simular((l) => {
+      const cursor = l.url.searchParams.get('cursor');
+      if (!cursor) {
+        return sobre(
+          [
+            {
+              domain_name: 'Dominio1.com',
+              expires_at: '2027-03-01T00:00:00Z',
+              auto_renew: true
+            },
+            { domain_name: 'sinfecha.com', expires_at: null }
+          ],
+          { cursor: 'c2' }
+        );
+      }
+      if (cursor === 'c2') {
+        return sobre(
+          [
+            // El nombre tambien puede venir como `name`.
+            { name: 'viejo.com', expires_at: '2026-12-31T23:59:59Z' },
+            { domain_name: 'rara.com', expires_at: 'no es fecha' }
+          ],
+          { cursor: 'c3' }
+        );
+      }
+      return sobre(
+        [{ domain_name: 'ultimo.mx', expires_at: '2028-01-05T10:00:00Z' }],
+        {}
+      );
+    });
+    const r = await registradas(config, [CUENTA, CUENTA]);
+    assert.equal(llamados.length, 3);
+    assert.ok(llamados.every((l) => l.url.pathname === ruta));
+    assert.deepEqual(
+      llamados.map((l) => l.url.searchParams.get('cursor')),
+      [null, 'c2', 'c3']
     );
-    const lista = await registradas(config, [CUENTA, CUENTA]);
-    assert.equal(llamados.length, 1);
-    assert.equal(
-      llamados[0]!.url.pathname,
-      `/client/v4/accounts/${CUENTA}/registrar/domains`
-    );
-    assert.deepEqual(lista, [
+    assert.equal(llamados[0]!.url.searchParams.get('per_page'), '50');
+    assert.equal(llamados[0]!.url.searchParams.get('page'), null);
+    assert.equal(r.transitorio, false);
+    assert.deepEqual(r.dominios, [
       {
         nombre: 'dominio1.com',
         venceEn: '2027-03-01T12:00:00.000Z',
         autoRenovar: true
+      },
+      {
+        nombre: 'ultimo.mx',
+        venceEn: '2028-01-05T12:00:00.000Z',
+        autoRenovar: false
+      },
+      {
+        nombre: 'viejo.com',
+        venceEn: '2026-12-31T12:00:00.000Z',
+        autoRenovar: false
       }
     ]);
   });
 
-  it('sin permiso, sin Registrar o con la red caida devuelve [] sin error', async () => {
-    simular(() => new Response('{}', { status: 403 }));
-    assert.deepEqual(await registradas(config, [CUENTA]), []);
-    simular(() => new Response('{}', { status: 404 }));
-    assert.deepEqual(await registradas(config, [CUENTA]), []);
+  it('un cursor repetido no cicla', async () => {
+    const llamados = simular(() => sobre([], { cursor: 'igual' }));
+    await registradas(config, [CUENTA]);
+    assert.equal(llamados.length, 2);
+  });
+
+  it('sin permiso o sin Registrar: [] y fallo estable (se puede cachear)', async () => {
+    for (const status of [401, 403, 404, 400, 410]) {
+      const llamados = simular(() => new Response('{}', { status }));
+      const r = await registradas(config, [CUENTA]);
+      assert.deepEqual(r, { dominios: [], transitorio: false }, `${status}`);
+      assert.equal(llamados.length, 1);
+    }
+    // Sin cuenta que consultar no hay ni peticion.
+    const llamados = simular(() => sobre([]));
+    assert.deepEqual(await registradas(config, []), {
+      dominios: [],
+      transitorio: false
+    });
+    assert.equal(llamados.length, 0);
+  });
+
+  it('red caida, 429, 5xx: fallo transitorio (no se debe cachear)', async () => {
     globalThis.fetch = (async () => {
       throw new Error('red');
     }) as typeof fetch;
-    assert.deepEqual(await registradas(config, [CUENTA]), []);
-    // Sin cuenta que consultar no hay ni peticion.
-    const llamados = simular(() => sobre([]));
-    assert.deepEqual(await registradas(config, []), []);
-    assert.equal(llamados.length, 0);
+    assert.deepEqual(await registradas(config, [CUENTA]), {
+      dominios: [],
+      transitorio: true
+    });
+    simular(
+      () => new Response('{}', { status: 429, headers: { 'retry-after': '0' } })
+    );
+    assert.equal((await registradas(config, [CUENTA])).transitorio, true);
+    simular(() => new Response('{}', { status: 500 }));
+    assert.equal((await registradas(config, [CUENTA])).transitorio, true);
+  });
+
+  it('si falla a media paginacion devuelve lo leido y avisa', async () => {
+    simular((l) =>
+      l.url.searchParams.get('cursor')
+        ? new Response('{}', { status: 503 })
+        : sobre(
+            [{ domain_name: 'a.com', expires_at: '2027-01-01T00:00:00Z' }],
+            { cursor: 'x' }
+          )
+    );
+    const r = await registradas(config, [CUENTA]);
+    assert.equal(r.transitorio, true);
+    assert.deepEqual(
+      r.dominios.map((d) => d.nombre),
+      ['a.com']
+    );
   });
 
   it('con CLOUDFLARE_ACCOUNT_ID usa esa cuenta y no las de las zonas', async () => {
     const otra = 'c'.repeat(32);
-    const llamados = simular(() => sobre([], { total_pages: 1 }));
+    const llamados = simular(() => sobre([]));
     await registradas({ ...config, accountId: otra }, [CUENTA]);
     assert.equal(llamados.length, 1);
     assert.match(llamados[0]!.url.pathname, new RegExp(otra));

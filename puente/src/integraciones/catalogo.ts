@@ -315,7 +315,7 @@ export const INTEGRACIONES: Integracion[] = [
         tipo: 'secreto',
         obligatoria: true,
         ayuda:
-          'Crea un token en dash.cloudflare.com → Mi perfil → Tokens de API con SOLO lectura: Zone → Zone → Read y Zone → DNS → Read (y Account → Registrar… si quieres las fechas de vencimiento). Con él se listan los dominios y sus subdominios; nunca se escribe en Cloudflare.'
+          'Crea un token en dash.cloudflare.com → Mi perfil → Tokens de API con SOLO lectura: Zone → Zone → Read y Zone → DNS → Read. Para las fechas de vencimiento agrega, si tu cuenta lo ofrece, Cuenta · Registrar de dominios · Leer (no se pudo confirmar el nombre exacto del permiso en la API nueva). Con el token se listan los dominios y sus subdominios; nunca se escribe en Cloudflare.'
       },
       {
         variable: 'CLOUDFLARE_ACCOUNT_ID',

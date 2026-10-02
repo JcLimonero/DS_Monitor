@@ -40,26 +40,58 @@
   </div>
 } @else {
   @if (resultado(); as r) {
-    <div class="banner banner-warn mb-4" role="status">
-      <span class="min-w-0 flex-1 break-words">
+    <div
+      class="banner mb-4 flex-wrap"
+      [class]="
+        r.sinFecha.length > 0 || r.registrarFallo
+          ? 'banner-warn'
+          : 'border-line bg-surface-muted text-ink'
+      "
+      role="status">
+      <span class="min-w-0 basis-full break-words sm:basis-0 sm:flex-1">
         {{ resumenImportacion() }}
         @if (r.invalidos.length > 0) {
           · {{ r.invalidos.length }} con un nombre que no se acepta
         }
+        @if (r.registrarFallo) {
+          <span class="mt-1 block"
+            >No se pudo consultar el Registrar de Cloudflare: se importaron sin
+            fecha. Captúrala en Dominios; si el Registrar la tiene, aparece sola
+            en la lista cuando vuelva a responder.</span
+          >
+        }
       </span>
-      @if (r.sinFecha.length > 0) {
-        <a
-          class="btn min-h-11 shrink-0"
-          routerLink="/integraciones"
-          [queryParams]="{ tab: 'dominios' }">
-          Capturar fechas
-        </a>
-      }
+      <span class="flex flex-wrap gap-2">
+        @if (r.sinFecha.length > 0) {
+          <a
+            class="btn min-h-11"
+            routerLink="/integraciones"
+            [queryParams]="{ tab: 'dominios' }">
+            Capturar fechas
+          </a>
+        }
+        <button
+          type="button"
+          class="btn min-h-11"
+          (click)="resultado.set(undefined)">
+          Entendido
+        </button>
+      </span>
+    </div>
+  }
+
+  @if (svc.registrarFallo() && !resultado()) {
+    <div class="banner banner-warn mb-4 flex-wrap" role="status">
+      <span class="min-w-0 basis-full break-words sm:basis-0 sm:flex-1"
+        >No se pudo consultar el Registrar de Cloudflare: las fechas de
+        vencimiento pueden faltar. Actualiza para reintentar.</span
+      >
       <button
         type="button"
-        class="btn min-h-11 shrink-0"
-        (click)="resultado.set(undefined)">
-        Entendido
+        class="btn min-h-11"
+        [disabled]="svc.cargando()"
+        (click)="svc.cargar(true)">
+        Reintentar
       </button>
     </div>
   }
@@ -188,7 +220,7 @@
         <li class="card overflow-hidden">
           <button
             type="button"
-            class="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+            class="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
             [attr.aria-expanded]="abierto() === d.nombre"
             [attr.aria-controls]="
               abierto() === d.nombre ? 'dominio-panel-' + i : null
@@ -296,7 +328,9 @@
                   } @else {
                     Sin fecha de vencimiento
                   }
-                  · {{ z.plan ?? "sin plan" }}
+                  @if (z.plan) {
+                    · {{ z.plan }}
+                  }
                 </span>
               </span>
             </label>
@@ -464,9 +498,15 @@
                 name="buscar-subdominio"
                 autocomplete="off"
                 placeholder="Buscar host, tipo o destino"
-                [ngModel]="busqueda()"
+                [ngModel]="entrada()"
                 (ngModelChange)="buscar($event)" />
             </label>
+            @if (busqueda()) {
+              <p class="mt-1 text-xs text-ink-muted" role="status">
+                {{ subdominios().length }}
+                {{ subdominios().length === 1 ? "coincide" : "coinciden" }}
+              </p>
+            }
             @if (subdominios().length === 0) {
               <p class="mt-3 break-words text-sm text-ink-muted">
                 Ningún subdominio coincide con «{{ busqueda() }}».
@@ -481,7 +521,7 @@
                     : 'max-h-[28rem] touch-pan-y overflow-y-auto overscroll-contain pr-1'
                 "
                 aria-label="Subdominios">
-                @for (s of subdominios(); track s.host) {
+                @for (s of visibles(); track s.host) {
                   <li class="py-2">
                     <div class="flex flex-wrap items-center gap-2">
                       <span
@@ -518,11 +558,25 @@
                             class="w-12 shrink-0 font-mono font-bold text-ink-muted"
                             >{{ r.tipo }}</span
                           >
-                          <span
-                            class="min-w-0 flex-1 truncate font-mono text-ink"
-                            [title]="r.contenido"
-                            >{{ destinoLegible(r) }}</span
-                          >
+                          <button
+                            type="button"
+                            class="min-h-11 min-w-0 flex-1 rounded-lg px-1 text-left font-mono text-ink hover:bg-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                            [class]="
+                              expandido(r.id)
+                                ? 'break-all'
+                                : 'line-clamp-1 break-all'
+                            "
+                            [attr.aria-expanded]="expandido(r.id)"
+                            [attr.aria-label]="
+                              'Ver completo el destino de ' +
+                              s.host +
+                              ' (' +
+                              r.tipo +
+                              ')'
+                            "
+                            (click)="alternarDestino(r.id)">
+                            {{ destinoLegible(r) }}
+                          </button>
                           <span class="shrink-0 text-ink-subtle">{{
                             etiquetaTtl(r.ttl)
                           }}</span>
@@ -558,6 +612,26 @@
                   </li>
                 }
               </ul>
+              @if (restantes() > 0) {
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                  <p class="min-w-0 flex-1 text-xs text-ink-muted">
+                    Se muestran {{ visibles().length }} de
+                    {{ subdominios().length }} hosts.
+                  </p>
+                  <button
+                    type="button"
+                    class="btn min-h-11"
+                    (click)="mostrarMas()">
+                    Mostrar más ({{ restantes() > 200 ? 200 : restantes() }})
+                  </button>
+                  <button
+                    type="button"
+                    class="btn min-h-11"
+                    (click)="mostrarTodos()">
+                    Mostrar todos ({{ subdominios().length }})
+                  </button>
+                </div>
+              }
             }
           }
         }
