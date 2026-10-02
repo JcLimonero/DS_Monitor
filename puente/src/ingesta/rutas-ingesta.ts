@@ -10,6 +10,7 @@ import {
 } from './ejecuciones.js';
 import { TIPOS_INGESTA, type TipoIngesta } from './modelos.js';
 import {
+  esJuntaDeIngesta,
   MAXIMO_HISTORIAL,
   normalizarCrm,
   normalizarDespliegues,
@@ -162,6 +163,14 @@ export function servirRecibido(
       `El último envío de "${cliente.nombre}" es de hace ${enPalabras(edadSegundos)} y se esperaba uno cada ${enPalabras(cliente.vigenciaSegundos)}.`,
       503
     );
+  }
+  // Lo ya guardado tambien se limpia al servir: asi las juntas que entraron
+  // antes de la regla desaparecen sin esperar al siguiente envio.
+  if (tipo === 'pendientes') {
+    return snapshot.elementos.filter((e) => {
+      const d = (e as { description?: unknown }).description;
+      return !esJuntaDeIngesta(typeof d === 'string' ? d : '');
+    });
   }
   return snapshot.elementos;
 }

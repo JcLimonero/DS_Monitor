@@ -103,43 +103,70 @@ const PRIORIDADES = ['baja', 'media', 'alta', 'urgente'] as const;
 /** De donde puede decir un emisor que salio el pendiente. */
 const ORIGENES_TAREA = ['ops', 'correo'] as const;
 
+/**
+ * Lo que manda un emisor como "pendiente" pero en realidad es una junta:
+ * su descripcion empieza con "Junta el jueves 29/10 de 10:00 a 12:00
+ * (CDMX)". Las juntas ya se ven en Agenda; en Pendientes solo estorban.
+ */
+const DESCRIPCION_DE_JUNTA =
+  /^\s*(junta|reuni[oó]n|cita|llamada)\b.{0,60}?\b\d{1,2}[:.]\d{2}\b/i;
+
+export function esJuntaDeIngesta(descripcion = ''): boolean {
+  return DESCRIPCION_DE_JUNTA.test(descripcion);
+}
+
 export function normalizarPendientes(
   datos: unknown,
   origen: string,
   accountId: string,
   ahora = new Date()
 ): TaskItem[] {
-  return listaDeObjetos(datos, '"datos"').map((crudo, indice) => {
-    const entrante = crudo as unknown as PendienteEntrante;
-    const donde = `datos[${indice}]`;
-    return {
-      id: idConOrigen(origen, textoObligatorio(entrante.id, `${donde}.id`)),
-      title: textoObligatorio(entrante.titulo, `${donde}.titulo`),
-      description: textoOpcional(entrante.descripcion, `${donde}.descripcion`),
-      status:
-        opcionOpcional(entrante.estado, ESTADOS_TAREA, `${donde}.estado`) ??
-        'pendiente',
-      priority:
-        opcionOpcional(entrante.prioridad, PRIORIDADES, `${donde}.prioridad`) ??
-        'media',
-      dueDate: fechaOpcional(entrante.venceEn, `${donde}.venceEn`),
-      assignee: persona(entrante.responsable, `${donde}.responsable`),
-      accountId,
-      origin:
-        opcionOpcional(entrante.origen, ORIGENES_TAREA, `${donde}.origen`) ??
-        'ops',
-      project: textoOpcional(entrante.proyecto, `${donde}.proyecto`),
-      url: textoOpcional(entrante.url, `${donde}.url`),
-      tags: Array.isArray(entrante.etiquetas)
-        ? entrante.etiquetas.map((etiqueta, i) =>
-            textoObligatorio(etiqueta, `${donde}.etiquetas[${i}]`)
-          )
-        : [],
-      updatedAt:
-        fechaOpcional(entrante.actualizadoEn, `${donde}.actualizadoEn`) ??
-        ahora.toISOString()
-    };
-  });
+  // Las juntas que algun emisor manda como pendiente se quedan fuera: ya
+  // estan en Agenda y en Pendientes solo hacen ruido.
+  return listaDeObjetos(datos, '"datos"')
+    .filter(
+      (crudo) =>
+        !esJuntaDeIngesta(
+          typeof crudo['descripcion'] === 'string' ? crudo['descripcion'] : ''
+        )
+    )
+    .map((crudo, indice) => {
+      const entrante = crudo as unknown as PendienteEntrante;
+      const donde = `datos[${indice}]`;
+      return {
+        id: idConOrigen(origen, textoObligatorio(entrante.id, `${donde}.id`)),
+        title: textoObligatorio(entrante.titulo, `${donde}.titulo`),
+        description: textoOpcional(
+          entrante.descripcion,
+          `${donde}.descripcion`
+        ),
+        status:
+          opcionOpcional(entrante.estado, ESTADOS_TAREA, `${donde}.estado`) ??
+          'pendiente',
+        priority:
+          opcionOpcional(
+            entrante.prioridad,
+            PRIORIDADES,
+            `${donde}.prioridad`
+          ) ?? 'media',
+        dueDate: fechaOpcional(entrante.venceEn, `${donde}.venceEn`),
+        assignee: persona(entrante.responsable, `${donde}.responsable`),
+        accountId,
+        origin:
+          opcionOpcional(entrante.origen, ORIGENES_TAREA, `${donde}.origen`) ??
+          'ops',
+        project: textoOpcional(entrante.proyecto, `${donde}.proyecto`),
+        url: textoOpcional(entrante.url, `${donde}.url`),
+        tags: Array.isArray(entrante.etiquetas)
+          ? entrante.etiquetas.map((etiqueta, i) =>
+              textoObligatorio(etiqueta, `${donde}.etiquetas[${i}]`)
+            )
+          : [],
+        updatedAt:
+          fechaOpcional(entrante.actualizadoEn, `${donde}.actualizadoEn`) ??
+          ahora.toISOString()
+      };
+    });
 }
 
 // --- Juntas ---

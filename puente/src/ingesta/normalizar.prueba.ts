@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   estadoDespliegueEntrante,
   etapaCrm,
+  esJuntaDeIngesta,
   normalizarJuntas,
   normalizarLicencias,
   normalizarPendientes,
@@ -210,5 +211,53 @@ describe('normalizar lo recibido', () => {
     // Sin dato de integración en el PR, no se asume que pasó.
     assert.equal(repo?.openPullRequests[0]?.checkState, 'sin_revision');
     assert.equal(repo?.openPullRequests[0]?.draft, false);
+  });
+});
+
+describe('esJuntaDeIngesta', () => {
+  it('reconoce lo que en realidad es una junta', () => {
+    assert.ok(
+      esJuntaDeIngesta('Junta el miércoles 28/10 de 10:00 a 12:00 (CDMX).')
+    );
+    assert.ok(
+      esJuntaDeIngesta(
+        'Junta el viernes 02/10 de 11:00 a 11:45 (CDMX). Organiza: Juan Carlos.'
+      )
+    );
+    assert.ok(esJuntaDeIngesta('Reunión el lunes 05/10 de 09:30 a 10:00.'));
+  });
+
+  it('deja pasar un pendiente que solo menciona una junta', () => {
+    assert.equal(
+      esJuntaDeIngesta(
+        'Preparar el material para la junta del jueves a las 10:00'
+      ),
+      false
+    );
+    assert.equal(esJuntaDeIngesta('Llamar al proveedor de refacciones'), false);
+    assert.equal(esJuntaDeIngesta(''), false);
+  });
+
+  it('normalizarPendientes deja fuera las juntas', () => {
+    const tareas = normalizarPendientes(
+      [
+        {
+          id: '1',
+          titulo: 'MIRA Development',
+          descripcion: 'Junta el jueves 29/10 de 10:00 a 12:00 (CDMX).'
+        },
+        {
+          id: '2',
+          titulo: 'Revisar cotización',
+          descripcion: 'Antes del viernes'
+        }
+      ],
+      'grok-bot',
+      'ops'
+    );
+    assert.deepEqual(
+      tareas.map((t) => t.title),
+      ['Revisar cotización']
+    );
   });
 });
