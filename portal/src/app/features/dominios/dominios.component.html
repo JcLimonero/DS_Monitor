@@ -1,0 +1,641 @@
+<pt-page-header title="Dominios" [subtitle]="subtitulo()">
+  <div class="flex flex-wrap items-center gap-2">
+    @if (svc.cloudflare() === "conectado") {
+      <button
+        type="button"
+        class="btn btn-primary min-h-11"
+        aria-haspopup="dialog"
+        (click)="abrirImportar()">
+        <pt-icon name="mas" class="h-4 w-4" />
+        Importar de Cloudflare
+      </button>
+    }
+    @if (svc.disponible) {
+      <button
+        type="button"
+        class="btn min-h-11 min-w-11 px-2"
+        title="Volver a pedir los dominios"
+        aria-label="Actualizar dominios"
+        [disabled]="svc.cargando()"
+        (click)="svc.cargar(true)">
+        <pt-icon name="refrescar" class="h-4 w-4" />
+      </button>
+    }
+    <a
+      class="btn min-h-11"
+      routerLink="/integraciones"
+      [queryParams]="{ tab: 'dominios' }"
+      title="Captura fechas, costos y registrador a mano">
+      Configurar
+    </a>
+  </div>
+</pt-page-header>
+
+@if (!svc.disponible) {
+  <div class="card">
+    <pt-empty-state
+      icon="globo"
+      title="Los dominios viven en el puente"
+      hint="Esta copia del portal no está conectada a un puente. Abre la aplicación publicada para ver tus dominios y sus subdominios." />
+  </div>
+} @else {
+  @if (resultado(); as r) {
+    <div
+      class="banner mb-4 flex-wrap"
+      [class]="
+        r.sinFecha.length > 0 || r.registrarFallo
+          ? 'banner-warn'
+          : 'border-line bg-surface-muted text-ink'
+      "
+      role="status">
+      <span class="min-w-0 basis-full break-words sm:basis-0 sm:flex-1">
+        {{ resumenImportacion() }}
+        @if (r.invalidos.length > 0) {
+          · {{ r.invalidos.length }} con un nombre que no se acepta
+        }
+        @if (r.registrarFallo) {
+          <span class="mt-1 block"
+            >No se pudo consultar el Registrar de Cloudflare: se importaron sin
+            fecha. Captúrala en Dominios; si el Registrar la tiene, aparece sola
+            en la lista cuando vuelva a responder.</span
+          >
+        }
+      </span>
+      <span class="flex flex-wrap gap-2">
+        @if (r.sinFecha.length > 0) {
+          <a
+            class="btn min-h-11"
+            routerLink="/integraciones"
+            [queryParams]="{ tab: 'dominios' }">
+            Capturar fechas
+          </a>
+        }
+        <button
+          type="button"
+          class="btn min-h-11"
+          (click)="resultado.set(undefined)">
+          Entendido
+        </button>
+      </span>
+    </div>
+  }
+
+  @if (svc.registrarFallo() && !resultado()) {
+    <div class="banner banner-warn mb-4 flex-wrap" role="status">
+      <span class="min-w-0 basis-full break-words sm:basis-0 sm:flex-1"
+        >No se pudo consultar el Registrar de Cloudflare: las fechas de
+        vencimiento pueden faltar. Actualiza para reintentar.</span
+      >
+      <button
+        type="button"
+        class="btn min-h-11"
+        [disabled]="svc.cargando()"
+        (click)="svc.cargar(true)">
+        Reintentar
+      </button>
+    </div>
+  }
+
+  @switch (svc.cloudflare()) {
+    @case ("sin-configurar") {
+      @if (lista().length > 0) {
+        <div class="banner banner-warn mb-4">
+          <span class="min-w-0 flex-1"
+            >Cloudflare no está conectado: sin él no se ven los
+            subdominios.</span
+          >
+          <a
+            class="btn min-h-11 shrink-0"
+            routerLink="/integraciones"
+            [queryParams]="{ tab: 'servicios' }"
+            >Conectar</a
+          >
+        </div>
+      }
+    }
+    @case ("sin-permiso") {
+      <div class="banner banner-warn mb-4">
+        <span class="min-w-0 flex-1 break-words">{{
+          svc.mensajeCloudflare()
+        }}</span>
+        <a
+          class="btn min-h-11 shrink-0"
+          routerLink="/integraciones"
+          [queryParams]="{ tab: 'servicios' }"
+          >Revisar token</a
+        >
+      </div>
+    }
+    @case ("error") {
+      <div class="banner banner-danger mb-4">
+        <span class="min-w-0 flex-1 break-words"
+          >No se pudo leer Cloudflare: {{ svc.mensajeCloudflare() }}</span
+        >
+        <button
+          type="button"
+          class="btn min-h-11 shrink-0"
+          (click)="svc.cargar(true)">
+          Reintentar
+        </button>
+      </div>
+    }
+  }
+
+  @if (svc.error(); as error) {
+    <div class="banner banner-danger mb-4">
+      <span class="min-w-0 flex-1 break-words"
+        >No se pudieron leer los dominios capturados: {{ error }}</span
+      >
+    </div>
+  }
+
+  @if (!svc.cargado()) {
+    <p class="text-sm text-ink-muted" role="status">Cargando dominios…</p>
+  } @else if (lista().length === 0) {
+    <div class="card">
+      @switch (svc.cloudflare()) {
+        @case ("sin-configurar") {
+          <pt-empty-state
+            icon="globo"
+            title="Cloudflare no está conectado"
+            hint="Conéctalo para traer tus dominios y ver sus subdominios. También puedes capturar los dominios a mano.">
+            <a
+              class="btn btn-primary min-h-11"
+              routerLink="/integraciones"
+              [queryParams]="{ tab: 'servicios' }"
+              >Conectar</a
+            >
+            <a
+              class="btn min-h-11"
+              routerLink="/integraciones"
+              [queryParams]="{ tab: 'dominios' }"
+              >Capturar a mano</a
+            >
+          </pt-empty-state>
+        }
+        @case ("sin-permiso") {
+          <pt-empty-state
+            icon="alerta"
+            title="El token de Cloudflare no tiene permiso"
+            hint="Necesita Zone → Zone → Read y Zone → DNS → Read, solo lectura.">
+            <a
+              class="btn btn-primary min-h-11"
+              routerLink="/integraciones"
+              [queryParams]="{ tab: 'servicios' }"
+              >Revisar token</a
+            >
+          </pt-empty-state>
+        }
+        @case ("conectado") {
+          <pt-empty-state
+            icon="globo"
+            title="Este token de Cloudflare no ve ningún dominio"
+            hint="Revisa que el token tenga acceso a las zonas (o el ID de la cuenta, si lo pusiste) o captura los dominios a mano.">
+            <a
+              class="btn min-h-11"
+              routerLink="/integraciones"
+              [queryParams]="{ tab: 'dominios' }"
+              >Capturar a mano</a
+            >
+          </pt-empty-state>
+        }
+        @default {
+          <pt-empty-state
+            icon="globo"
+            title="Todavía no hay dominios"
+            hint="Captura el primero en Integraciones → Dominios.">
+            <a
+              class="btn min-h-11"
+              routerLink="/integraciones"
+              [queryParams]="{ tab: 'dominios' }"
+              >Configurar</a
+            >
+          </pt-empty-state>
+        }
+      }
+    </div>
+  } @else {
+    <ul class="space-y-2" aria-label="Dominios">
+      @for (d of lista(); track d.nombre; let i = $index) {
+        <li class="card overflow-hidden">
+          <button
+            type="button"
+            class="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+            [attr.aria-expanded]="abierto() === d.nombre"
+            [attr.aria-controls]="
+              abierto() === d.nombre ? 'dominio-panel-' + i : null
+            "
+            (click)="alternar(d)">
+            <pt-icon name="globo" class="h-5 w-5 text-ink-subtle" />
+            <span class="min-w-0 flex-1">
+              <span
+                class="block truncate font-mono text-sm font-semibold text-ink"
+                [title]="d.nombre"
+                >{{ d.nombre }}</span
+              >
+              <span class="mt-1 flex flex-wrap items-center gap-1.5">
+                @if (d.zona) {
+                  <span class="chip bg-brand-soft text-ink">Cloudflare</span>
+                }
+                @if (d.manual) {
+                  <span class="chip bg-surface-muted text-ink-muted"
+                    >Capturado</span
+                  >
+                }
+                @if (estadoZona(d); as estado) {
+                  <span class="chip" [class]="claseTono(estado.tono)">{{
+                    estado.texto
+                  }}</span>
+                }
+                <span class="chip" [class]="claseVencimiento(d.venceEn)">{{
+                  textoVencimiento(d.venceEn)
+                }}</span>
+              </span>
+              @if (detalle(d); as texto) {
+                <span class="mt-1 block truncate text-xs text-ink-muted">{{
+                  texto
+                }}</span>
+              }
+            </span>
+            <pt-icon
+              name="siguiente"
+              class="h-4 w-4 text-ink-subtle transition-transform"
+              [class.rotate-90]="abierto() === d.nombre" />
+          </button>
+          @if (ancho() && abierto() === d.nombre) {
+            <div class="border-t border-line" [id]="'dominio-panel-' + i">
+              <div class="p-4">
+                <ng-container
+                  *ngTemplateOutlet="
+                    panel;
+                    context: { $implicit: d, dialogo: false }
+                  " />
+              </div>
+            </div>
+          }
+        </li>
+      }
+    </ul>
+  }
+}
+
+@if (!ancho() && dominioAbierto(); as d) {
+  <pt-dialogo [titulo]="d.nombre" [enfocar]="false" (cerrar)="cerrar()">
+    <ng-container
+      *ngTemplateOutlet="panel; context: { $implicit: d, dialogo: true }" />
+  </pt-dialogo>
+}
+
+@if (importando()) {
+  <pt-dialogo titulo="Importar de Cloudflare" (cerrar)="cerrarImportar()">
+    @if (candidatos().length === 0) {
+      <p class="text-sm text-ink-muted">
+        Todos los dominios de Cloudflare ya están en tu lista.
+      </p>
+    } @else {
+      <p class="mb-3 text-sm text-ink-muted">
+        Elige los dominios que quieres llevar a tu lista. La fecha de
+        vencimiento solo la da Cloudflare Registrar; los demás se importan sin
+        fecha y la capturas después.
+      </p>
+      <label
+        class="flex min-h-11 cursor-pointer items-center gap-3 border-b border-line text-sm font-semibold text-ink">
+        <input
+          type="checkbox"
+          class="h-5 w-5 shrink-0 rounded border-line"
+          [checked]="todasMarcadas()"
+          (change)="marcarTodas($event)" />
+        Seleccionar todos ({{ candidatos().length }})
+      </label>
+      <ul class="divide-y divide-line">
+        @for (z of candidatos(); track z.id) {
+          <li>
+            <label class="flex min-h-11 cursor-pointer items-center gap-3 py-2">
+              <input
+                type="checkbox"
+                class="h-5 w-5 shrink-0 rounded border-line"
+                [checked]="seleccion().has(z.nombre)"
+                (change)="marcar(z.nombre, $event)" />
+              <span class="min-w-0 flex-1">
+                <span
+                  class="block truncate font-mono text-sm font-semibold text-ink"
+                  [title]="z.nombre"
+                  >{{ z.nombre }}</span
+                >
+                <span class="block truncate text-xs text-ink-muted">
+                  @if (z.registro) {
+                    Vence {{ z.registro.venceEn | dia }}
+                  } @else {
+                    Sin fecha de vencimiento
+                  }
+                  @if (z.plan) {
+                    · {{ z.plan }}
+                  }
+                </span>
+              </span>
+            </label>
+          </li>
+        }
+      </ul>
+    }
+    @if (errorImportar(); as error) {
+      <p class="banner banner-danger mt-3 break-words" role="alert">
+        {{ error }}
+      </p>
+    }
+    <div class="dialogo-pie">
+      <button type="button" class="btn min-h-11" (click)="cerrarImportar()">
+        Cancelar
+      </button>
+      @if (candidatos().length > 0) {
+        <button
+          type="button"
+          class="btn btn-primary ml-auto min-h-11"
+          [disabled]="seleccion().size === 0 || importandoOcupado()"
+          (click)="importar()">
+          @if (importandoOcupado()) {
+            Importando…
+          } @else {
+            Importar {{ seleccion().size }}
+          }
+        </button>
+      }
+    </div>
+  </pt-dialogo>
+}
+
+<!--
+  El detalle de un dominio y sus subdominios. Se pinta dentro de la lista
+  (escritorio) o dentro de una hoja (celular y tableta vertical); en la hoja es
+  la hoja la que se desplaza, en la lista lo hace la lista de subdominios.
+-->
+<ng-template #panel let-d let-dialogo="dialogo">
+  <dl class="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+    @if (d.manual) {
+      <div class="min-w-0">
+        <dt class="text-xs text-ink-subtle">Vencimiento</dt>
+        <dd class="text-ink">
+          @if (d.manual.sinFecha) {
+            Sin fecha: captúrala en Integraciones → Dominios.
+          } @else {
+            {{ d.manual.venceEn | dia }}
+          }
+        </dd>
+      </div>
+      @if (!d.manual.sinFecha && d.manual.costo !== undefined) {
+        <div class="min-w-0">
+          <dt class="text-xs text-ink-subtle">Renovación</dt>
+          <dd class="text-ink">
+            {{ d.manual.costo | number: "1.0-2" }}
+            {{ d.manual.moneda ?? "MXN" }}
+          </dd>
+        </div>
+      }
+      @if (d.manual.notas) {
+        <div class="min-w-0 sm:col-span-2">
+          <dt class="text-xs text-ink-subtle">Notas</dt>
+          <dd class="break-words text-ink">{{ d.manual.notas }}</dd>
+        </div>
+      }
+    } @else if (d.zona?.registro; as registro) {
+      <div class="min-w-0">
+        <dt class="text-xs text-ink-subtle">Vencimiento (Cloudflare)</dt>
+        <dd class="text-ink">{{ registro.venceEn | dia }}</dd>
+      </div>
+    } @else {
+      <div class="min-w-0 sm:col-span-2">
+        <dt class="text-xs text-ink-subtle">Vencimiento</dt>
+        <dd class="text-ink-muted">
+          Sin fecha de vencimiento. Importa el dominio para capturarla.
+        </dd>
+      </div>
+    }
+    @if (d.zona; as zona) {
+      @if (zona.servidoresDeNombres.length > 0) {
+        <div class="min-w-0 sm:col-span-2">
+          <dt class="text-xs text-ink-subtle">Servidores de nombres</dt>
+          <dd class="break-all font-mono text-xs text-ink">
+            {{ zona.servidoresDeNombres.join(" · ") }}
+          </dd>
+        </div>
+      }
+    }
+  </dl>
+
+  <div class="mt-4 border-t border-line pt-4">
+    @if (!d.zona) {
+      <p class="text-sm text-ink-muted">
+        Este dominio no está en Cloudflare, así que no hay subdominios que
+        mostrar.
+        @if (svc.cloudflare() === "sin-configurar") {
+          <a
+            class="font-semibold text-brand underline"
+            routerLink="/integraciones"
+            [queryParams]="{ tab: 'servicios' }"
+            >Conectar Cloudflare</a
+          >
+        }
+      </p>
+    } @else {
+      <div class="flex flex-wrap items-center gap-2">
+        <h3 class="min-w-0 flex-1 text-sm font-semibold text-ink">
+          Subdominios
+          @if (subs(); as estado) {
+            @if (estado.tipo === "listo") {
+              <span class="font-normal text-ink-muted">
+                · {{ plural(estado.datos.subdominios.length, "host", "hosts") }}
+                ·
+                {{ plural(estado.datos.registros, "registro") }}</span
+              >
+            }
+          }
+        </h3>
+        <button
+          type="button"
+          class="btn min-h-11 min-w-11 px-2"
+          title="Volver a pedir los registros DNS"
+          aria-label="Actualizar subdominios"
+          [disabled]="subs()?.tipo === 'cargando'"
+          (click)="actualizarSubdominios(d)">
+          <pt-icon name="refrescar" class="h-4 w-4" />
+        </button>
+      </div>
+
+      @switch (subs()?.tipo) {
+        @case ("cargando") {
+          <p class="mt-3 text-sm text-ink-muted" role="status">
+            Leyendo el DNS en Cloudflare…
+          </p>
+        }
+        @case ("error") {
+          <p class="banner banner-danger mt-3 break-words" role="alert">
+            {{ $any(subs()).mensaje }}
+          </p>
+        }
+        @case ("listo") {
+          @if ($any(subs()).datos.truncado) {
+            <p class="banner banner-warn mt-3 break-words">
+              Cloudflare reporta {{ $any(subs()).datos.total }} registros; se
+              muestran los primeros {{ $any(subs()).datos.registros }}.
+            </p>
+          }
+          @if ($any(subs()).datos.subdominios.length === 0) {
+            <p class="mt-3 text-sm text-ink-muted">
+              Esta zona no tiene registros DNS.
+            </p>
+          } @else {
+            <label
+              class="mt-3 block"
+              [class]="
+                dialogo
+                  ? 'sticky top-0 z-10 -mx-1 bg-surface px-1 pb-2 pt-1'
+                  : ''
+              ">
+              <span class="sr-only">Buscar subdominios</span>
+              <input
+                class="field min-h-11"
+                type="search"
+                name="buscar-subdominio"
+                autocomplete="off"
+                placeholder="Buscar host, tipo o destino"
+                [ngModel]="entrada()"
+                (ngModelChange)="buscar($event)" />
+            </label>
+            @if (busqueda()) {
+              <p class="mt-1 text-xs text-ink-muted" role="status">
+                {{ subdominios().length }}
+                {{ subdominios().length === 1 ? "coincide" : "coinciden" }}
+              </p>
+            }
+            @if (subdominios().length === 0) {
+              <p class="mt-3 break-words text-sm text-ink-muted">
+                Ningún subdominio coincide con «{{ busqueda() }}».
+              </p>
+            } @else {
+              <ul
+                #listaSubs
+                class="mt-2 divide-y divide-line"
+                [class]="
+                  dialogo
+                    ? ''
+                    : 'max-h-[28rem] touch-pan-y overflow-y-auto overscroll-contain pr-1'
+                "
+                aria-label="Subdominios">
+                @for (s of visibles(); track s.host) {
+                  <li class="py-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span
+                        class="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-ink"
+                        [title]="s.fqdn"
+                        >{{ s.host }}</span
+                      >
+                      <span class="chip bg-surface-muted text-ink-muted">{{
+                        plural(s.total, "registro")
+                      }}</span>
+                      @if (s.proxied) {
+                        <span
+                          class="chip bg-accent-soft text-ink"
+                          title="Detrás del proxy de Cloudflare"
+                          >Proxy</span
+                        >
+                      }
+                      @if (urlParaAbrir(s); as url) {
+                        <a
+                          class="btn min-h-11 px-3 text-xs"
+                          [href]="url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          [attr.aria-label]="'Abrir ' + s.fqdn">
+                          <pt-icon name="externo" class="h-3.5 w-3.5" />
+                          Abrir
+                        </a>
+                      }
+                    </div>
+                    <ul class="mt-1 space-y-0.5 border-l border-line pl-3">
+                      @for (r of s.registros; track r.id) {
+                        <li class="flex items-center gap-2 text-xs">
+                          <span
+                            class="w-12 shrink-0 font-mono font-bold text-ink-muted"
+                            >{{ r.tipo }}</span
+                          >
+                          <button
+                            type="button"
+                            class="min-h-11 min-w-0 flex-1 rounded-lg px-1 text-left font-mono text-ink hover:bg-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                            [class]="
+                              expandido(r.id)
+                                ? 'break-all'
+                                : 'line-clamp-1 break-all'
+                            "
+                            [attr.aria-expanded]="expandido(r.id)"
+                            [attr.aria-label]="
+                              'Ver completo el destino de ' +
+                              s.host +
+                              ' (' +
+                              r.tipo +
+                              ')'
+                            "
+                            (click)="alternarDestino(r.id)">
+                            {{ destinoLegible(r) }}
+                          </button>
+                          <span class="shrink-0 text-ink-subtle">{{
+                            etiquetaTtl(r.ttl)
+                          }}</span>
+                          @if (r.proxied) {
+                            <span
+                              class="chip shrink-0 bg-accent-soft text-ink"
+                              title="Detrás del proxy de Cloudflare"
+                              >Proxy</span
+                            >
+                          }
+                          <button
+                            type="button"
+                            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-subtle hover:bg-surface-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                            [attr.aria-label]="
+                              'Copiar el destino de ' +
+                              s.host +
+                              ' (' +
+                              r.tipo +
+                              ')'
+                            "
+                            title="Copiar destino"
+                            (click)="copiar(r)">
+                            <pt-icon
+                              [name]="copiado() === r.id ? 'ok' : 'copiar'"
+                              class="h-4 w-4" />
+                          </button>
+                          @if (r.comentario) {
+                            <span class="sr-only">{{ r.comentario }}</span>
+                          }
+                        </li>
+                      }
+                    </ul>
+                  </li>
+                }
+              </ul>
+              @if (restantes() > 0) {
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                  <p class="min-w-0 flex-1 text-xs text-ink-muted">
+                    Se muestran {{ visibles().length }} de
+                    {{ subdominios().length }} hosts.
+                  </p>
+                  <button
+                    type="button"
+                    class="btn min-h-11"
+                    (click)="mostrarMas()">
+                    Mostrar más ({{ restantes() > 200 ? 200 : restantes() }})
+                  </button>
+                  <button
+                    type="button"
+                    class="btn min-h-11"
+                    (click)="mostrarTodos()">
+                    Mostrar todos ({{ subdominios().length }})
+                  </button>
+                </div>
+              }
+            }
+          }
+        }
+      }
+    }
+  </div>
+</ng-template>

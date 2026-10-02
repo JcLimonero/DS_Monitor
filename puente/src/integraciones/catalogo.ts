@@ -305,6 +305,37 @@ export const INTEGRACIONES: Integracion[] = [
     }
   },
   {
+    id: 'cloudflare',
+    etiqueta: 'Cloudflare (dominios y subdominios)',
+    kind: 'cloudflare',
+    campos: [
+      {
+        variable: 'CLOUDFLARE_API_TOKEN',
+        etiqueta: 'API token',
+        tipo: 'secreto',
+        obligatoria: true,
+        ayuda:
+          'Crea un token en dash.cloudflare.com → Mi perfil → Tokens de API con SOLO lectura: Zone → Zone → Read y Zone → DNS → Read. Para las fechas de vencimiento agrega, si tu cuenta lo ofrece, Cuenta · Registrar de dominios · Leer (no se pudo confirmar el nombre exacto del permiso en la API nueva). Con el token se listan los dominios y sus subdominios; nunca se escribe en Cloudflare.'
+      },
+      {
+        variable: 'CLOUDFLARE_ACCOUNT_ID',
+        etiqueta: 'ID de la cuenta (opcional)',
+        tipo: 'texto',
+        ayuda:
+          'Solo si el token ve varias cuentas y quieres los dominios de una. Se copia de la URL del panel de Cloudflare.'
+      }
+    ],
+    probar: async (config) => {
+      const { zonas } = await import('../proveedores/cloudflare.js');
+      const lista = await zonas(
+        exigir(config.cloudflare, 'el token de Cloudflare')
+      );
+      return lista.length === 0
+        ? 'Cloudflare responde, pero el token no ve ningún dominio.'
+        : `${lista.length} ${lista.length === 1 ? 'dominio leído' : 'dominios leídos'}.`;
+    }
+  },
+  {
     id: 'monitoreo',
     etiqueta: 'Monitoreo',
     kind: 'monitor',

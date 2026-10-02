@@ -48,7 +48,8 @@ Hay además una sección de **Pendientes personales** (`/personales`, guardados
 en el navegador), la vista **Equipo** toma la lista que se administra en
 Ajustes → Equipo, y Ajustes → Dominios lleva el control de los dominios
 registrados (vencimiento y costo), que salen en Licencias como renovaciones
-anuales. Con el acceso por código configurado en el puente, el portal manda a
+anuales. El módulo **Dominios** (`/dominios`) junta esos dominios con los de
+Cloudflare (si está conectado) y, al tocar uno, muestra sus subdominios. Con el acceso por código configurado en el puente, el portal manda a
 `/acceso` cuando el puente contesta 401.
 
 Las integraciones de Claude, Cursor y Figma arrancan apagadas: sus datos de

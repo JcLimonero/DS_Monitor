@@ -36,10 +36,13 @@ let seq = 0;
       class="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 lg:items-center lg:p-6"
       (click)="pedirCerrar()">
       <div
-        class="card flex h-full w-full max-w-2xl flex-col rounded-none lg:h-auto lg:max-h-[90dvh] lg:rounded-xl"
+        class="card flex h-full w-full max-w-2xl outline-none flex-col rounded-none lg:h-auto lg:max-h-[90dvh] lg:rounded-xl"
         role="dialog"
         aria-modal="true"
+        tabindex="-1"
         [attr.aria-labelledby]="tituloId"
+        (keydown.tab)="atraparTab($event, false)"
+        (keydown.shift.tab)="atraparTab($event, true)"
         (click)="$event.stopPropagation()">
         <header
           class="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2 lg:px-5">
@@ -67,6 +70,11 @@ let seq = 0;
 })
 export class DialogoComponent {
   readonly titulo = input.required<string>();
+  /**
+   * Enfoca el primer campo al abrir. Se apaga cuando el primero es un
+   * buscador: en una tableta abriría el teclado antes de ver nada.
+   */
+  readonly enfocar = input(true);
   readonly cerrar = output<void>();
 
   readonly tituloId = `dialogo-titulo-${++seq}`;
@@ -80,13 +88,51 @@ export class DialogoComponent {
       // Angular solo quita la raiz de ese componente y este nodo se quedaria.
       host.nativeElement.remove();
     });
+    const previo = document.activeElement as HTMLElement | null;
+    inject(DestroyRef).onDestroy(() => previo?.focus?.());
     afterNextRender(() => {
       document.body.appendChild(host.nativeElement);
+      if (!this.enfocar()) {
+        // Sin campo al que dar el foco, se lo queda el diálogo: así Tab ya
+        // no sigue en la página de atrás.
+        (
+          host.nativeElement.querySelector('[role=dialog]') as HTMLElement
+        )?.focus();
+        return;
+      }
       const primero = host.nativeElement.querySelector(
         'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
       ) as HTMLElement | null;
       primero?.focus();
     });
+  }
+
+  /** Tab y Shift+Tab dan la vuelta dentro del diálogo, sin salir a la página. */
+  atraparTab(evento: Event, atras: boolean): void {
+    const caja = (evento.currentTarget as HTMLElement) ?? undefined;
+    const lista = [
+      ...caja.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    ].filter((e) => e.offsetParent !== null || e === document.activeElement);
+    if (lista.length === 0) {
+      evento.preventDefault();
+      caja.focus();
+      return;
+    }
+    const primero = lista[0];
+    const ultimo = lista[lista.length - 1];
+    const activo = document.activeElement;
+    if (atras && (activo === primero || activo === caja)) {
+      evento.preventDefault();
+      ultimo.focus();
+    } else if (!atras && activo === ultimo) {
+      evento.preventDefault();
+      primero.focus();
+    } else if (!caja.contains(activo)) {
+      evento.preventDefault();
+      primero.focus();
+    }
   }
 
   pedirCerrar(): void {

@@ -58,6 +58,81 @@ export interface Dominio {
   moneda?: string;
   automatico?: boolean;
   notas?: string;
+  /**
+   * Se importó de Cloudflare sin saber cuándo vence: `venceEn` es un relleno
+   * lejano que no se debe mostrar ni contar. Se quita al capturar la fecha.
+   */
+  sinFecha?: true;
+}
+
+/** Un dominio (zona) de Cloudflare, tal como lo lee el puente. */
+export interface ZonaCloudflare {
+  id: string;
+  nombre: string;
+  /** active, pending, initializing, moved... */
+  estado: string;
+  plan?: string;
+  servidoresDeNombres: string[];
+  pausada: boolean;
+  /** Solo si está registrado en Cloudflare Registrar. */
+  registro?: { venceEn: string; autoRenovar: boolean };
+}
+
+export interface RespuestaZonas {
+  zonas: ZonaCloudflare[];
+  /** El Registrar contestó con fechas de vencimiento. */
+  conFechas: boolean;
+  /** No se pudo consultar el Registrar (fallo pasajero). */
+  registrarFallo?: boolean;
+  /** El token no alcanza: se explica en pantalla, no es una falla. */
+  problema?: { tipo: 'sin-permiso'; mensaje: string };
+}
+
+export interface RegistroDns {
+  id: string;
+  nombre: string;
+  tipo: string;
+  contenido: string;
+  proxied: boolean;
+  /** 1 es "automático" en Cloudflare. */
+  ttl: number;
+  comentario?: string;
+  /** Solo MX y SRV. */
+  prioridad?: number;
+}
+
+/** Un host de la zona con todos sus registros. */
+export interface Subdominio {
+  /** `@` es el dominio mismo; `*` el comodín. */
+  host: string;
+  fqdn: string;
+  registros: RegistroDns[];
+  total: number;
+  proxied: boolean;
+  /** Tiene A, AAAA o CNAME: se puede abrir en el navegador. */
+  web: boolean;
+  /** Empieza con `_` (DMARC, DKIM, validaciones). */
+  tecnico: boolean;
+}
+
+export interface RespuestaSubdominios {
+  zona: string;
+  subdominios: Subdominio[];
+  /** Registros que se trajeron y total que dice Cloudflare. */
+  registros: number;
+  total: number;
+  truncado: boolean;
+}
+
+export interface ResultadoImportacion {
+  importados: string[];
+  existentes: string[];
+  /** Importados sin fecha de vencimiento (hay que capturarla). */
+  sinFecha: string[];
+  /** Nombres que el puente no acepta como dominio. */
+  invalidos: string[];
+  /** Quedaron sin fecha porque no se pudo consultar el Registrar. */
+  registrarFallo?: boolean;
 }
 
 /**
@@ -390,6 +465,34 @@ export class PuenteAdminService {
     return this.http.post<Dominio[]>(
       this.url('/dominios/guardar'),
       { dominios },
+      { headers: this.headers() }
+    );
+  }
+
+  /** Las zonas de Cloudflare. `refrescar` salta la caché del puente. */
+  zonasCloudflare(refrescar = false): Observable<RespuestaZonas> {
+    return this.http.get<RespuestaZonas>(
+      this.url(`/cloudflare/zonas${refrescar ? '?refrescar=1' : ''}`),
+      { headers: this.headers() }
+    );
+  }
+
+  subdominiosCloudflare(
+    zonaId: string,
+    refrescar = false
+  ): Observable<RespuestaSubdominios> {
+    return this.http.get<RespuestaSubdominios>(
+      this.url(
+        `/cloudflare/zonas/${encodeURIComponent(zonaId)}/subdominios${refrescar ? '?refrescar=1' : ''}`
+      ),
+      { headers: this.headers() }
+    );
+  }
+
+  importarDeCloudflare(nombres: string[]): Observable<ResultadoImportacion> {
+    return this.http.post<ResultadoImportacion>(
+      this.url('/cloudflare/importar'),
+      { nombres },
       { headers: this.headers() }
     );
   }

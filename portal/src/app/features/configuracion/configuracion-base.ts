@@ -57,7 +57,8 @@ const KIND_LABEL: Record<SourceKind, string> = {
   github: 'GitHub',
   openrouter: 'OpenRouter',
   prometheus: 'Servidores (Prometheus)',
-  coolify: 'Coolify'
+  coolify: 'Coolify',
+  cloudflare: 'Cloudflare'
 };
 
 const CAPABILITY_LABEL: Record<SourceConnection['provides'][number], string> = {

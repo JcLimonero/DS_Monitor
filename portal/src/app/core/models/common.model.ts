@@ -30,7 +30,8 @@ export type SourceKind =
   | 'github'
   | 'openrouter'
   | 'prometheus'
-  | 'coolify';
+  | 'coolify'
+  | 'cloudflare';
 
 /** Una cuenta concreta dentro de una integración, por ejemplo un correo. */
 export interface Account {

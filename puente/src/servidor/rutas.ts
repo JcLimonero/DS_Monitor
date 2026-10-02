@@ -50,7 +50,10 @@ import {
   type ServidorVps
 } from '../datos/servidores.js';
 import {
+  FECHA_PROVISIONAL,
+  MAXIMO_DOMINIOS,
   dominiosComoLicencias,
+  idLicenciaDeDominio,
   validarDominio,
   type Dominio
 } from '../datos/dominios.js';
@@ -304,6 +307,15 @@ import {
 import { estadoServidores, estadoVps } from '../proveedores/prometheus.js';
 import { portalesCoolify } from '../proveedores/coolify.js';
 import {
+  ErrorCloudflareSinPermiso,
+  agruparSubdominios,
+  registradas,
+  registros as registrosCloudflare,
+  zonas as zonasCloudflare,
+  type DominioRegistrado,
+  type ZonaCloudflare
+} from '../proveedores/cloudflare.js';
+import {
   desplieguesVercel,
   estadoPlataformaVercel,
   licenciasVercel
@@ -346,6 +358,7 @@ const CREDENCIAL_DE: Record<string, string> = {
   monitoreo: 'MONITOREO_DESTINOS',
   prometheus: 'PROMETHEUS_URL',
   coolify: 'COOLIFY_URL y COOLIFY_TOKEN',
+  cloudflare: 'CLOUDFLARE_API_TOKEN',
   github: 'GITHUB_TOKEN',
   odoo: 'ODOO_URL, ODOO_DB, ODOO_USUARIO y ODOO_API_KEY',
   ops: 'un emisor con tipo pendientes (Pendientes → API)'
@@ -388,6 +401,7 @@ export function estadoDeConexiones(
     ['monitoreo', config.monitoreo !== undefined, ['monitors']],
     ['prometheus', config.prometheus !== undefined || hayServidores(), ['vps']],
     ['coolify', config.coolify !== undefined, ['portales']],
+    ['cloudflare', config.cloudflare !== undefined, ['dominios']],
     ['odoo', config.odoo !== undefined, ['crm']],
     ['github', config.github !== undefined, ['repos']],
     [
@@ -1438,6 +1452,239 @@ export function construirRutas(
     );
   });
 
+  // --- Cloudflare: los dominios y sus subdominios (solo lectura) ---
+  //
+  // Todo es de administracion porque los registros DNS pueden traer IPs y
+  // nombres internos. La API se consulta con cache; un dominio que se importa
+  // entra a `dominios` como cualquier otro.
+
+  type DatosZonas = {
+    zonas: (ZonaCloudflare & {
+      /** Si esta registrada en Cloudflare Registrar. */
+      registro?: { venceEn: string; autoRenovar: boolean };
+    })[];
+    /** El Registrar contesto con dominios (si no, la fecha va a mano). */
+    conFechas: boolean;
+    /** No se pudo consultar el Registrar (fallo pasajero): reintentar. */
+    registrarFallo: boolean;
+  };
+
+  const soloZonasCloudflare = (): Promise<ZonaCloudflare[]> =>
+    cache.obtener('cloudflare:zonas', ttl.cloudflare, () =>
+      zonasCloudflare(exigir(cfg().cloudflare, 'cloudflare'))
+    );
+
+  /** Un fallo pasajero del Registrar: no se guarda en cache (ver abajo). */
+  class RegistrarTransitorio extends Error {
+    constructor(readonly parcial: DominioRegistrado[]) {
+      super('registrar transitorio');
+    }
+  }
+
+  /**
+   * Las fechas del Registrar. Sin permiso o sin Registrar es un resultado
+   * estable y se guarda en cache (`[]`); un fallo pasajero (red, 429, 5xx) NO
+   * se guarda, para que el siguiente intento vuelva a preguntar en vez de dejar
+   * los dominios sin fecha hasta que venza la cache.
+   */
+  const fechasDelRegistrar = async (
+    zonas: ZonaCloudflare[]
+  ): Promise<{ dominios: DominioRegistrado[]; fallo: boolean }> => {
+    const config = exigir(cfg().cloudflare, 'cloudflare');
+    try {
+      const dominios = await cache.obtener(
+        'cloudflare:registrar',
+        ttl.cloudflare,
+        async () => {
+          const r = await registradas(
+            config,
+            zonas
+              .map((z) => z.cuentaId)
+              .filter((c): c is string => c !== undefined)
+          );
+          if (r.transitorio) {
+            throw new RegistrarTransitorio(r.dominios);
+          }
+          return r.dominios;
+        }
+      );
+      return { dominios, fallo: false };
+    } catch (error) {
+      if (error instanceof RegistrarTransitorio) {
+        return { dominios: error.parcial, fallo: true };
+      }
+      throw error;
+    }
+  };
+
+  const zonasCloudflareCache = async (): Promise<{
+    zonas: ZonaCloudflare[];
+    registradas: DominioRegistrado[];
+    registrarFallo: boolean;
+  }> => {
+    const zonas = await soloZonasCloudflare();
+    const r = await fechasDelRegistrar(zonas);
+    return { zonas, registradas: r.dominios, registrarFallo: r.fallo };
+  };
+
+  router.get('/cloudflare/zonas', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    if (contexto.parametros.get('refrescar') === '1') {
+      cache.olvidar('cloudflare:zonas');
+      cache.olvidar('cloudflare:registrar');
+    }
+    try {
+      const { zonas, registradas, registrarFallo } =
+        await zonasCloudflareCache();
+      const porNombre = new Map(registradas.map((r) => [r.nombre, r]));
+      const salida: DatosZonas = {
+        // La cuenta de Cloudflare no sale del puente: solo sirve para consultar.
+        zonas: zonas.map(({ cuentaId: _cuenta, ...z }) => {
+          const r = porNombre.get(z.nombre);
+          return r
+            ? {
+                ...z,
+                registro: { venceEn: r.venceEn, autoRenovar: r.autoRenovar }
+              }
+            : z;
+        }),
+        conFechas: registradas.length > 0,
+        registrarFallo
+      };
+      return salida;
+    } catch (error) {
+      // Un token sin permiso no es una falla del puente: la pantalla lo
+      // explica y deja corregirlo, en vez de mostrar un error generico.
+      if (error instanceof ErrorCloudflareSinPermiso) {
+        return {
+          zonas: [],
+          conFechas: false,
+          registrarFallo: false,
+          problema: { tipo: 'sin-permiso', mensaje: error.message }
+        };
+      }
+      throw error;
+    }
+  });
+
+  router.get('/cloudflare/zonas/:id/subdominios', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const id = contexto.segmentos[2] ?? '';
+    const fresco = contexto.parametros.get('refrescar') === '1';
+    if (fresco) {
+      cache.olvidar('cloudflare:zonas');
+      cache.olvidar(`cloudflare:registros:${id}`);
+    }
+    const config = exigir(cfg().cloudflare, 'cloudflare');
+    // Solo zonas que esta cuenta ve: el id viene del cliente.
+    const zonas = await soloZonasCloudflare();
+    const zona = zonas.find((z) => z.id === id);
+    if (!zona) {
+      throw new ErrorPuente('Esa zona no existe en Cloudflare.', 404);
+    }
+    const lectura = await cache.obtener(
+      `cloudflare:registros:${zona.id}`,
+      ttl.cloudflare,
+      () => registrosCloudflare(config, zona.id)
+    );
+    return {
+      zona: zona.nombre,
+      subdominios: agruparSubdominios(zona.nombre, lectura.registros),
+      registros: lectura.registros.length,
+      total: lectura.total,
+      truncado: lectura.truncado
+    };
+  });
+
+  // Trae a `dominios` las zonas elegidas. No pisa lo que ya existe (por
+  // nombre). La fecha de vencimiento solo sale de Cloudflare Registrar; sin
+  // ella el dominio entra marcado `sinFecha` (sin alerta ni costo) y se avisa
+  // en `sinFecha` para que se capture.
+  router.post('/cloudflare/importar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { nombres } = (contexto.cuerpo ?? {}) as { nombres?: unknown };
+    if (
+      !Array.isArray(nombres) ||
+      nombres.length === 0 ||
+      nombres.length > MAXIMO_DOMINIOS ||
+      nombres.some((n) => typeof n !== 'string')
+    ) {
+      throw new ErrorPuente(
+        `"nombres" debe ser una lista de 1 a ${MAXIMO_DOMINIOS} dominios.`,
+        400
+      );
+    }
+    const pedidos = [
+      ...new Set((nombres as string[]).map((n) => n.trim().toLowerCase()))
+    ];
+    const { zonas, registradas, registrarFallo } = await zonasCloudflareCache();
+    const deCloudflare = new Set(zonas.map((z) => z.nombre));
+    const fuera = pedidos.find((n) => !deCloudflare.has(n));
+    if (fuera) {
+      throw new ErrorPuente(`${fuera} no es un dominio de Cloudflare.`, 400);
+    }
+    const porNombre = new Map(registradas.map((r) => [r.nombre, r]));
+    return enLicencias(async () => {
+      const lista = datos.dominios.leer();
+      const tiene = new Set(lista.map((d) => d.nombre));
+      const nuevos: Dominio[] = [];
+      const existentes: string[] = [];
+      const invalidos: string[] = [];
+      const sinFecha: string[] = [];
+      for (const nombre of pedidos) {
+        if (tiene.has(nombre)) {
+          existentes.push(nombre);
+          continue;
+        }
+        const r = porNombre.get(nombre);
+        try {
+          nuevos.push(
+            validarDominio(
+              r
+                ? {
+                    nombre,
+                    registrador: 'Cloudflare',
+                    venceEn: r.venceEn,
+                    automatico: r.autoRenovar
+                  }
+                : { nombre, venceEn: FECHA_PROVISIONAL, sinFecha: true },
+              nombre
+            )
+          );
+          if (!r) {
+            sinFecha.push(nombre);
+          }
+        } catch {
+          invalidos.push(nombre);
+        }
+      }
+      if (lista.length + nuevos.length > MAXIMO_DOMINIOS) {
+        throw new ErrorPuente(
+          `Se pasaría del tope de ${MAXIMO_DOMINIOS} dominios.`,
+          400
+        );
+      }
+      if (nuevos.length > 0) {
+        await datos.dominios.escribir(
+          [...lista, ...nuevos].sort((a, b) =>
+            a.venceEn.localeCompare(b.venceEn)
+          )
+        );
+        console.log(
+          `[puente] dominios: ${quienEs(contexto)} importó ${nuevos.length} de Cloudflare (${sinFecha.length} sin fecha)`
+        );
+      }
+      return {
+        importados: nuevos.map((d) => d.nombre),
+        existentes,
+        sinFecha,
+        invalidos,
+        // Las que quedaron sin fecha pueden ser por esto: la pantalla lo avisa.
+        registrarFallo: registrarFallo && sinFecha.length > 0
+      };
+    });
+  });
+
   // --- Licencias a mano y renovaciones confirmadas ---
   //
   // Antes se guardaban en el navegador de quien las capturaba; ahora viven aqui
@@ -1504,6 +1751,19 @@ export function construirRutas(
       !datos.licenciasManuales.leer().some((m) => m.id === id)
     ) {
       throw new ErrorPuente('Esa licencia a mano no existe.', 404);
+    }
+    if (
+      id.startsWith('dominios-') &&
+      datos.dominios
+        .leer()
+        .some(
+          (d) => d.sinFecha && idLicenciaDeDominio('dominios', d.nombre) === id
+        )
+    ) {
+      throw new ErrorPuente(
+        'Ese dominio todavía no tiene fecha de vencimiento: captúrala en Dominios antes de renovarlo.',
+        400
+      );
     }
     if (
       id.startsWith('dominios-') &&
@@ -4151,7 +4411,7 @@ export function construirRutas(
         datos.licenciasAjustes.leer(),
         new Date()
       ),
-    dominios: () => datos.dominios.leer(),
+    dominios: () => datos.dominios.leer().filter((d) => !d.sinFecha),
     monitoreo: () =>
       siHay(cfg().monitoreo, () =>
         cache.obtener('monitoreo:destinos', ttl.monitoreo, () =>
@@ -4186,7 +4446,7 @@ export function construirRutas(
     pendientesDeCorreo: () =>
       conNotas(Object.values(datos.registroCorreo.leer()).flat()),
     asignar: asignarPendiente,
-    dominios: () => datos.dominios.leer(),
+    dominios: () => datos.dominios.leer().filter((d) => !d.sinFecha),
     ligaDe,
     push,
     iaPara,

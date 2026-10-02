@@ -105,6 +105,12 @@
           name="dominio-vence"
           [ngModel]="fechaCorta(borrador().venceEn)"
           (ngModelChange)="cambiarBorrador({ venceEn: $event })" />
+        @if (borrador().sinFecha && !borrador().venceEn) {
+          <span class="mt-1 block text-xs text-ink-muted">
+            Importado de Cloudflare sin fecha. Captúrala para que cuente en
+            Licencias y avise antes de vencer.
+          </span>
+        }
       </label>
       <label>
         <span class="mb-1 block text-xs font-medium text-ink-muted">Costo</span>
@@ -115,6 +121,17 @@
           name="dominio-costo"
           [ngModel]="borrador().costo"
           (ngModelChange)="cambiarBorrador({ costo: $event })" />
+        @if (
+          borrador().sinFecha &&
+          !borrador().venceEn &&
+          borrador().costo !== undefined &&
+          borrador().costo !== null &&
+          "" + borrador().costo !== ""
+        ) {
+          <span class="mt-1 block text-xs text-ink-muted">
+            El costo se guardará cuando captures la fecha.
+          </span>
+        }
       </label>
       <label>
         <span class="mb-1 block text-xs font-medium text-ink-muted"

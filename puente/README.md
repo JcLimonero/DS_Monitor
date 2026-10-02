@@ -243,6 +243,42 @@ El equipo (`GET /equipo`, `POST /equipo/guardar`) y los dominios
 (`GET /dominios`, `POST /dominios/guardar`, y `GET /dominios/licenses` para el
 tablero) viven en `DATOS_DIRECTORIO` como JSON, junto con las sesiones.
 
+**Dominios desde Cloudflare.** Con `CLOUDFLARE_API_TOKEN` (y, si el token ve
+varias cuentas, `CLOUDFLARE_ACCOUNT_ID`; ambos también capturables en
+Integraciones → Servicios) el módulo Dominios del portal lista las zonas de
+Cloudflare junto a las capturadas a mano y, al tocar una, muestra sus
+subdominios (el DNS agrupado por host). El token debe ser de **solo lectura**
+con los permisos mínimos Zone → Zone → Read y Zone → DNS → Read; para traer
+las fechas de vencimiento se necesita además, si la cuenta lo ofrece, el permiso
+de lectura del Registrar de dominios.
+El puente nunca escribe en Cloudflare. Rutas (todas de administración, porque
+el DNS puede traer IPs internas): `GET /cloudflare/zonas` (con
+`?refrescar=1` salta la caché de `CACHE_CLOUDFLARE_SEGUNDOS`, 300 por omisión),
+`GET /cloudflare/zonas/:id/subdominios` y `POST /cloudflare/importar
+{nombres}`, que crea en `dominios` los que falten sin pisar los existentes y
+responde `{importados, existentes, sinFecha, invalidos}`. **La fecha de
+vencimiento solo existe para los dominios registrados en Cloudflare Registrar**;
+los demás se importan con `sinFecha: true` (sin alerta, sin costo y fuera de
+Licencias) hasta que se capture la fecha en Integraciones → Dominios.
+`CLOUDFLARE_API_URL` solo sirve para apuntar a un servidor falso en pruebas.
+
+El Registrar se lee de `GET /accounts/{id}/registrar/registrations` (la ruta
+`/registrar/domains` está dada de baja desde el 27-sep-2026), paginado por
+cursor (`result_info.cursor`, hasta que no venga) y leído a la defensiva: el
+nombre puede venir como `domain_name` o `name` y lo que no traiga una fecha
+válida se ignora. Sin permiso o sin Registrar el resultado (`[]`) se guarda en
+la caché; un fallo pasajero (red, 429, 5xx) **no** se guarda, se avisa en la
+pantalla y en la respuesta de importar (`registrarFallo`) y el siguiente intento
+vuelve a preguntar.
+
+**Sin confirmar contra la API real de Cloudflare** (las pruebas usan una API
+simulada): el nombre exacto del permiso del token para el Registrar, la forma
+real de la respuesta de `registrations` (campos `domain_name`, `expires_at`,
+`auto_renew` y el cursor) y que `plan` de la zona siga viniendo (está
+deprecado; si falta, simplemente no se muestra). El primer uso con un token
+real es la prueba: en Integraciones → Servicios → Cloudflare, "Probar" confirma
+las zonas, y en Dominios se ve si el Registrar trajo fechas o avisa que no pudo.
+
 Las empresas del grupo también son un catálogo editable (`GET /empresas`,
 `POST /empresas/guardar {empresas}` con la lista completa; Integraciones →
 Empresas en el portal). Cada una lleva nombre, descripción para la IA, color,

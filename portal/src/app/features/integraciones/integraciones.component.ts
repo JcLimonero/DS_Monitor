@@ -66,7 +66,8 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
   {
     id: 'dominios',
     titulo: 'Dominios',
-    detalle: 'Registro, vencimiento y costo de cada dominio'
+    detalle:
+      'Registro, vencimiento y costo de cada dominio (los de Cloudflare se importan en Dominios)'
   },
   {
     id: 'correo',
@@ -86,7 +87,7 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
   {
     id: 'servicios',
     titulo: 'Servicios',
-    detalle: 'Vercel, GitHub, Odoo y Coolify'
+    detalle: 'Vercel, GitHub, Odoo, Coolify y Cloudflare'
   },
   {
     id: 'sitios',

@@ -10,6 +10,9 @@ import { DialogoComponent } from '../../ui/dialogo.component';
 import { IconComponent } from '../../ui/icon.component';
 import { ConfiguracionBase } from './configuracion-base';
 
+/** El relleno que usa el puente mientras un dominio no tiene fecha. */
+const FECHA_PROVISIONAL = '9999-12-31T00:00:00.000Z';
+
 type DialogoDominio = { modo: 'alta' } | { modo: 'edicion'; indice: number };
 
 /** Los dominios registrados: vencimiento y costo. */
@@ -37,7 +40,8 @@ export class DominiosConfigComponent extends ConfiguracionBase {
     if (!d) {
       return;
     }
-    this.borrador.set({ ...d });
+    // Sin fecha, el campo va vacío: la fecha lejana es solo un relleno.
+    this.borrador.set(d.sinFecha ? { ...d, venceEn: '' } : { ...d });
     this.dialogo.set({ modo: 'edicion', indice: i });
   }
 
@@ -51,7 +55,8 @@ export class DominiosConfigComponent extends ConfiguracionBase {
 
   confirmarDialogo(): void {
     const b = this.borrador();
-    if (!b.nombre.trim() || !b.venceEn) {
+    const sinFecha = b.sinFecha === true && !b.venceEn;
+    if (!b.nombre.trim() || (!b.venceEn && !sinFecha)) {
       this.dominiosMensaje.set({
         ok: false,
         mensaje: 'Faltan el nombre y la fecha de vencimiento.'
@@ -64,6 +69,9 @@ export class DominiosConfigComponent extends ConfiguracionBase {
     }
     const fila: Dominio = {
       ...b,
+      // Con fecha capturada deja de estar "sin fecha"; sin ella se queda así.
+      venceEn: sinFecha ? FECHA_PROVISIONAL : b.venceEn,
+      sinFecha: sinFecha ? true : undefined,
       nombre: b.nombre.trim(),
       registrador: b.registrador?.trim() || undefined,
       notas: b.notas?.trim() || undefined
@@ -94,7 +102,9 @@ export class DominiosConfigComponent extends ConfiguracionBase {
     if (d.registrador) {
       partes.push(d.registrador);
     }
-    if (d.venceEn) {
+    if (d.sinFecha) {
+      partes.push('sin fecha de vencimiento');
+    } else if (d.venceEn) {
       partes.push(`vence ${this.fechaCorta(d.venceEn)}`);
     }
     if (d.costo !== undefined && d.costo !== null && String(d.costo) !== '') {
@@ -107,7 +117,7 @@ export class DominiosConfigComponent extends ConfiguracionBase {
   }
 
   etiquetaDias(d: Dominio): string {
-    if (!d.venceEn) {
+    if (!d.venceEn || d.sinFecha) {
       return '';
     }
     const n = this.diasPara(d.venceEn);
@@ -118,7 +128,7 @@ export class DominiosConfigComponent extends ConfiguracionBase {
   }
 
   claseDias(d: Dominio): string {
-    if (!d.venceEn) {
+    if (!d.venceEn || d.sinFecha) {
       return 'text-ink-muted';
     }
     const n = this.diasPara(d.venceEn);
