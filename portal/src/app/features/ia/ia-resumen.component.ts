@@ -40,16 +40,14 @@ import { RelativePipe } from '../../ui/portal.pipes';
       @if (tv()) {
         <div class="flex h-full flex-col">
           <p class="tv-label shrink-0">Hoy, en corto</p>
-          <p
-            class="mt-2 text-2xl font-bold leading-tight text-ink xl:text-3xl 2xl:text-4xl">
+          <p class="tv-title mt-1">
             {{ r.titular }}
           </p>
-          <ul class="mt-4 flex min-h-0 flex-1 flex-col justify-around gap-2">
+          <ul class="mt-2 flex min-h-0 flex-1 flex-col justify-around gap-1.5">
             @for (linea of r.lineas; track $index) {
-              <li
-                class="flex items-start gap-3 text-lg text-ink xl:text-xl 2xl:text-2xl">
+              <li class="tv-row flex items-start gap-2 text-ink">
                 <span
-                  class="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-brand"></span>
+                  class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand"></span>
                 <span>{{ linea }}</span>
               </li>
             }

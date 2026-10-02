@@ -79,8 +79,7 @@ function guardarJuntasQuitadas(mapa: Readonly<Record<string, number>>): void {
       <button
         type="button"
         class="btn relative px-2 py-1.5"
-        [class.h-12]="tv()"
-        [class.w-12]="tv()"
+        [class]="tv() ? 'min-h-[44px] min-w-[44px]' : ''"
         [class.text-base]="tv()"
         aria-label="Avisos del equipo"
         (click)="alternar()">

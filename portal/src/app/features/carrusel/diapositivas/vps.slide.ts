@@ -46,24 +46,19 @@ const CLASE_ESTADO: Record<VpsHealth, string> = {
   template: `
     @if (visibles().length > 0) {
       <!--
-        Todos los servidores, con scroll: las filas miden lo que su contenido
-        (auto-rows-min) y la cuadricula desplaza el resto. Antes las filas se
-        encogian al alto de la pantalla (y un tope de seis escondia el resto),
-        y el motivo se salia de la tarjeta.
+        Todos los servidores, en una rejilla por ancho (.tv-rejilla). Nombre y
+        estado arriba, CPU / memoria / disco en una sola fila de medidores, la
+        curva de CPU y, si lo hay, el motivo.
       -->
-      <div
-        class="grid min-h-0 flex-1 auto-rows-min grid-cols-1 content-start gap-4 overflow-y-auto pr-1 lg:grid-cols-2 xl:grid-cols-3">
+      <div class="tv-rejilla" style="--tv-min: 16rem">
         @for (v of visibles(); track v.id) {
           <article
-            class="tv-card flex flex-col gap-3 px-5 py-4"
+            class="tv-card flex min-w-0 flex-col gap-1.5 px-3 py-2"
             [class]="claseTarjeta(v)">
-            <div class="flex items-start justify-between gap-3">
+            <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
-                <p
-                  class="line-clamp-2 break-words text-xl font-bold leading-tight text-ink 2xl:text-2xl">
-                  {{ v.name }}
-                </p>
-                <p class="truncate text-base text-ink-muted">
+                <p class="tv-nombre line-clamp-2">{{ v.name }}</p>
+                <p class="tv-dato truncate">
                   @if (v.online) {
                     arriba {{ arriba(v.uptimeSeconds) }} ·
                     {{ corriendo(v) }} contenedores
@@ -73,33 +68,32 @@ const CLASE_ESTADO: Record<VpsHealth, string> = {
                 </p>
               </div>
               <p
-                class="flex shrink-0 items-center gap-2 text-2xl font-bold 2xl:text-3xl"
+                class="tv-estado flex shrink-0 items-center gap-1.5"
                 [class]="claseEstado(v)">
                 @if (v.health === 'bien') {
-                  <pt-icon name="ok" class="h-7 w-7" />
+                  <pt-icon name="ok" class="h-5 w-5" />
                 } @else if (v.health === 'sin_senal') {
-                  <pt-icon name="reloj" class="h-7 w-7" />
+                  <pt-icon name="reloj" class="h-5 w-5" />
                 } @else {
-                  <pt-icon name="alerta" class="h-7 w-7" />
+                  <pt-icon name="alerta" class="h-5 w-5" />
                 }
                 {{ etiqueta[v.health] }}
               </p>
             </div>
 
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-3 gap-3">
               @for (m of medidores(v); track m.nombre) {
                 <div class="min-w-0">
-                  <p
-                    class="flex flex-wrap items-baseline justify-between gap-x-2 text-base text-ink-muted">
-                    <span>{{ m.nombre }}</span>
+                  <p class="tv-dato flex items-baseline justify-between gap-1">
+                    <span class="truncate">{{ m.nombre }}</span>
                     <span
-                      class="text-2xl font-bold tabular-nums text-ink 2xl:text-3xl"
+                      class="shrink-0 text-base font-bold tabular-nums text-ink"
                       >{{ m.valor ?? '—'
-                      }}<span class="text-base font-normal"> %</span></span
+                      }}<span class="text-xs font-normal"> %</span></span
                     >
                   </p>
                   <div
-                    class="mt-1 h-2.5 overflow-hidden rounded-full bg-surface-muted">
+                    class="mt-0.5 h-2 overflow-hidden rounded-full bg-surface-muted">
                     <div
                       class="h-full rounded-full"
                       [class]="claseUso(m.valor)"
@@ -109,13 +103,11 @@ const CLASE_ESTADO: Record<VpsHealth, string> = {
               }
             </div>
 
-            <div class="text-accent">
+            <div class="text-accent [&_svg]:h-5">
               <pt-serie [puntos]="v.cpuHistory" nombre="CPU" />
             </div>
             @if (v.reason) {
-              <p class="line-clamp-3 break-words text-base text-ink-muted">
-                {{ v.reason }}
-              </p>
+              <p class="tv-dato line-clamp-2">{{ v.reason }}</p>
             }
           </article>
         }
@@ -160,7 +152,7 @@ export class VpsSlideComponent implements DiapositivaConContenido {
   medidores(v: VpsStatus) {
     return [
       { nombre: 'CPU', valor: v.cpuPct },
-      { nombre: 'Memoria', valor: v.memPct },
+      { nombre: 'Mem.', valor: v.memPct },
       { nombre: 'Disco', valor: v.diskPct }
     ];
   }

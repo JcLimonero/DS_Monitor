@@ -50,15 +50,14 @@ const CLASE_DIALOGO = 'con-dialogo';
     LicenciasMigracionComponent
   ],
   host: {
-    class: 'flex h-full flex-col gap-4',
+    class: 'flex h-full flex-col gap-2',
     '(document:keydown.escape)': 'cerrar()'
   },
   template: `
-    <div
-      class="grid min-h-0 flex-1 auto-rows-min grid-cols-1 content-start gap-x-4 gap-y-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
+    <div class="tv-rejilla" style="--tv-min: 15rem">
       @for (licencia of licencias(); track licencia.id) {
         <article
-          class="tv-card flex cursor-pointer items-center gap-4 px-4 py-2.5 transition hover:border-brand/60 hover:bg-surface-muted"
+          class="tv-card flex min-h-[44px] min-w-0 cursor-pointer items-center gap-2 px-3 py-1.5 transition hover:border-brand/60 hover:bg-surface-muted"
           [class.border-warn]="renuevaPronto(licencia)"
           role="button"
           tabindex="0"
@@ -68,24 +67,20 @@ const CLASE_DIALOGO = 'con-dialogo';
           (keydown.enter)="abrir(licencia)"
           (keydown.space)="abrir(licencia); $event.preventDefault()">
           <div class="min-w-0 flex-1">
+            <p class="tv-nombre line-clamp-2">{{ licencia.product }}</p>
             <p
-              class="line-clamp-2 break-words text-lg font-bold leading-tight text-ink 2xl:text-xl">
-              {{ licencia.product }}
-            </p>
-            <p
-              class="flex items-center gap-1.5 truncate text-sm 2xl:text-base"
+              class="tv-dato flex items-center gap-1 truncate"
               [class]="claseRenovacion(licencia)">
               @if (renuevaPronto(licencia)) {
-                <pt-icon name="alerta" class="h-4 w-4 shrink-0" />
+                <pt-icon name="alerta" class="h-3.5 w-3.5 shrink-0" />
               } @else if (renovada(licencia)) {
-                <pt-icon name="ok" class="h-4 w-4 shrink-0" />
+                <pt-icon name="ok" class="h-3.5 w-3.5 shrink-0" />
               }
-              {{ renovacion(licencia) }}
+              <span class="truncate">{{ renovacion(licencia) }}</span>
             </p>
           </div>
-          <div class="max-w-[55%] shrink-0 break-words text-right">
-            <p
-              class="text-lg font-bold tabular-nums leading-tight text-ink 2xl:text-xl">
+          <div class="max-w-[50%] shrink-0 break-words text-right">
+            <p class="text-base font-bold tabular-nums leading-tight text-ink">
               {{
                 licencia.cost !== undefined || licencia.unit !== 'dinero'
                   ? consumo(licencia)
@@ -93,11 +88,11 @@ const CLASE_DIALOGO = 'con-dialogo';
               }}
             </p>
             @if (licencia.limit) {
-              <p class="text-sm tabular-nums" [class]="claseTexto(licencia)">
+              <p class="tv-dato tabular-nums" [class]="claseTexto(licencia)">
                 {{ porcentaje(licencia) }}% del tope
               </p>
             } @else {
-              <p class="truncate text-sm text-ink-subtle">
+              <p class="tv-dato truncate !text-ink-subtle">
                 {{ proveedor(licencia) }}
               </p>
             }
@@ -107,33 +102,34 @@ const CLASE_DIALOGO = 'con-dialogo';
     </div>
 
     <div
-      class="flex shrink-0 flex-wrap items-center gap-x-8 gap-y-2 rounded-2xl border border-line bg-surface px-6 py-3">
-      <p class="flex items-baseline gap-3">
+      class="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-1 rounded-xl border border-line bg-surface px-3 py-1.5">
+      <p class="flex items-baseline gap-2">
         <span class="tv-label">Gasto del periodo</span>
-        <span class="text-3xl font-bold tabular-nums text-info 2xl:text-4xl">{{
+        <span class="text-2xl font-bold tabular-nums text-info">{{
           gasto()
         }}</span>
       </p>
       <p
-        class="ml-auto flex items-center gap-3 tv-row"
+        class="tv-row flex items-center gap-2"
         [class.text-warn]="conAviso().length > 0">
         @if (conAviso().length > 0) {
-          <pt-icon name="alerta" class="h-7 w-7" />
+          <pt-icon name="alerta" class="h-5 w-5" />
         } @else {
-          <pt-icon name="ok" class="h-7 w-7 text-ok" />
+          <pt-icon name="ok" class="h-5 w-5 text-ok" />
         }
         {{ textoAvisos() }}
       </p>
       <!--
-        Centrado y por encima (z-30) de las esquinas del kiosco, que son
-        zonas de clic de 10 rem pegadas a los lados y taparian el boton.
+        A la derecha y por encima (z-30) de las esquinas del kiosco, que son
+        zonas de clic pegadas a los lados y taparian el boton. 44 px de alto:
+        es un iPad, se toca con el dedo.
       -->
       <div
-        class="relative z-30 flex w-full flex-wrap items-center justify-center gap-x-6 gap-y-2">
+        class="relative z-30 ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
         <pt-licencias-migracion [compacto]="true" />
         <button
           type="button"
-          class="btn !h-[40px]"
+          class="btn !h-[44px]"
           aria-haspopup="dialog"
           (click)="abrirAlta()">
           + Agregar licencia
@@ -150,16 +146,16 @@ const CLASE_DIALOGO = 'con-dialogo';
     -->
     @if (dialogoAbierto()) {
       <div
-        class="dialogo-carrusel fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-0 lg:items-center lg:p-6"
+        class="dialogo-carrusel fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-0 md:items-center md:p-6"
         (click)="cerrar()">
         <div
-          class="card flex h-full w-full max-w-xl flex-col rounded-none lg:h-auto lg:max-h-[90dvh] lg:rounded-xl"
+          class="card flex h-full w-full max-w-xl flex-col rounded-none md:h-auto md:max-h-[90dvh] md:rounded-xl"
           role="dialog"
           aria-modal="true"
           aria-labelledby="dialogo-licencia-titulo"
           (click)="$event.stopPropagation()">
           <header
-            class="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2 lg:px-5">
+            class="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2 md:px-5">
             <h2
               id="dialogo-licencia-titulo"
               class="text-sm font-semibold text-ink">
@@ -173,7 +169,7 @@ const CLASE_DIALOGO = 'con-dialogo';
               <pt-icon name="cerrar" class="h-5 w-5" />
             </button>
           </header>
-          <div class="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5">
+          <div class="min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
             @if (seleccionada(); as licencia) {
               <pt-licencia-renovacion
                 [licencia]="licencia"

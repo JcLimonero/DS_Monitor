@@ -41,7 +41,7 @@ interface Aviso {
 }
 
 /** Cuantas juntas se listan en "lo que sigue". */
-const SIGUIENTES = 4;
+const SIGUIENTES = 6;
 
 /** Cuantos avisos caben en "requiere atencion" sin que se desborde. */
 const AVISOS = 8;
@@ -57,16 +57,16 @@ const AVISOS = 8;
   selector: 'pt-slide-resumen',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IaResumenComponent, IconComponent, MoneyPipe, TimePipe],
-  host: { class: 'flex h-full flex-col gap-5' },
+  host: { class: 'flex h-full flex-col gap-2' },
   template: `
     <!-- En una tablet apaisada las cuatro cifras van en un renglon: dejan alto para lo de abajo. -->
-    <div class="grid shrink-0 grid-cols-2 gap-5 lg:grid-cols-4">
-      <div class="tv-card px-6 py-5">
+    <div class="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
+      <div class="tv-card min-w-0 px-3 py-2">
         <p class="tv-label">Pendientes abiertos</p>
-        <p class="tv-numero mt-2" [class.text-danger]="vencidos() > 0">
+        <p class="tv-numero mt-1" [class.text-danger]="vencidos() > 0">
           {{ abiertos() }}
         </p>
-        <p class="mt-2 tv-row text-ink-muted">
+        <p class="tv-dato mt-1">
           <span
             [class.text-danger]="vencidos() > 0"
             [class.font-bold]="vencidos() > 0">
@@ -76,39 +76,38 @@ const AVISOS = 8;
         </p>
       </div>
 
-      <div class="tv-card px-6 py-5">
+      <div class="tv-card min-w-0 px-3 py-2">
         <p class="tv-label">Juntas hoy</p>
-        <p class="tv-numero mt-2">{{ juntasHoy().length }}</p>
-        <p class="mt-2 truncate tv-row text-ink-muted">
+        <p class="tv-numero mt-1">{{ juntasHoy().length }}</p>
+        <p class="tv-dato mt-1 truncate">
           {{ empalmes().length > 0 ? empalmesTexto() : 'Sin empalmes' }}
         </p>
       </div>
 
-      <div class="tv-card px-6 py-5">
+      <div class="tv-card min-w-0 px-3 py-2">
         <p class="tv-label">Plataformas con problema</p>
         <p
-          class="tv-numero mt-2"
+          class="tv-numero mt-1"
           [class]="conProblema().length > 0 ? 'text-danger' : 'text-ok'">
           {{ conProblema().length }}
         </p>
-        <p class="mt-2 tv-row text-ink-muted">{{ vigiladas() }} vigiladas</p>
+        <p class="tv-dato mt-1">{{ vigiladas() }} vigiladas</p>
       </div>
 
-      <div class="tv-card px-6 py-5">
+      <div class="tv-card min-w-0 px-3 py-2">
         <p class="tv-label">Embudo ponderado</p>
         <!-- El importe es mas largo que una cifra: con el tamano de las otras se salia de la tarjeta. -->
-        <p
-          class="tv-numero mt-2 text-[length:clamp(1.5rem,3.4vw,4.5rem)] text-info">
+        <p class="tv-numero mt-1 text-[length:2.25rem] text-info">
           {{ ponderado() | moneda }}
         </p>
-        <p class="mt-2 tv-row text-ink-muted">{{ oportunidades() }}</p>
+        <p class="tv-dato mt-1">{{ oportunidades() }}</p>
       </div>
     </div>
 
     <!-- Sin juntas por delante, "Lo que sigue" se reduce a una linea. -->
     @if (siguientes().length === 0) {
-      <p class="flex shrink-0 items-center gap-3 tv-row text-ink-subtle">
-        <pt-icon name="agenda" class="h-6 w-6 shrink-0" />
+      <p class="tv-row flex shrink-0 items-center gap-2 text-ink-subtle">
+        <pt-icon name="agenda" class="h-5 w-5 shrink-0" />
         Ya no quedan juntas por delante
       </p>
     }
@@ -118,33 +117,31 @@ const AVISOS = 8;
       hace scroll por dentro; asi nunca se salen de la pantalla ni tapan el pie.
     -->
     <div
-      class="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3 lg:grid-rows-[minmax(0,1fr)]">
+      class="grid min-h-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-3 sm:grid-rows-[minmax(0,1fr)]">
       @if (ia.activa()) {
         <section
-          class="tv-card flex min-h-0 flex-col overflow-y-auto px-6 py-5">
+          class="tv-card flex min-h-0 flex-col overflow-y-auto overscroll-contain px-3 py-2">
           <pt-ia-resumen [tv]="true" />
         </section>
       }
       @if (siguientes().length > 0) {
         <section
-          class="tv-card flex min-h-0 flex-col overflow-y-auto px-6 py-5"
-          [class.lg:col-span-2]="!ia.activa()">
+          class="tv-card flex min-h-0 flex-col overflow-y-auto overscroll-contain px-3 py-2"
+          [class.sm:col-span-2]="!ia.activa()">
           <h2 class="tv-label shrink-0">Lo que sigue</h2>
           <ul
-            class="mt-3 flex min-h-0 flex-1 flex-col justify-around overflow-y-auto">
+            class="mt-1.5 flex min-h-0 flex-1 flex-col justify-around gap-1.5 overflow-y-auto overscroll-contain">
             @for (junta of siguientes(); track junta.id) {
-              <li class="flex items-baseline gap-5">
+              <li class="flex items-baseline gap-3">
                 <span
-                  class="w-24 shrink-0 text-2xl font-bold tabular-nums text-ink 2xl:text-3xl">
+                  class="w-16 shrink-0 text-xl font-bold tabular-nums text-ink">
                   {{ junta.start | hora }}
                 </span>
                 <span class="min-w-0 flex-1">
-                  <span
-                    class="line-clamp-2 break-words text-xl font-bold leading-tight text-ink 2xl:text-2xl">
+                  <span class="tv-nombre line-clamp-2">
                     {{ junta.title }}
                   </span>
-                  <span
-                    class="line-clamp-1 break-words text-base text-ink-muted 2xl:text-lg">
+                  <span class="tv-dato line-clamp-1">
                     {{ cuenta(junta) }}
                     @if (junta.location) {
                       · {{ junta.location }}
@@ -159,26 +156,22 @@ const AVISOS = 8;
 
       <!-- Sin juntas se lleva el ancho que dejaron; asi no queda media pantalla vacia. -->
       <section
-        class="tv-card flex min-h-0 flex-col overflow-y-auto px-6 py-5"
+        class="tv-card flex min-h-0 flex-col overflow-y-auto overscroll-contain px-3 py-2"
         [class]="claseAtencion()">
         <h2 class="tv-label shrink-0">Requiere atención</h2>
         @if (avisos().length > 0) {
           <ul
-            class="mt-3 flex min-h-0 flex-1 flex-col justify-around overflow-y-auto">
+            class="mt-1.5 flex min-h-0 flex-1 flex-col justify-around gap-1.5 overflow-y-auto overscroll-contain">
             @for (aviso of avisosVisibles(); track aviso.id) {
-              <li class="flex items-start gap-3">
+              <li class="flex items-start gap-2">
                 <pt-icon
                   name="alerta"
-                  class="mt-1 h-6 w-6 shrink-0"
+                  class="mt-0.5 h-5 w-5 shrink-0"
                   [class]="aviso.grave ? 'text-danger' : 'text-warn'" />
                 <span class="min-w-0">
-                  <span
-                    class="line-clamp-2 break-words text-xl font-bold leading-tight text-ink 2xl:text-2xl"
-                    >{{ aviso.texto }}</span
-                  >
+                  <span class="tv-nombre line-clamp-2">{{ aviso.texto }}</span>
                   @if (aviso.detalle) {
-                    <span
-                      class="line-clamp-2 break-words text-base text-ink-muted 2xl:text-lg">
+                    <span class="tv-dato line-clamp-2">
                       {{ aviso.detalle }}
                     </span>
                   }
@@ -187,15 +180,15 @@ const AVISOS = 8;
             }
           </ul>
           @if (avisosRestantes() > 0) {
-            <p class="mt-2 shrink-0 text-center text-lg text-ink-muted">
+            <p class="tv-row mt-1 shrink-0 text-center text-ink-muted">
               y {{ avisosRestantes() }} más
             </p>
           }
         } @else {
           <div
             class="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-            <pt-icon name="ok" class="h-16 w-16 text-ok" />
-            <p class="text-2xl font-bold text-ok">Todo en orden</p>
+            <pt-icon name="ok" class="h-12 w-12 text-ok" />
+            <p class="tv-title !text-ok">Todo en orden</p>
           </div>
         }
       </section>
@@ -250,7 +243,7 @@ export class ResumenSlideComponent {
     if (this.siguientes().length > 0) {
       return '';
     }
-    return this.ia.activa() ? 'lg:col-span-2' : 'lg:col-span-3';
+    return this.ia.activa() ? 'sm:col-span-2' : 'sm:col-span-3';
   });
 
   /** Los que caben; los demas se resumen en "y N mas". */

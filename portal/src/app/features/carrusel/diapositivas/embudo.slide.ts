@@ -28,9 +28,8 @@ const POR_ETAPA = 3;
 /**
  * El embudo de Odoo por etapa y lo que hay que hacer con el.
  *
- * El alto minimo de la diapositiva (min-h-[40rem]) deja a las actividades un
- * espacio razonable aunque la pantalla sea baja: en ese caso se desplaza el
- * carrusel entero en lugar de dejar una sola actividad visible.
+ * Las actividades van en columnas por ancho y, si aun asi no caben, la lista
+ * se desplaza sola.
  *
  * Las columnas del embudo no se estiran: con dos oportunidades por etapa
  * quedaban tres cuartos de pantalla en blanco. El espacio que sobra se lo lleva
@@ -40,31 +39,29 @@ const POR_ETAPA = 3;
   selector: 'pt-slide-embudo',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [DayPipe, IconComponent, MoneyPipe],
-  host: { class: 'flex h-full min-h-[40rem] flex-col gap-4' },
+  host: { class: 'flex h-full flex-col gap-2' },
   template: `
-    <div class="grid shrink-0 grid-cols-2 gap-4 lg:grid-cols-4">
+    <div class="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
       @for (etapa of etapas(); track etapa.stage) {
-        <section class="tv-card px-5 py-4">
+        <section class="tv-card min-w-0 px-3 py-2">
           <p class="tv-label">{{ nombre(etapa.stage) }}</p>
-          <p class="mt-1 text-3xl font-bold tabular-nums text-ink 2xl:text-4xl">
+          <p class="text-2xl font-bold tabular-nums leading-tight text-ink">
             {{ etapa.total | moneda }}
           </p>
-          <p class="text-base text-ink-muted">
+          <p class="tv-dato">
             {{ conteo(etapa.opportunities.length) }}
           </p>
 
-          <ul class="mt-3 space-y-2">
+          <ul class="mt-1.5 space-y-1">
             @for (
               oportunidad of etapa.opportunities.slice(0, porEtapa);
               track oportunidad.id
             ) {
-              <li class="rounded-lg bg-surface-muted px-3 py-2">
-                <p
-                  class="line-clamp-2 break-words text-lg font-bold leading-tight text-ink 2xl:text-xl">
+              <li class="rounded-lg bg-surface-muted px-2 py-1">
+                <p class="tv-nombre line-clamp-2">
                   {{ oportunidad.partner }}
                 </p>
-                <p
-                  class="flex items-baseline justify-between text-base text-ink-muted">
+                <p class="tv-dato flex items-baseline justify-between">
                   <span class="tabular-nums">
                     {{ oportunidad.amount | moneda: oportunidad.currency }}
                   </span>
@@ -72,10 +69,10 @@ const POR_ETAPA = 3;
                 </p>
               </li>
             } @empty {
-              <li class="text-lg text-ink-subtle">Sin oportunidades</li>
+              <li class="tv-row text-ink-subtle">Sin oportunidades</li>
             }
             @if (etapa.opportunities.length > porEtapa) {
-              <li class="text-center text-base text-ink-muted">
+              <li class="tv-dato text-center">
                 y {{ etapa.opportunities.length - porEtapa }} más
               </li>
             }
@@ -85,44 +82,46 @@ const POR_ETAPA = 3;
     </div>
 
     <div
-      class="flex shrink-0 flex-wrap items-center gap-x-8 gap-y-2 rounded-2xl border border-line bg-surface px-6 py-3">
-      <p class="flex items-baseline gap-3">
+      class="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-1 rounded-xl border border-line bg-surface px-3 py-1.5">
+      <p class="flex items-baseline gap-2">
         <span class="tv-label">Ponderado</span>
-        <span class="text-3xl font-bold tabular-nums text-info 2xl:text-4xl">
+        <span class="text-2xl font-bold tabular-nums text-info">
           {{ ponderado() | moneda }}
         </span>
       </p>
       <p
-        class="flex items-center gap-3 tv-row"
+        class="tv-row flex items-center gap-2"
         [class.text-danger]="atrasadas() > 0">
         @if (atrasadas() > 0) {
-          <pt-icon name="alerta" class="h-7 w-7" />
+          <pt-icon name="alerta" class="h-5 w-5" />
         } @else {
-          <pt-icon name="ok" class="h-7 w-7 text-ok" />
+          <pt-icon name="ok" class="h-5 w-5 text-ok" />
         }
         {{ textoAtrasadas() }}
       </p>
     </div>
 
-    <section class="tv-card flex min-h-0 flex-1 flex-col px-6 py-4">
+    <section class="tv-card flex min-h-0 flex-1 flex-col px-3 py-2">
       <h2 class="shrink-0 tv-label">Siguientes actividades</h2>
       @if (actividades().length > 0) {
+        <!--
+          Las actividades en columnas por ancho: con 14 renglones de una
+          columna sobraba medio ancho y faltaba alto.
+        -->
         <ul
-          class="mt-2 flex min-h-0 flex-1 flex-col justify-around gap-3 overflow-y-auto pr-1">
+          class="tv-rejilla mt-1.5 !gap-x-4 !gap-y-1.5"
+          style="--tv-min: 24rem">
           @for (actividad of actividades(); track actividad.id) {
-            <li
-              class="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 sm:flex-nowrap">
+            <li class="flex min-w-0 items-center gap-3">
               <span
-                class="chip w-28 shrink-0 justify-center bg-surface-muted py-1 text-base text-ink-muted sm:w-32">
+                class="chip w-20 shrink-0 justify-center bg-surface-muted py-0.5 text-xs text-ink-muted">
                 {{ tipo(actividad) }}
               </span>
-              <span class="min-w-0 flex-1 basis-48">
-                <span
-                  class="line-clamp-2 break-words text-xl font-bold leading-tight text-ink 2xl:text-2xl">
+              <span class="min-w-0 flex-1">
+                <span class="tv-nombre line-clamp-2">
                   {{ actividad.summary }}
                 </span>
-                <span
-                  class="line-clamp-1 break-words text-base text-ink-muted 2xl:text-lg">
+                <span class="tv-dato line-clamp-1">
                   {{ actividad.opportunityName ?? 'Sin oportunidad' }}
                   @if (actividad.responsible) {
                     · {{ actividad.responsible.name }}
@@ -130,8 +129,8 @@ const POR_ETAPA = 3;
                 </span>
               </span>
               <span
-                class="shrink-0 whitespace-nowrap tv-row font-bold"
-                [class]="tarde(actividad) ? 'text-danger' : 'text-ink-muted'">
+                class="tv-dato shrink-0 whitespace-nowrap text-right font-bold"
+                [class]="tarde(actividad) ? '!text-danger' : ''">
                 {{ tarde(actividad) ? 'Atrasada · ' : ''
                 }}{{ actividad.dueDate | dia }}
               </span>
@@ -139,7 +138,7 @@ const POR_ETAPA = 3;
           }
         </ul>
       } @else {
-        <p class="mt-3 flex-1 text-2xl text-ink-subtle">
+        <p class="tv-row mt-2 flex-1 text-ink-subtle">
           Odoo no devolvió actividades programadas
         </p>
       }

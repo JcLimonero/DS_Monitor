@@ -49,15 +49,15 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
   selector: 'pt-slide-despliegues',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent, RelativePipe, PortalChipComponent],
-  host: { class: 'flex h-full flex-col gap-4' },
+  host: { class: 'flex h-full flex-col gap-2' },
   template: `
     @if (incidentes().length > 0) {
       <div
-        class="shrink-0 rounded-2xl border border-amber-400 bg-amber-50 px-6 py-4 dark:border-amber-500/40 dark:bg-amber-500/10">
+        class="shrink-0 rounded-xl border border-amber-400 bg-amber-50 px-3 py-2 dark:border-amber-500/40 dark:bg-amber-500/10">
         @for (incidente of incidentes(); track incidente.id) {
           <p
-            class="flex items-center gap-3 tv-title text-amber-900 dark:text-amber-200">
-            <pt-icon name="alerta" class="h-7 w-7 shrink-0" />
+            class="tv-row flex items-center gap-2 font-bold text-amber-900 dark:text-amber-200">
+            <pt-icon name="alerta" class="h-5 w-5 shrink-0" />
             <span class="line-clamp-2 min-w-0 break-words">
               {{ incidente.label }}: {{ etiquetaPlataforma(incidente) }} ·
               {{ incidente.description }}
@@ -67,14 +67,20 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
       </div>
     }
 
+    <!--
+      Vercel y Coolify: lado a lado cuando el ancho alcanza para dos y uno
+      sobre otro cuando no (iPad vertical). Cada lista reparte sus renglones
+      en columnas por ancho (.tv-rejilla), asi caben 12 + 12 sin scroll. Si
+      aun asi sobra, la zona entera se desplaza.
+    -->
     <div
-      class="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
+      class="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto overscroll-contain [grid-template-columns:repeat(auto-fit,minmax(min(100%,40rem),1fr))]">
       <!-- Vercel: un renglon por proyecto con su ultimo estado -->
-      <section class="tv-card flex min-h-0 flex-col px-5 py-4">
-        <h2 class="flex shrink-0 items-baseline gap-3">
+      <section class="tv-card flex min-w-0 flex-col px-3 py-2">
+        <h2 class="flex shrink-0 items-baseline gap-2">
           <span class="tv-label">Vercel</span>
           <span
-            class="text-lg font-bold"
+            class="tv-row font-bold"
             [class]="fallidos().length > 0 ? 'text-danger' : 'text-ink-muted'">
             {{
               fallidos().length > 0
@@ -84,65 +90,54 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
           </span>
         </h2>
         @if (despliegues().length > 0) {
-          <ul class="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+          <ul
+            class="tv-rejilla mt-1.5 !flex-none !overflow-visible !pr-0"
+            style="--tv-min: 17rem">
             @for (despliegue of despliegues(); track despliegue.id) {
               <li
-                class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border px-4 py-3 sm:flex-nowrap"
+                class="min-w-0 rounded-lg border px-2.5 py-1"
                 [class]="borde(despliegue)">
-                <span class="w-28 shrink-0 sm:w-32">
+                <span class="flex items-baseline gap-2">
+                  <span class="tv-nombre min-w-0 flex-1 truncate !text-base">{{
+                    despliegue.project
+                  }}</span>
                   <span
-                    class="block text-lg font-bold 2xl:text-xl"
+                    class="shrink-0 text-sm font-bold"
                     [class]="claseEstado(despliegue)">
                     {{ estado(despliegue) }}
                   </span>
-                  <span class="block text-sm text-ink-muted">{{
-                    entorno(despliegue)
-                  }}</span>
-                </span>
-                <span class="min-w-0 flex-1 basis-40">
-                  <span
-                    class="line-clamp-2 break-words text-lg font-bold leading-tight text-ink 2xl:text-xl"
-                    >{{ despliegue.project }}</span
-                  >
-                  <span
-                    class="line-clamp-2 break-words text-base text-ink-muted">
-                    {{ mensaje(despliegue) }}
-                  </span>
                 </span>
                 <!--
-                  La rama se recorta con puntos suspensivos: sin tope, una
-                  rama larga empujaba el renglon fuera de la tarjeta.
+                  La rama y el mensaje se recortan con puntos suspensivos: sin
+                  tope, una rama larga empujaba el renglon fuera de la tarjeta.
                 -->
-                <span
-                  class="min-w-0 max-w-full shrink-0 text-right text-sm text-ink-muted sm:max-w-[13rem]">
-                  <span
-                    class="flex min-w-0 items-center justify-end gap-1 text-base text-ink">
-                    <pt-icon
-                      name="rama"
-                      class="h-4 w-4 shrink-0 text-ink-subtle" />
-                    <span class="min-w-0 truncate">{{
-                      despliegue.branch
-                    }}</span>
+                <span class="tv-dato flex items-center gap-1">
+                  <pt-icon name="rama" class="h-3.5 w-3.5 shrink-0" />
+                  <span class="min-w-0 flex-1 truncate">
+                    {{ entorno(despliegue) }} · {{ despliegue.branch }} ·
+                    {{ mensaje(despliegue) }}
                   </span>
-                  {{ despliegue.createdAt | relativo }}
+                  <span class="shrink-0">{{
+                    despliegue.createdAt | relativo
+                  }}</span>
                 </span>
               </li>
             }
           </ul>
         } @else {
           <p
-            class="flex flex-1 items-center justify-center text-xl text-ink-subtle">
+            class="tv-row flex flex-1 items-center justify-center py-4 text-ink-subtle">
             Sin despliegues en Vercel
           </p>
         }
       </section>
 
       <!-- Coolify: cada portal con su estado actual -->
-      <section class="tv-card flex min-h-0 flex-col px-5 py-4">
-        <h2 class="flex shrink-0 items-baseline gap-3">
+      <section class="tv-card flex min-w-0 flex-col px-3 py-2">
+        <h2 class="flex shrink-0 items-baseline gap-2">
           <span class="tv-label">Coolify</span>
           <span
-            class="text-lg font-bold"
+            class="tv-row font-bold"
             [class]="portalesMal() > 0 ? 'text-danger' : 'text-ink-muted'">
             {{
               portalesMal() > 0
@@ -152,20 +147,21 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
           </span>
         </h2>
         @if (portales().length > 0) {
-          <ul class="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+          <ul
+            class="tv-rejilla mt-1.5 !flex-none !overflow-visible !pr-0"
+            style="--tv-min: 17rem">
             @for (p of portales(); track p.id) {
               <li
-                class="flex shrink-0 items-center gap-4 rounded-lg border px-4 py-3"
+                class="flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-1"
                 [class]="claseFila(p)">
                 <span
                   class="h-2.5 w-2.5 shrink-0 rounded-full"
                   [class]="punto(p)"></span>
                 <span class="min-w-0 flex-1">
-                  <span
-                    class="line-clamp-2 break-words text-lg font-bold leading-tight text-ink 2xl:text-xl"
-                    >{{ p.name }}</span
-                  >
-                  <span class="block truncate text-base text-ink-muted">
+                  <span class="tv-nombre block truncate !text-base">{{
+                    p.name
+                  }}</span>
+                  <span class="tv-dato block truncate">
                     {{ p.server ? p.server + ' · ' : ''
                     }}{{
                       p.url || (p.kind === 'app' ? 'aplicación' : 'servicio')
@@ -175,7 +171,7 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
                 <span class="shrink-0 text-right">
                   <pt-portal-chip [portal]="p" />
                   @if (p.lastDeployAt) {
-                    <span class="mt-1 block text-sm text-ink-muted">{{
+                    <span class="tv-dato block">{{
                       p.lastDeployAt | relativo
                     }}</span>
                   }
@@ -185,7 +181,7 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
           </ul>
         } @else {
           <p
-            class="flex flex-1 items-center justify-center text-xl text-ink-subtle">
+            class="tv-row flex flex-1 items-center justify-center py-4 text-ink-subtle">
             {{
               coolify.sinConfigurar()
                 ? 'Coolify sin conectar'
@@ -197,14 +193,14 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
     </div>
 
     <div
-      class="flex shrink-0 flex-wrap items-center gap-x-8 gap-y-2 rounded-2xl border border-line bg-surface px-6 py-3 tv-row">
+      class="tv-row flex shrink-0 flex-wrap items-center gap-x-6 gap-y-1 rounded-xl border border-line bg-surface px-3 py-1.5">
       <p
-        class="flex items-center gap-3"
+        class="flex items-center gap-2"
         [class.text-danger]="fallidos().length > 0">
         @if (fallidos().length > 0) {
-          <pt-icon name="alerta" class="h-7 w-7" />
+          <pt-icon name="alerta" class="h-5 w-5" />
         } @else {
-          <pt-icon name="ok" class="h-7 w-7 text-ok" />
+          <pt-icon name="ok" class="h-5 w-5 text-ok" />
         }
         {{ textoFallidos() }}
       </p>

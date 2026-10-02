@@ -161,33 +161,98 @@ body {
   }
 
   /*
-   * Estilos del modo carrusel. Todo es mas grande y con mas aire porque se lee
-   * a varios metros, no a medio metro.
+   * Estilos del modo carrusel. Todo va en rem y la raiz del <html> crece con
+   * el ancho de la pantalla (ver `html.kiosco` abajo): un iPad lo lee a
+   * distancia de brazo y una television a varios metros con las mismas clases.
    */
   .tv-card {
-    @apply rounded-2xl border border-line bg-surface;
+    @apply rounded-xl border border-line bg-surface;
   }
 
   .tv-label {
-    @apply text-xs font-bold uppercase tracking-[0.2em] text-ink-subtle 2xl:text-sm;
+    @apply font-bold uppercase tracking-[0.16em] text-ink-subtle;
+    font-size: 0.75rem;
+    line-height: 1.2;
   }
 
   .tv-title {
-    @apply text-2xl font-bold text-ink 2xl:text-3xl;
+    @apply font-bold text-ink;
+    font-size: 1.25rem;
+    line-height: 1.2;
   }
 
   .tv-row {
-    @apply text-lg sm:text-xl 2xl:text-2xl;
+    font-size: 1rem;
+    line-height: 1.3;
+  }
+
+  /* Lo que se lee de lejos: el nombre y el estado en color. */
+  .tv-nombre {
+    @apply break-words font-bold text-ink;
+    font-size: 1.05rem;
+    line-height: 1.2;
+  }
+
+  .tv-estado {
+    @apply font-bold;
+    font-size: 1.2rem;
+    line-height: 1.25;
+  }
+
+  /* Datos secundarios de una tarjeta: tiempos, entorno, mensajes. */
+  .tv-dato {
+    @apply break-words text-ink-muted;
+    font-size: 0.875rem;
+    line-height: 1.3;
   }
 
   .tv-numero {
     @apply font-bold tabular-nums leading-none;
-    font-size: clamp(2rem, 5vw, 5.5rem);
+    font-size: 3.25rem;
+  }
+
+  /*
+   * Cuadricula de tarjetas del carrusel: las columnas salen del ancho que hay
+   * (cada diapositiva fija el minimo con --tv-min), no de breakpoints. Las
+   * filas miden lo que su contenido y, si aun asi sobra, la cuadricula se
+   * desplaza por su cuenta sin arrastrar la pagina (overscroll contain).
+   */
+  .tv-rejilla {
+    @apply grid min-h-0 flex-1 content-start gap-2 overflow-y-auto pr-1;
+    grid-auto-rows: min-content;
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(100%, var(--tv-min, 12rem)), 1fr)
+    );
+    overscroll-behavior: contain;
   }
 }
 
-/* El carrusel en un telefono: todo lo que va en rem se reduce a tres cuartos. */
-@media (max-width: 767px) {
+/*
+ * Escala fluida del carrusel (solo ahi): la raiz crece con el ancho y todo lo
+ * que va en rem la sigue. 1024 px = 14 px (iPad apaisado), 1366 = 15.8,
+ * 1920 = 18.6, 2560 = 21.8 y de 3840 en adelante 28 px. Entre 640 y 1023 se
+ * queda en 13.5 como minimo para que el iPad vertical no se vea diminuto.
+ */
+@media (min-width: 640px) {
+  html.kiosco {
+    font-size: clamp(13.5px, calc(0.5vw + 9px), 28px);
+  }
+}
+
+/*
+ * Con un dialogo abierto, en tableta y celular, la raiz vuelve a 16 px: los
+ * selectores y botones tienen que poderse tocar con el dedo. En pantallas
+ * grandes (>= 1280) se queda la escala fluida.
+ */
+@media (min-width: 640px) and (max-width: 1279px) {
+  html.kiosco.con-dialogo {
+    font-size: 16px;
+  }
+}
+
+/* El carrusel en un celular (< 640 px): todo lo que va en rem se reduce a tres cuartos. */
+@media (max-width: 639px) {
   html.kiosco {
     font-size: 12px;
   }
@@ -205,14 +270,15 @@ body {
 
 /*
  * El dialogo del carrusel se opera con el dedo (iPad, celular, la pantalla de
- * la oficina): ningun selector ni boton por debajo de 2.5rem, aunque la
- * tarjeta los achique a partir de lg como en la lista de escritorio.
+ * la oficina): ningun selector ni boton por debajo de 44 px (la medida de
+ * Apple), aunque la tarjeta los achique a partir de lg como en la lista de
+ * escritorio.
  */
 .dialogo-carrusel select,
 .dialogo-carrusel .btn,
 .dialogo-carrusel button[aria-expanded] {
-  min-height: 2.5rem;
-  min-width: 2.5rem;
+  min-height: 44px;
+  min-width: 44px;
 }
 
 /* Mientras un CRUD de Integraciones esta en overlay, el fondo no se mueve. */

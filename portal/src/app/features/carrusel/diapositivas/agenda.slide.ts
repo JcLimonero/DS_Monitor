@@ -23,37 +23,34 @@ import { DiapositivaConContenido } from '../carrusel.model';
   selector: 'pt-slide-agenda',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent, TimePipe],
-  host: { class: 'grid h-full grid-cols-1 gap-6 lg:grid-cols-2' },
+  host: { class: 'grid h-full grid-cols-2 gap-3 max-sm:grid-cols-1' },
   template: `
     @for (columna of columnas(); track columna.titulo) {
-      <section class="flex min-h-0 flex-col">
-        <h2 class="shrink-0 tv-label">{{ columna.titulo }}</h2>
+      <section class="flex min-h-0 min-w-0 flex-col">
+        <h2 class="tv-label shrink-0">{{ columna.titulo }}</h2>
 
         @if (columna.juntas.length > 0) {
           <!--
-            Todas las juntas, con scroll. Centradas con margenes automaticos en
-            el primero y el ultimo (no con justify-center): si la lista es mas
-            alta que la columna, justify-center corta el principio y ya no se
-            puede subir a verlo.
+            Todas las juntas, con scroll si no caben. En pantallas bajas el
+            titulo se recorta a una linea para que quepan diez juntas.
           -->
           <ul
-            class="mt-3 flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-1 [&>:first-child]:mt-auto [&>:last-child]:mb-auto">
+            class="mt-1.5 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain pr-1">
             @for (junta of columna.juntas; track junta.id) {
               <li
-                class="tv-card relative flex shrink-0 items-center gap-4 overflow-hidden py-5 pl-6 pr-5">
+                class="tv-card relative flex shrink-0 items-center gap-3 overflow-hidden py-1.5 pl-4 pr-3">
                 <span class="account-bar" [class]="colorCuenta(junta)"></span>
                 <span
-                  class="shrink-0 text-2xl font-bold tabular-nums text-ink 2xl:text-3xl">
+                  class="shrink-0 text-xl font-bold tabular-nums leading-none text-ink">
                   {{ junta.start | hora }}
                 </span>
                 <span class="min-w-0 flex-1">
                   <span
-                    class="line-clamp-2 break-words text-xl font-bold leading-tight text-ink 2xl:text-2xl"
+                    class="tv-nombre line-clamp-2 [@media(max-height:900px)]:line-clamp-1"
                     [class.line-through]="junta.status === 'cancelada'">
                     {{ junta.title }}
                   </span>
-                  <span
-                    class="line-clamp-1 break-words text-base text-ink-muted 2xl:text-lg">
+                  <span class="tv-dato line-clamp-1">
                     {{ nombreCuenta(junta) }}
                     @if (junta.location) {
                       · {{ junta.location }}
@@ -61,15 +58,15 @@ import { DiapositivaConContenido } from '../carrusel.model';
                   </span>
                 </span>
                 @if (empalmadas().has(junta.id)) {
-                  <pt-icon name="alerta" class="h-7 w-7 shrink-0 text-warn" />
+                  <pt-icon name="alerta" class="h-5 w-5 shrink-0 text-warn" />
                 }
               </li>
             }
           </ul>
         } @else {
           <div
-            class="mt-3 flex flex-1 items-center justify-center rounded-2xl border border-dashed border-line">
-            <p class="text-2xl text-ink-subtle">Sin juntas</p>
+            class="mt-1.5 flex flex-1 items-center justify-center rounded-xl border border-dashed border-line">
+            <p class="tv-title !font-normal text-ink-subtle">Sin juntas</p>
           </div>
         }
       </section>

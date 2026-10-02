@@ -79,59 +79,50 @@ const CLASE_ESTADO: Record<Estado, string> = {
   template: `
     @if (visibles().length > 0) {
       <!--
-        Todas las tarjetas, con scroll: las filas miden lo que su contenido
-        (auto-rows-min) y la cuadricula desplaza el resto. Antes las filas se
-        encogian al alto de la pantalla y el texto se salia de la tarjeta.
+        Todas las tarjetas, en una rejilla por ancho (.tv-rejilla). Cada una:
+        el nombre, el estado (con hace cuanto y cuanto tardo en la misma
+        linea), de quien viene y cada cuanto corre, y el ultimo mensaje.
       -->
-      <div
-        class="grid min-h-0 flex-1 auto-rows-min grid-cols-2 content-start gap-4 overflow-y-auto pr-1 lg:grid-cols-3 xl:grid-cols-4">
+      <div class="tv-rejilla" style="--tv-min: 11rem">
         @for (e of visibles(); track e.clave) {
           <article
-            class="tv-card flex min-h-[10rem] flex-col justify-between gap-2 px-5 py-4"
+            class="tv-card flex min-w-0 flex-col gap-0.5 px-3 py-2"
             [class]="claseTarjeta(e)">
-            <div class="min-w-0">
-              <p
-                class="line-clamp-2 break-words text-xl font-bold leading-tight text-ink 2xl:text-2xl">
-                {{ e.nombre }}
-              </p>
-              <p class="line-clamp-1 break-words text-base text-ink-muted">
-                {{ e.emisores }}
-                @if (frecuencia(e)) {
-                  · {{ frecuencia(e) }}
-                }
-              </p>
-            </div>
+            <p class="tv-nombre line-clamp-2">{{ e.nombre }}</p>
 
             <p
-              class="flex items-center gap-2 text-2xl font-bold 2xl:text-3xl"
+              class="tv-estado flex items-center gap-1.5"
               [class]="claseEstado(e)">
               @if (e.estado === 'error') {
-                <pt-icon name="alerta" class="h-7 w-7" />
+                <pt-icon name="alerta" class="h-5 w-5 shrink-0" />
               } @else if (e.estado === 'ok') {
-                <pt-icon name="ok" class="h-7 w-7" />
+                <pt-icon name="ok" class="h-5 w-5 shrink-0" />
               } @else if (e.estado === 'atrasada') {
-                <pt-icon name="reloj" class="h-7 w-7" />
+                <pt-icon name="reloj" class="h-5 w-5 shrink-0" />
               }
-              {{ etiqueta(e) }}
+              <span class="min-w-0">{{ etiqueta(e) }}</span>
               @if (e.erroresSeguidos > 1) {
-                <span class="text-lg">×{{ e.erroresSeguidos }}</span>
+                <span class="shrink-0 text-sm">×{{ e.erroresSeguidos }}</span>
               }
+              @if (duracion(e)) {
+                <span class="tv-dato ml-auto shrink-0 font-normal tabular-nums">
+                  {{ duracion(e) }}
+                </span>
+              }
+            </p>
+
+            <p
+              class="tv-dato line-clamp-1 [@media(min-height:901px)]:line-clamp-2">
+              {{ e.terminoEn | relativo }}
+              @if (frecuencia(e)) {
+                · {{ frecuencia(e) }}
+              }
+              · {{ e.emisores }}
             </p>
 
             @if (e.mensaje) {
-              <p
-                class="line-clamp-2 break-words text-base leading-snug text-ink-muted">
-                {{ e.mensaje }}
-              </p>
+              <p class="tv-dato line-clamp-2">{{ e.mensaje }}</p>
             }
-
-            <p
-              class="flex items-baseline justify-between gap-2 text-lg text-ink-muted 2xl:text-xl">
-              <span>{{ e.terminoEn | relativo }}</span>
-              @if (duracion(e)) {
-                <span class="tabular-nums">{{ duracion(e) }}</span>
-              }
-            </p>
           </article>
         }
       </div>
