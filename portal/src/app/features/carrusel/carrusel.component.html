@@ -7,7 +7,12 @@
       <pt-brand-logo class="hidden sm:block" [heightRem]="2.25" />
 
       <div class="min-w-0 flex-1">
-        <p class="tv-label truncate">{{ fecha() }}</p>
+        <p class="tv-label truncate">
+          {{ fecha() }}
+          @if (pausado()) {
+            <span class="text-ink"> · En pausa · toca aquí para continuar</span>
+          }
+        </p>
         <h1
           class="truncate text-xl font-bold leading-tight text-ink sm:text-2xl">
           {{ actual().titulo }}
@@ -37,12 +42,11 @@
 
   <!--
     En pantalla grande cada diapositiva cabe entera; en el celular se desplaza.
-    En pausa los controles flotantes quedan a la vista, asi que se les deja su
-    lugar abajo; corriendo, se esconden solos y la diapositiva usa todo el alto. Las diapositivas con #diapositiva saben decir si estan vacias.
+    Los controles flotantes salen un momento al tocar y se esconden solos
+    (tambien en pausa, que se avisa en el encabezado): asi la diapositiva
+    ocupa siempre el mismo alto. Las diapositivas con #diapositiva saben decir si estan vacias.
   -->
-  <main
-    class="min-h-0 flex-1 overflow-y-auto px-3 pt-2 sm:px-4 sm:pt-3"
-    [class]="pausado() ? 'pb-[60px]' : 'pb-2'">
+  <main class="min-h-0 flex-1 overflow-y-auto px-3 pb-2 pt-2 sm:px-4 sm:pt-3">
     @switch (actual().id) {
       @case ("resumen") {
         <pt-slide-resumen />
@@ -115,8 +119,8 @@
               "></span>
           </span>
           <span
-            class="mt-1 block truncate text-left text-[0.65rem] font-bold uppercase tracking-wider"
-            [class]="i === indice() ? 'text-ink' : 'text-ink-subtle'">
+            class="mt-1 block truncate text-left text-[length:max(0.65rem,11px)] font-bold uppercase tracking-wider"
+            [class]="i === indice() ? 'text-ink' : 'text-ink-muted'">
             {{ diapositiva.corto }}
           </span>
         </button>
@@ -223,11 +227,3 @@
     <pt-icon name="cerrar" class="h-5 w-5" />
   </a>
 </div>
-
-@if (pausado()) {
-  <p
-    class="fixed bottom-[calc(52px+env(safe-area-inset-bottom))] left-4 z-30 chip bg-accent-soft px-3 py-1.5 text-sm text-ink">
-    <pt-icon name="pausa" class="h-4 w-4" />
-    En pausa · toca el encabezado para continuar
-  </p>
-}

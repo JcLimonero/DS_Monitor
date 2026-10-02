@@ -32,13 +32,14 @@ import { DiapositivaConContenido } from '../carrusel.model';
         @if (columna.juntas.length > 0) {
           <!--
             Todas las juntas, con scroll si no caben. En pantallas bajas el
-            titulo se recorta a una linea para que quepan diez juntas.
+            titulo se recorta a una linea (menos de 700 px de alto) para que quepan
+            diez juntas.
           -->
           <ul
-            class="mt-1.5 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain pr-1">
+            class="mt-1.5 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pr-1">
             @for (junta of columna.juntas; track junta.id) {
               <li
-                class="tv-card relative flex shrink-0 items-center gap-3 overflow-hidden py-1.5 pl-4 pr-3">
+                class="tv-card relative flex shrink-0 items-center gap-3 overflow-hidden py-1 pl-4 pr-3">
                 <span class="account-bar" [class]="colorCuenta(junta)"></span>
                 <span
                   class="shrink-0 text-xl font-bold tabular-nums leading-none text-ink">
@@ -46,7 +47,7 @@ import { DiapositivaConContenido } from '../carrusel.model';
                 </span>
                 <span class="min-w-0 flex-1">
                   <span
-                    class="tv-nombre line-clamp-2 [@media(max-height:900px)]:line-clamp-1"
+                    class="tv-nombre line-clamp-2 [@media(max-height:699px)]:line-clamp-1"
                     [class.line-through]="junta.status === 'cancelada'">
                     {{ junta.title }}
                   </span>

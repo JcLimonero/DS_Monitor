@@ -69,14 +69,14 @@ const CLASE_DIALOGO = 'con-dialogo';
           <div class="min-w-0 flex-1">
             <p class="tv-nombre line-clamp-2">{{ licencia.product }}</p>
             <p
-              class="tv-dato flex items-center gap-1 truncate"
+              class="tv-dato flex items-start gap-1"
               [class]="claseRenovacion(licencia)">
               @if (renuevaPronto(licencia)) {
-                <pt-icon name="alerta" class="h-3.5 w-3.5 shrink-0" />
+                <pt-icon name="alerta" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
               } @else if (renovada(licencia)) {
-                <pt-icon name="ok" class="h-3.5 w-3.5 shrink-0" />
+                <pt-icon name="ok" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
               }
-              <span class="truncate">{{ renovacion(licencia) }}</span>
+              <span class="min-w-0">{{ renovacion(licencia) }}</span>
             </p>
           </div>
           <div class="max-w-[50%] shrink-0 break-words text-right">
@@ -120,12 +120,13 @@ const CLASE_DIALOGO = 'con-dialogo';
         {{ textoAvisos() }}
       </p>
       <!--
-        A la derecha y por encima (z-30) de las esquinas del kiosco, que son
+        A la derecha y por encima (z-35) de los controles flotantes (z-30) y de las
+        esquinas del kiosco, que son
         zonas de clic pegadas a los lados y taparian el boton. 44 px de alto:
         es un iPad, se toca con el dedo.
       -->
       <div
-        class="relative z-30 ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+        class="relative z-[35] ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
         <pt-licencias-migracion [compacto]="true" />
         <button
           type="button"

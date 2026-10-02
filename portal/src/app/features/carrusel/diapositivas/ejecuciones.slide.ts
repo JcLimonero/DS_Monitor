@@ -37,7 +37,7 @@ const PESO: Record<Estado, number> = {
   error: 3
 };
 
-/** Cuantas tarjetas caben sin scroll en una pantalla de televisión. */
+/** Como se llama cada estado en pantalla. */
 const ETIQUETA: Record<Estado, string> = {
   ok: 'Bien',
   aviso: 'Con aviso',
@@ -77,14 +77,14 @@ const CLASE_ESTADO: Record<Estado, string> = {
   imports: [IconComponent, RelativePipe],
   host: { class: 'flex h-full flex-col' },
   template: `
-    @if (visibles().length > 0) {
+    @if (grupos().length > 0) {
       <!--
         Todas las tarjetas, en una rejilla por ancho (.tv-rejilla). Cada una:
         el nombre, el estado (con hace cuanto y cuanto tardo en la misma
         linea), de quien viene y cada cuanto corre, y el ultimo mensaje.
       -->
       <div class="tv-rejilla" style="--tv-min: 10.5rem">
-        @for (e of visibles(); track e.clave) {
+        @for (e of grupos(); track e.clave) {
           <article
             class="tv-card flex min-w-0 flex-col gap-0.5 px-3 py-2"
             [class]="claseTarjeta(e)">
@@ -141,13 +141,10 @@ export class EjecucionesSlideComponent implements DiapositivaConContenido {
   private readonly servicio = inject(EjecucionesService);
 
   readonly lista = this.servicio.lista;
-  /** Ya respondio el puente y no hay servicios que enseñar. */
   /** Vacia solo cuando ya respondio y no hay nada; cargando no cuenta. */
   readonly vacia = computed(() => this.lista()?.length === 0);
   /** Una tarjeta por integracion, lo malo primero. */
   readonly grupos = computed(() => agrupar(this.lista() ?? []));
-  /** Todas, con lo malo primero; la cuadricula hace scroll. */
-  readonly visibles = computed(() => this.grupos());
 
   constructor() {
     this.servicio.cargar();

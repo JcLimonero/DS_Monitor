@@ -58,7 +58,7 @@ const CLASE_ESTADO: Record<VpsHealth, string> = {
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
                 <p class="tv-nombre line-clamp-2">{{ v.name }}</p>
-                <p class="tv-dato truncate">
+                <p class="tv-dato line-clamp-2">
                   @if (v.online) {
                     arriba {{ arriba(v.uptimeSeconds) }} ·
                     {{ corriendo(v) }} contenedores
@@ -103,7 +103,7 @@ const CLASE_ESTADO: Record<VpsHealth, string> = {
               }
             </div>
 
-            <div class="text-accent [&_svg]:h-5">
+            <div class="text-accent [&_svg]:h-5 min-[1700px]:[&_svg]:h-10">
               <pt-serie [puntos]="v.cpuHistory" nombre="CPU" />
             </div>
             @if (v.reason) {

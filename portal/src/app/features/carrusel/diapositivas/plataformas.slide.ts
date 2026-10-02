@@ -55,7 +55,7 @@ const CLASE_ESTADO: Record<MonitorStatus, string> = {
         la rejilla se desplaza sola. El estado es lo que se lee de lejos: color,
         icono y etiqueta; el resto va en una linea chica.
       -->
-      <div class="tv-rejilla" style="--tv-min: 10.5rem">
+      <div class="tv-rejilla" style="--tv-min: 12.5rem">
         @for (destino of destinos(); track destino.id) {
           <article
             class="tv-card flex min-w-0 flex-col gap-1 px-3 py-2"
@@ -78,8 +78,8 @@ const CLASE_ESTADO: Record<MonitorStatus, string> = {
             </div>
 
             <p
-              class="tv-dato flex items-baseline justify-between gap-2 tabular-nums">
-              <span class="min-w-0 truncate">
+              class="tv-dato flex flex-wrap items-baseline justify-between gap-x-2 tabular-nums">
+              <span class="min-w-0 flex-1 basis-[6.5rem]">
                 {{ entorno(destino) }} ·
                 {{
                   destino.latencyMs !== undefined

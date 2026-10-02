@@ -66,7 +66,7 @@ import { RelativePipe } from '../../../ui/portal.pipes';
                     class="block text-2xl font-bold tabular-nums leading-none text-ink">
                     {{ carga.open }}
                   </span>
-                  <span class="tv-label !text-[0.65rem]">Abiertos</span>
+                  <span class="tv-label !tracking-wide">Abiertos</span>
                 </span>
                 <span class="min-w-[3.25rem]">
                   <span
@@ -76,7 +76,7 @@ import { RelativePipe } from '../../../ui/portal.pipes';
                     ">
                     {{ carga.overdue }}
                   </span>
-                  <span class="tv-label !text-[0.65rem]">Vencidos</span>
+                  <span class="tv-label !tracking-wide">Vencidos</span>
                 </span>
                 <span class="min-w-[3.25rem]">
                   <span
@@ -86,7 +86,7 @@ import { RelativePipe } from '../../../ui/portal.pipes';
                     ">
                     {{ carga.blocked }}
                   </span>
-                  <span class="tv-label !text-[0.65rem]">Bloqueados</span>
+                  <span class="tv-label !tracking-wide">Bloqueados</span>
                 </span>
               </span>
             </li>

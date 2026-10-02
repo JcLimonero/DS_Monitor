@@ -143,9 +143,7 @@ export class CarruselComponent {
     Math.min(100, (this.transcurrido() / (this.duracion() * 1000)) * 100)
   );
   readonly controlesVisibles = computed(
-    () =>
-      this.pausado() ||
-      this.ahora().getTime() - this.ultimoMovimiento() < CONTROLES_MS
+    () => this.ahora().getTime() - this.ultimoMovimiento() < CONTROLES_MS
   );
 
   /**
