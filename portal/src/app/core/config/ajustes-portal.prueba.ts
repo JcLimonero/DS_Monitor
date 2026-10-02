@@ -8,6 +8,7 @@ import {
 } from './local-settings';
 import {
   aplicarAjustesServidor,
+  cuerpoDeGuardado,
   apagadasAProposito,
   ajustesParaSubir,
   hayAjustesLocales,
@@ -209,5 +210,69 @@ describe('ajustes locales: detectar, subir y limpiar', () => {
     );
     assert.equal(hayAjustesLocales(limpio), false);
     assert.deepEqual(limpio.licenseEdits, { x: { cost: 3 } });
+  });
+});
+
+describe('cuerpoDeGuardado (primer guardado contra un servidor vacío)', () => {
+  const local: LocalSettings = {
+    ...EMPTY_SETTINGS,
+    accounts: [buzon('correo-local')],
+    accountEnabled: { claude: false },
+    removedAccounts: ['correo-icloud'],
+    connectionMode: { 'odoo-itech': 'gateway' },
+    licenseEdits: { x: { cost: 3 } }
+  };
+
+  it('servidor vacío + local no vacío: documento completo con el cambio encima', () => {
+    const r = cuerpoDeGuardado(true, local, {
+      cuentaEnabled: { id: 'plataformas', enabled: false }
+    });
+    assert.equal(r.subeLocal, true);
+    assert.deepEqual(r.cuerpo, {
+      ajustes: {
+        cuentasApagadas: { claude: false, plataformas: false },
+        modos: { 'odoo-itech': 'gateway' },
+        buzonesAgregados: [buzon('correo-local')],
+        buzonesQuitados: ['correo-icloud']
+      }
+    });
+  });
+
+  it('el cambio manda sobre lo local (quitar el buzón local, cambiar un modo)', () => {
+    const r = cuerpoDeGuardado(true, local, { quitarBuzon: 'correo-local' });
+    const doc = (r.cuerpo['ajustes'] ?? {}) as Record<string, unknown>;
+    assert.deepEqual(doc['buzonesAgregados'], []);
+    assert.deepEqual(doc['buzonesQuitados'], ['correo-icloud']);
+    const m = cuerpoDeGuardado(true, local, {
+      modo: { id: 'odoo-itech', modo: 'demo' }
+    });
+    assert.deepEqual((m.cuerpo['ajustes'] as { modos: unknown }).modos, {
+      'odoo-itech': 'demo'
+    });
+  });
+
+  it('servidor con ajustes: solo el parche', () => {
+    const parche = { cuentaEnabled: { id: 'claude', enabled: true } };
+    const r = cuerpoDeGuardado(false, local, parche);
+    assert.equal(r.subeLocal, false);
+    assert.deepEqual(r.cuerpo, parche);
+  });
+
+  it('servidor vacío + local vacío: solo el parche', () => {
+    const parche = { agregarBuzon: buzon('correo-nuevo') };
+    const r = cuerpoDeGuardado(true, EMPTY_SETTINGS, parche);
+    assert.equal(r.subeLocal, false);
+    assert.deepEqual(r.cuerpo, parche);
+  });
+
+  it('las licencias del navegador no cuentan como ajustes locales', () => {
+    const soloLicencias = {
+      ...EMPTY_SETTINGS,
+      licenseEdits: { x: { cost: 3 } }
+    };
+    const r = cuerpoDeGuardado(true, soloLicencias, {
+      cuentaEnabled: { id: 'claude', enabled: false }
+    });
+    assert.equal(r.subeLocal, false);
   });
 });

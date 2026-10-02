@@ -58,6 +58,13 @@ import { AjustesPortalService } from '../../core/config/ajustes-portal.service';
         }
       </section>
     }
+    @if (ajustes.subidoAlGuardar()) {
+      <section
+        class="mb-4 rounded-lg bg-surface-muted p-3 text-sm text-ink"
+        role="status">
+        <p>Los ajustes de este navegador se subieron al servidor.</p>
+      </section>
+    }
     @if (ajustes.pendienteRecarga()) {
       <section
         class="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-muted p-3 text-sm text-ink"

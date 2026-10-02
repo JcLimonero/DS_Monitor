@@ -104,6 +104,17 @@ export class LocalSettingsStore {
     });
   }
 
+  /** Vacía cuentas y modos (ya viven en el servidor); deja las licencias. */
+  clearAccountSettings(): void {
+    this.commit({
+      ...this.settingsSignal(),
+      accounts: [],
+      accountEnabled: {},
+      removedAccounts: [],
+      connectionMode: {}
+    });
+  }
+
   editLicense(licenseId: string, edit: LicenseEdit): void {
     const current = this.settingsSignal();
     const merged = { ...current.licenseEdits[licenseId], ...edit };

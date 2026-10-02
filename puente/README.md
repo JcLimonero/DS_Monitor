@@ -267,6 +267,17 @@ nada y cada portal se queda con lo suyo; en cuanto hay fecha, lo del servidor
 manda en todos los dispositivos. Agregar un buzón aquí solo lo da de alta en el
 portal: su conexión se captura aparte (Integraciones → Correo).
 
+Política, para quien valide: `GET /ajustes-portal` sigue la misma regla que
+`/empresas` (con acceso por código activo pide sesión; no es público porque
+trae correos de buzones), así que un portal sin sesión arranca con lo suyo y
+recarga solo al iniciar sesión. El servidor manda solo si ya tiene ajustes
+(`actualizadoEn` con fecha); vacío o caído, cada portal arranca con lo que
+guardó su navegador. El primer guardado contra un servidor vacío sube el
+documento completo (lo del navegador más el cambio) y limpia esos campos
+locales, para que nada se pierda de vista. Un apagado explícito (`false`) gana
+a `/salud`: una cuenta apagada a propósito sigue apagada aunque el backend
+tenga su integración configurada.
+
 ## Dos maneras de traer datos
 
 **Ir por ellos**: el puente consulta la API del proveedor cada tanto. Es lo que

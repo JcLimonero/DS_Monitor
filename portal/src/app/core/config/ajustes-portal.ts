@@ -169,3 +169,77 @@ export function apagadasAProposito(
       .map(([id]) => id)
   );
 }
+
+/** Una operación sobre los ajustes compartidos (la misma que acepta el puente). */
+export interface ParcheAjustes {
+  cuentaEnabled?: { id: string; enabled: boolean };
+  modo?: { id: string; modo: Modo };
+  agregarBuzon?: Account;
+  quitarBuzon?: string;
+}
+
+type DocumentoAjustes = ReturnType<typeof ajustesParaSubir>;
+
+/**
+ * Aplica una operación sobre un documento (copia nueva). Es la misma regla
+ * que el puente: quitar un buzón agregado lo saca de la lista, quitar uno de
+ * fábrica lo anota como quitado, y en los dos casos se olvidan su encendido
+ * y su modo.
+ */
+export function aplicarParcheADocumento(
+  doc: DocumentoAjustes,
+  parche: ParcheAjustes
+): DocumentoAjustes {
+  const r: DocumentoAjustes = {
+    cuentasApagadas: { ...doc.cuentasApagadas },
+    modos: { ...doc.modos },
+    buzonesAgregados: [...doc.buzonesAgregados],
+    buzonesQuitados: [...doc.buzonesQuitados]
+  };
+  if (parche.cuentaEnabled) {
+    r.cuentasApagadas[parche.cuentaEnabled.id] = parche.cuentaEnabled.enabled;
+  }
+  if (parche.modo) {
+    r.modos[parche.modo.id] = parche.modo.modo;
+  }
+  if (parche.agregarBuzon) {
+    const nuevo = parche.agregarBuzon;
+    r.buzonesAgregados = [
+      ...r.buzonesAgregados.filter((a) => a.id !== nuevo.id),
+      nuevo
+    ];
+  }
+  if (parche.quitarBuzon) {
+    const id = parche.quitarBuzon;
+    const eraAgregado = r.buzonesAgregados.some((a) => a.id === id);
+    r.buzonesAgregados = r.buzonesAgregados.filter((a) => a.id !== id);
+    if (!eraAgregado && !r.buzonesQuitados.includes(id)) {
+      r.buzonesQuitados.push(id);
+    }
+    delete r.cuentasApagadas[id];
+    delete r.modos[id];
+  }
+  return r;
+}
+
+/**
+ * Qué se manda al guardar un cambio. Con el servidor vacío y ajustes locales
+ * en este navegador, el primer guardado manda el documento completo (lo local
+ * más el cambio) para que nada quede fuera de vista; en cualquier otro caso,
+ * solo el parche.
+ */
+export function cuerpoDeGuardado(
+  servidorVacio: boolean,
+  local: LocalSettings,
+  parche: ParcheAjustes
+): { cuerpo: Record<string, unknown>; subeLocal: boolean } {
+  if (servidorVacio && hayAjustesLocales(local)) {
+    return {
+      cuerpo: {
+        ajustes: aplicarParcheADocumento(ajustesParaSubir(local), parche)
+      },
+      subeLocal: true
+    };
+  }
+  return { cuerpo: { ...parche }, subeLocal: false };
+}

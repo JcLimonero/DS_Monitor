@@ -1,22 +1,19 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, defer, firstValueFrom, map, of, tap } from 'rxjs';
+import { Observable, defer, firstValueFrom, from, map, of, tap } from 'rxjs';
 import { SesionService } from '../acceso/sesion.service';
 import { Account, AjustesPortal } from '../models';
 import { PuenteAdminService } from '../sources/gateway/puente-admin.service';
 import {
+  ParcheAjustes,
   ajustesParaSubir,
+  cuerpoDeGuardado,
   hayAjustesLocales,
   normalizarAjustes,
-  servidorTieneAjustes,
-  sinAjustesDeCuentas
+  servidorTieneAjustes
 } from './ajustes-portal';
 import { LocalSettingsStore, NewMailAccount } from './local-settings.store';
-import {
-  accountIdFor,
-  readLocalSettings,
-  writeLocalSettings
-} from './local-settings';
+import { accountIdFor } from './local-settings';
 import { PORTAL_CONFIG } from './portal-config.token';
 
 /** Qué se le ofrece a quien administra cuando el navegador trae ajustes viejos. */
@@ -97,7 +94,12 @@ export class AjustesPortalService {
    * para quien administra, y solo si el servidor contestó.
    */
   readonly migracion = computed<Migracion | undefined>(() => {
-    if (!this.conPuente || !this.servidor() || this.fallo()) {
+    if (
+      !this.conPuente ||
+      !this.servidor() ||
+      this.fallo() ||
+      this.localesResueltos()
+    ) {
       return undefined;
     }
     if (!this.puedeAdministrar() || !hayAjustesLocales(this.local.settings())) {
@@ -105,6 +107,11 @@ export class AjustesPortalService {
     }
     return this.usaServidor() ? 'descartar' : 'subir';
   });
+
+  /** Lo del navegador ya se subió o se descartó en esta sesión. */
+  private readonly localesResueltos = signal(false);
+  /** El primer guardado subió solo lo que este navegador traía. */
+  readonly subidoAlGuardar = signal(false);
 
   readonly migrando = signal(false);
   readonly errorMigracion = signal<string | undefined>(undefined);
@@ -224,8 +231,9 @@ export class AjustesPortalService {
   }
 
   private limpiarLocales(): void {
-    // Se relee lo guardado: otra pestaña pudo haber tocado las licencias.
-    writeLocalSettings(sinAjustesDeCuentas(readLocalSettings()));
+    // Las licencias se quedan; solo se vacían cuentas y modos.
+    this.local.clearAccountSettings();
+    this.localesResueltos.set(true);
   }
 
   private puedeAdministrar(): boolean {
@@ -234,10 +242,12 @@ export class AjustesPortalService {
 
   /**
    * Con puente, escribe al servidor y actualiza las señales con lo que
-   * contesta; sin puente, hace lo de siempre en `localStorage`.
+   * contesta; sin puente, hace lo de siempre en `localStorage`. Los guardados
+   * van uno tras otro: el primero contra un servidor vacío sube lo local, y
+   * los que siguen ya ven al servidor con ajustes y mandan solo su parche.
    */
   private guardar(
-    parche: Record<string, unknown>,
+    parche: ParcheAjustes,
     alLocal: () => void
   ): Observable<void> {
     if (!this.conPuente) {
@@ -247,10 +257,34 @@ export class AjustesPortalService {
         return of(undefined);
       });
     }
-    return defer(() => this.admin.guardarAjustesPortal(parche)).pipe(
-      tap((nuevo) => this.recibir(nuevo)),
-      map(() => undefined)
-    );
+    return this.enCola(() => {
+      const servidorVacio = !!this.servidor() && !this.usaServidor();
+      const { cuerpo, subeLocal } = cuerpoDeGuardado(
+        servidorVacio,
+        this.local.settings(),
+        parche
+      );
+      return this.admin.guardarAjustesPortal(cuerpo).pipe(
+        tap((nuevo) => {
+          this.recibir(nuevo);
+          if (subeLocal) {
+            this.limpiarLocales();
+            this.subidoAlGuardar.set(true);
+          }
+        }),
+        map(() => undefined)
+      );
+    });
+  }
+
+  private cola: Promise<unknown> = Promise.resolve();
+
+  private enCola<T>(trabajo: () => Observable<T>): Observable<T> {
+    return defer(() => {
+      const turno = this.cola.then(() => firstValueFrom(trabajo()));
+      this.cola = turno.catch(() => undefined);
+      return from(turno);
+    });
   }
 
   private recibir(nuevo: AjustesPortal): void {
