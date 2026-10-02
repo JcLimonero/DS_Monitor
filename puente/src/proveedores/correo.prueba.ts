@@ -3,7 +3,9 @@ import { describe, it } from 'node:test';
 import {
   candidatosParaIa,
   detectarLicencias,
+  esAvisoDeSistema,
   esCorreoDeTotalOne,
+  esRebote,
   detectarLicenciasConEvidencia,
   detectarPendientes,
   montoDelRecibo,
@@ -489,6 +491,94 @@ describe('esCorreoDeTotalOne', () => {
     assert.deepEqual(
       lista.map((c) => c.encabezado.asunto),
       ['Propuesta']
+    );
+  });
+});
+
+describe('esRebote', () => {
+  it('reconoce los rebotes por asunto, remitente o cuerpo', () => {
+    assert.ok(esRebote('No se puede entregar: Alerta de stock mínimo'));
+    assert.ok(esRebote('RE: Undeliverable: Cotización'));
+    // "No se pudo entregar tu paquete" de paquetería NO es rebote.
+    assert.equal(
+      esRebote(
+        'No se pudo entregar tu paquete, reagenda tu entrega',
+        'DHL México <notificaciones@dhl.com>',
+        'Tu envío requiere una nueva fecha.'
+      ),
+      false
+    );
+    assert.ok(
+      esRebote(
+        'Alerta de stock mínimo',
+        'Microsoft Outlook <MicrosoftExchange329e71ec88ae4615bbc36ab6ce41109e@nexusqtech.com>'
+      )
+    );
+    assert.ok(
+      esRebote(
+        'Algo',
+        'alguien@cliente.com',
+        'No se pudo entregar el mensaje a despachador@nexusqtech.com .'
+      )
+    );
+  });
+
+  it('reconoce un pendiente ya registrado por su descripción', () => {
+    assert.ok(
+      esRebote(
+        'Verificar dirección de correo y reenviar alerta de stock',
+        '',
+        'El sistema no pudo entregar la alerta.\nDe: Microsoft Outlook <MicrosoftExchange329e71ec88ae4615bbc36ab6ce41109e@nexusqtech.com>\nAsunto: No se puede entregar: Alerta de stock mínimo'
+      )
+    );
+  });
+
+  it('deja pasar un correo normal que hable de entregas', () => {
+    assert.equal(
+      esRebote(
+        'Entrega del paquete de productos muestra',
+        'Felipe <felipe@cliente.com>',
+        'Mañana entrego el paquete en la sucursal.'
+      ),
+      false
+    );
+    assert.equal(
+      esRebote('Alerta de stock mínimo', 'carlos@nexusqtech.com'),
+      false
+    );
+  });
+});
+
+describe('esAvisoDeSistema', () => {
+  it('reconoce los avisos automaticos del DMS por su asunto', () => {
+    assert.ok(esAvisoDeSistema('Alerta de stock mínimo'));
+    assert.ok(esAvisoDeSistema('RE: Resumen diario del taller'));
+    assert.ok(esAvisoDeSistema('cita_recordatorio'));
+    assert.ok(esAvisoDeSistema('No llegó a su cita: Matías Ruiz'));
+  });
+
+  it('reconoce un pendiente ya registrado por el "Asunto:" de su descripción', () => {
+    assert.ok(
+      esAvisoDeSistema(
+        'Reabastecer stock bajo (Amortiguador delantero)',
+        'De: Carlos Limon <carlos.limon@nexusqtech.com>\nAsunto: Alerta de stock mínimo\n\nPartes con stock bajo'
+      )
+    );
+  });
+
+  it('deja pasar un correo de persona que hable de lo mismo', () => {
+    assert.equal(
+      esAvisoDeSistema(
+        'Pedido de refacciones para el taller',
+        'Nos quedamos sin stock de filtros, ¿puedes pedir más?'
+      ),
+      false
+    );
+    assert.equal(esAvisoDeSistema('Resumen de la junta del taller'), false);
+    // Una cotización sí puede pedirle algo: no se descarta.
+    assert.equal(
+      esAvisoDeSistema('Tu cotización NTECOT00000002 está lista'),
+      false
     );
   });
 });
