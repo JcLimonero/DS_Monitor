@@ -96,7 +96,11 @@ const AVISOS = 8;
 
       <div class="tv-card px-6 py-5">
         <p class="tv-label">Embudo ponderado</p>
-        <p class="tv-numero mt-2 text-info">{{ ponderado() | moneda }}</p>
+        <!-- El importe es mas largo que una cifra: con el tamano de las otras se salia de la tarjeta. -->
+        <p
+          class="tv-numero mt-2 text-[length:clamp(1.5rem,3.4vw,4.5rem)] text-info">
+          {{ ponderado() | moneda }}
+        </p>
         <p class="mt-2 tv-row text-ink-muted">{{ oportunidades() }}</p>
       </div>
     </div>
@@ -136,11 +140,11 @@ const AVISOS = 8;
                 </span>
                 <span class="min-w-0 flex-1">
                   <span
-                    class="block truncate text-xl font-bold text-ink 2xl:text-2xl">
+                    class="line-clamp-2 break-words text-xl font-bold leading-tight text-ink 2xl:text-2xl">
                     {{ junta.title }}
                   </span>
                   <span
-                    class="block truncate text-base text-ink-muted 2xl:text-lg">
+                    class="line-clamp-1 break-words text-base text-ink-muted 2xl:text-lg">
                     {{ cuenta(junta) }}
                     @if (junta.location) {
                       · {{ junta.location }}
@@ -168,12 +172,13 @@ const AVISOS = 8;
                   class="mt-1 h-6 w-6 shrink-0"
                   [class]="aviso.grave ? 'text-danger' : 'text-warn'" />
                 <span class="min-w-0">
-                  <span class="block text-xl font-bold text-ink 2xl:text-2xl">{{
-                    aviso.texto
-                  }}</span>
+                  <span
+                    class="line-clamp-2 break-words text-xl font-bold leading-tight text-ink 2xl:text-2xl"
+                    >{{ aviso.texto }}</span
+                  >
                   @if (aviso.detalle) {
                     <span
-                      class="block truncate text-base text-ink-muted 2xl:text-lg">
+                      class="line-clamp-2 break-words text-base text-ink-muted 2xl:text-lg">
                       {{ aviso.detalle }}
                     </span>
                   }

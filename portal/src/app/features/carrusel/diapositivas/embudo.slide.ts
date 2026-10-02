@@ -25,11 +25,12 @@ import { DiapositivaConContenido } from '../carrusel.model';
 /** Cuantas oportunidades se alcanzan a listar por etapa. */
 const POR_ETAPA = 3;
 
-/** Cuantas actividades caben en la banda de abajo. */
-const ACTIVIDADES = 5;
-
 /**
  * El embudo de Odoo por etapa y lo que hay que hacer con el.
+ *
+ * El alto minimo de la diapositiva (min-h-[46rem]) deja a las actividades un
+ * espacio razonable aunque la pantalla sea baja: en ese caso se desplaza el
+ * carrusel entero en lugar de dejar una sola actividad visible.
  *
  * Las columnas del embudo no se estiran: con dos oportunidades por etapa
  * quedaban tres cuartos de pantalla en blanco. El espacio que sobra se lo lleva
@@ -39,9 +40,9 @@ const ACTIVIDADES = 5;
   selector: 'pt-slide-embudo',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [DayPipe, IconComponent, MoneyPipe],
-  host: { class: 'flex h-full flex-col gap-4' },
+  host: { class: 'flex h-full min-h-[46rem] flex-col gap-4' },
   template: `
-    <div class="grid shrink-0 grid-cols-2 gap-4 xl:grid-cols-4">
+    <div class="grid shrink-0 grid-cols-2 gap-4 lg:grid-cols-4">
       @for (etapa of etapas(); track etapa.stage) {
         <section class="tv-card px-5 py-4">
           <p class="tv-label">{{ nombre(etapa.stage) }}</p>
@@ -58,7 +59,8 @@ const ACTIVIDADES = 5;
               track oportunidad.id
             ) {
               <li class="rounded-lg bg-surface-muted px-3 py-2">
-                <p class="truncate text-lg font-bold text-ink 2xl:text-xl">
+                <p
+                  class="line-clamp-2 break-words text-lg font-bold leading-tight text-ink 2xl:text-xl">
                   {{ oportunidad.partner }}
                 </p>
                 <p
@@ -71,6 +73,11 @@ const ACTIVIDADES = 5;
               </li>
             } @empty {
               <li class="text-lg text-ink-subtle">Sin oportunidades</li>
+            }
+            @if (etapa.opportunities.length > porEtapa) {
+              <li class="text-center text-base text-ink-muted">
+                y {{ etapa.opportunities.length - porEtapa }} más
+              </li>
             }
           </ul>
         </section>
@@ -101,20 +108,21 @@ const ACTIVIDADES = 5;
       <h2 class="shrink-0 tv-label">Siguientes actividades</h2>
       @if (actividades().length > 0) {
         <ul
-          class="mt-2 flex min-h-0 flex-1 flex-col justify-around overflow-y-auto">
+          class="mt-2 flex min-h-0 flex-1 flex-col justify-around gap-3 overflow-y-auto pr-1">
           @for (actividad of actividades(); track actividad.id) {
-            <li class="flex items-center gap-5">
+            <li
+              class="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 sm:flex-nowrap">
               <span
-                class="chip w-32 shrink-0 justify-center bg-surface-muted py-1 text-base text-ink-muted">
+                class="chip w-28 shrink-0 justify-center bg-surface-muted py-1 text-base text-ink-muted sm:w-32">
                 {{ tipo(actividad) }}
               </span>
-              <span class="min-w-0 flex-1">
+              <span class="min-w-0 flex-1 basis-48">
                 <span
-                  class="block truncate text-xl font-bold text-ink 2xl:text-2xl">
+                  class="line-clamp-2 break-words text-xl font-bold leading-tight text-ink 2xl:text-2xl">
                   {{ actividad.summary }}
                 </span>
                 <span
-                  class="block truncate text-base text-ink-muted 2xl:text-lg">
+                  class="line-clamp-1 break-words text-base text-ink-muted 2xl:text-lg">
                   {{ actividad.opportunityName ?? 'Sin oportunidad' }}
                   @if (actividad.responsible) {
                     · {{ actividad.responsible.name }}
@@ -171,11 +179,11 @@ export class EmbudoSlideComponent implements DiapositivaConContenido {
     weightedPipeline(this.store.opportunities())
   );
 
-  /** Lo atrasado primero, y luego lo mas proximo. */
+  /** Todas, lo atrasado primero y luego lo mas proximo; la lista hace scroll. */
   readonly actividades = computed(() =>
-    [...this.store.activities()]
-      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-      .slice(0, ACTIVIDADES)
+    [...this.store.activities()].sort((a, b) =>
+      a.dueDate.localeCompare(b.dueDate)
+    )
   );
 
   readonly atrasadas = computed(

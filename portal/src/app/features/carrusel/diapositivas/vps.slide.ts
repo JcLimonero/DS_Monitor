@@ -16,9 +16,6 @@ import {
 } from '../../vps/vps.component';
 import { DiapositivaConContenido } from '../carrusel.model';
 
-/** Cuantas tarjetas caben en una pantalla de televisión. */
-const MAXIMO = 6;
-
 const CLASE_TARJETA: Record<VpsHealth, string> = {
   bien: 'border-line',
   aviso:
@@ -48,15 +45,22 @@ const CLASE_ESTADO: Record<VpsHealth, string> = {
   host: { class: 'flex h-full flex-col' },
   template: `
     @if (visibles().length > 0) {
+      <!--
+        Todos los servidores, con scroll: las filas miden lo que su contenido
+        (auto-rows-min) y la cuadricula desplaza el resto. Antes las filas se
+        encogian al alto de la pantalla (y un tope de seis escondia el resto),
+        y el motivo se salia de la tarjeta.
+      -->
       <div
-        class="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        class="grid min-h-0 flex-1 auto-rows-min grid-cols-1 content-start gap-4 overflow-y-auto pr-1 lg:grid-cols-2 xl:grid-cols-3">
         @for (v of visibles(); track v.id) {
           <article
-            class="tv-card flex min-h-0 flex-col gap-3 px-5 py-4"
+            class="tv-card flex flex-col gap-3 px-5 py-4"
             [class]="claseTarjeta(v)">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
-                <p class="truncate text-xl font-bold text-ink 2xl:text-2xl">
+                <p
+                  class="line-clamp-2 break-words text-xl font-bold leading-tight text-ink 2xl:text-2xl">
                   {{ v.name }}
                 </p>
                 <p class="truncate text-base text-ink-muted">
@@ -84,9 +88,9 @@ const CLASE_ESTADO: Record<VpsHealth, string> = {
 
             <div class="grid grid-cols-3 gap-4">
               @for (m of medidores(v); track m.nombre) {
-                <div>
+                <div class="min-w-0">
                   <p
-                    class="flex items-baseline justify-between text-base text-ink-muted">
+                    class="flex flex-wrap items-baseline justify-between gap-x-2 text-base text-ink-muted">
                     <span>{{ m.nombre }}</span>
                     <span
                       class="text-2xl font-bold tabular-nums text-ink 2xl:text-3xl"
@@ -109,16 +113,13 @@ const CLASE_ESTADO: Record<VpsHealth, string> = {
               <pt-serie [puntos]="v.cpuHistory" nombre="CPU" />
             </div>
             @if (v.reason) {
-              <p class="text-base text-ink-muted">{{ v.reason }}</p>
+              <p class="line-clamp-3 break-words text-base text-ink-muted">
+                {{ v.reason }}
+              </p>
             }
           </article>
         }
       </div>
-      @if (restantes() > 0) {
-        <p class="mt-2 shrink-0 text-center text-base text-ink-muted">
-          y {{ restantes() }} más
-        </p>
-      }
     } @else {
       <div
         class="flex flex-1 flex-col items-center justify-center gap-2 text-center text-ink-subtle">
@@ -149,10 +150,8 @@ export class VpsSlideComponent implements DiapositivaConContenido {
       (a, b) => peso[a.health] - peso[b.health] || a.name.localeCompare(b.name)
     );
   });
-  readonly visibles = computed(() => this.ordenados().slice(0, MAXIMO));
-  readonly restantes = computed(() =>
-    Math.max(0, this.ordenados().length - MAXIMO)
-  );
+  /** Todos, lo que esta mal primero; la cuadricula hace scroll. */
+  readonly visibles = computed(() => this.ordenados());
 
   constructor() {
     this.servicio.cargar();
