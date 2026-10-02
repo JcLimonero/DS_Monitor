@@ -34,7 +34,7 @@ import { IconComponent } from './icon.component';
           </span>
           <button
             type="button"
-            class="btn !h-[40px]"
+            class="btn !h-[44px]"
             [disabled]="subiendo()"
             (click)="subir()">
             Subir al servidor

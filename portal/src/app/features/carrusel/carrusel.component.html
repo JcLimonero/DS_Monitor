@@ -1,33 +1,37 @@
-<div class="flex min-h-full flex-col lg:h-full">
+<div class="flex min-h-full flex-col sm:h-full">
   <header
     class="shrink-0 cursor-pointer"
     title="Pausar o continuar el carrusel"
     (click)="alClicEncabezado($event)">
-    <div
-      class="flex items-center gap-3 px-4 pb-3 pt-4 sm:gap-6 sm:px-8 sm:pt-5 2xl:px-12 2xl:pt-7">
-      <pt-brand-logo class="hidden sm:block" [heightRem]="3.25" />
+    <div class="flex items-center gap-3 px-3 py-2 sm:gap-4 sm:px-4">
+      <pt-brand-logo class="hidden sm:block" [heightRem]="2.25" />
 
       <div class="min-w-0 flex-1">
-        <p class="tv-label truncate">{{ fecha() }}</p>
+        <p class="tv-label truncate">
+          {{ fecha() }}
+          @if (pausado()) {
+            <span class="text-ink"> · En pausa · toca aquí para continuar</span>
+          }
+        </p>
         <h1
-          class="truncate text-2xl font-bold text-ink sm:text-3xl 2xl:text-4xl">
+          class="truncate text-xl font-bold leading-tight text-ink sm:text-2xl">
           {{ actual().titulo }}
         </h1>
       </div>
 
-      <div class="flex shrink-0 items-end gap-4 sm:gap-6">
+      <div class="flex shrink-0 items-end gap-3 sm:gap-4">
         <pt-avisos-campana #campana [kiosco]="true" [tv]="true" />
         <p class="text-right">
           <span class="tv-label block">GDL · MTY</span>
           <span
-            class="block text-5xl font-bold tabular-nums leading-none text-ink 2xl:text-6xl">
+            class="block text-3xl font-bold tabular-nums leading-none text-ink">
             {{ reloj() }}
           </span>
         </p>
         <p class="hidden text-right sm:block">
           <span class="tv-label block">Laredo</span>
           <span
-            class="block text-3xl font-bold tabular-nums leading-none text-ink-muted 2xl:text-4xl">
+            class="block text-xl font-bold tabular-nums leading-none text-ink-muted">
             {{ relojLaredo() }}
           </span>
         </p>
@@ -38,11 +42,11 @@
 
   <!--
     En pantalla grande cada diapositiva cabe entera; en el celular se desplaza.
-    El aire de abajo es para que los controles flotantes no tapen el ultimo
-    renglon. Las diapositivas con #diapositiva saben decir si estan vacias.
+    Los controles flotantes salen un momento al tocar y se esconden solos
+    (tambien en pausa, que se avisa en el encabezado): asi la diapositiva
+    ocupa siempre el mismo alto. Las diapositivas con #diapositiva saben decir si estan vacias.
   -->
-  <main
-    class="min-h-0 flex-1 overflow-y-auto px-4 pb-16 pt-4 sm:px-8 sm:pt-5 2xl:px-12 2xl:pt-7">
+  <main class="min-h-0 flex-1 overflow-y-auto px-3 pb-2 pt-2 sm:px-4 sm:pt-3">
     @switch (actual().id) {
       @case ("resumen") {
         <pt-slide-resumen />
@@ -77,7 +81,8 @@
     }
   </main>
 
-  <footer class="shrink-0 px-8 pb-5 2xl:px-12">
+  <footer
+    class="shrink-0 px-3 pb-[max(0.25rem,env(safe-area-inset-bottom))] sm:px-4">
     <!--
       Las fuentes caidas, con nombre: un punto rojo no dice cual. Con muchas
       caidas la fila hace scroll en vez de quitarle el alto a la diapositiva,
@@ -85,11 +90,11 @@
     -->
     @if (store.failedSources().length > 0) {
       <div
-        class="mb-3 flex max-h-20 flex-wrap items-center gap-2 overflow-y-auto">
+        class="mb-1 flex max-h-16 flex-wrap items-center gap-1.5 overflow-y-auto">
         @for (fuente of store.failedSources(); track fuente.sourceId) {
           <span
-            class="chip max-w-full bg-rose-100 px-3 py-1 text-sm text-rose-800 dark:bg-rose-500/15 dark:text-rose-200">
-            <pt-icon name="monitoreo" class="h-4 w-4 shrink-0" />
+            class="chip max-w-full bg-rose-100 px-2 py-0.5 text-xs text-rose-800 dark:bg-rose-500/15 dark:text-rose-200">
+            <pt-icon name="monitoreo" class="h-3.5 w-3.5 shrink-0" />
             <span class="min-w-0 truncate">
               {{ fuente.label }} sin conexión
             </span>
@@ -98,15 +103,15 @@
       </div>
     }
     <!-- Un segmento por pantalla; el de la pantalla actual se va llenando. -->
-    <div class="flex items-center gap-2">
+    <div class="flex items-stretch gap-1.5">
       @for (diapositiva of diapositivas; track diapositiva.id; let i = $index) {
         <button
           type="button"
-          class="group flex-1"
+          class="group flex min-h-[44px] min-w-0 flex-1 flex-col justify-center border-0 bg-transparent p-0 text-left"
           [attr.aria-label]="'Ir a ' + diapositiva.titulo"
           [attr.aria-current]="i === indice() ? 'true' : null"
           (click)="irA(i)">
-          <span class="block h-1.5 overflow-hidden rounded-full bg-line">
+          <span class="block h-1 overflow-hidden rounded-full bg-line">
             <span
               class="block h-full rounded-full bg-accent transition-[width] duration-100 ease-linear"
               [style.width.%]="
@@ -114,8 +119,8 @@
               "></span>
           </span>
           <span
-            class="mt-1.5 block truncate text-left text-xs font-bold uppercase tracking-wider 2xl:text-sm"
-            [class]="i === indice() ? 'text-ink' : 'text-ink-subtle'">
+            class="mt-1 block truncate text-left text-[length:max(0.65rem,11px)] font-bold uppercase tracking-wider"
+            [class]="i === indice() ? 'text-ink' : 'text-ink-muted'">
             {{ diapositiva.corto }}
           </span>
         </button>
@@ -126,65 +131,67 @@
 
 <!--
   Esquinas del kiosco: clic izquierda = pantalla anterior, derecha = siguiente.
-  Solo las esquinas, no toda la franja, para no tapar listas del centro.
+  Solo las esquinas, no toda la franja, para no tapar listas del centro: las de
+  arriba miden lo que el encabezado y las de abajo no existen en pantallas
+  tactiles (un iPad no tiene raton y taparian la primera tarjeta de la esquina).
   La inferior derecha queda mas arriba para no cubrir los controles flotantes.
 -->
 <button
   type="button"
-  class="group fixed left-0 top-0 z-20 hidden h-[10rem] w-[10rem] cursor-pointer items-center justify-center border-0 bg-transparent disabled:pointer-events-none sm:flex"
+  class="group fixed left-0 top-0 z-20 hidden h-[3.5rem] w-[5rem] cursor-pointer items-center justify-center border-0 bg-transparent disabled:pointer-events-none sm:flex"
   aria-label="Pantalla anterior"
   [disabled]="enDialogo()"
   (click)="alClicEsquina(-1)">
   <pt-icon
     name="anterior"
-    class="pointer-events-none h-10 w-10 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-40 group-focus-visible:opacity-40" />
+    class="pointer-events-none h-8 w-8 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-40 group-focus-visible:opacity-40" />
 </button>
 <button
   type="button"
-  class="group fixed right-0 top-0 z-20 hidden h-[10rem] w-[10rem] cursor-pointer items-center justify-center border-0 bg-transparent disabled:pointer-events-none sm:flex"
+  class="group fixed right-0 top-0 z-20 hidden h-[3.5rem] w-[5rem] cursor-pointer items-center justify-center border-0 bg-transparent disabled:pointer-events-none sm:flex"
   aria-label="Pantalla siguiente"
   [disabled]="enDialogo()"
   (click)="alClicEsquina(1)">
   <pt-icon
     name="siguiente"
-    class="pointer-events-none h-10 w-10 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-40 group-focus-visible:opacity-40" />
+    class="pointer-events-none h-8 w-8 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-40 group-focus-visible:opacity-40" />
 </button>
 <button
   type="button"
-  class="group fixed bottom-24 left-0 z-20 hidden h-[10rem] w-[10rem] cursor-pointer items-center justify-center border-0 bg-transparent disabled:pointer-events-none sm:flex"
+  class="group fixed bottom-16 left-0 z-20 hidden h-[5rem] w-[5rem] cursor-pointer [@media(pointer:coarse)]:!hidden items-center justify-center border-0 bg-transparent disabled:pointer-events-none sm:flex"
   aria-label="Pantalla anterior"
   [disabled]="enDialogo()"
   (click)="alClicEsquina(-1)">
   <pt-icon
     name="anterior"
-    class="pointer-events-none h-10 w-10 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-40 group-focus-visible:opacity-40" />
+    class="pointer-events-none h-8 w-8 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-40 group-focus-visible:opacity-40" />
 </button>
 <button
   type="button"
-  class="group fixed bottom-40 right-0 z-20 hidden h-32 w-[10rem] cursor-pointer items-center justify-center border-0 bg-transparent disabled:pointer-events-none sm:flex"
+  class="group fixed bottom-28 right-0 z-20 hidden h-[5rem] w-[5rem] cursor-pointer [@media(pointer:coarse)]:!hidden items-center justify-center border-0 bg-transparent disabled:pointer-events-none sm:flex"
   aria-label="Pantalla siguiente"
   [disabled]="enDialogo()"
   (click)="alClicEsquina(1)">
   <pt-icon
     name="siguiente"
-    class="pointer-events-none h-10 w-10 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-40 group-focus-visible:opacity-40" />
+    class="pointer-events-none h-8 w-8 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-40 group-focus-visible:opacity-40" />
 </button>
 
 <!-- Los controles solo salen si alguien se acerca al equipo. -->
 <div
-  class="fixed bottom-24 right-8 z-30 flex items-center gap-2 rounded-full border border-line bg-surface/95 p-1.5 shadow-card transition-opacity"
+  class="fixed bottom-[calc(52px+env(safe-area-inset-bottom))] right-4 z-30 flex items-center gap-1 rounded-full border border-line bg-surface/95 p-1 shadow-card transition-opacity"
   [class.opacity-0]="!controlesVisibles()"
   [class.pointer-events-none]="!controlesVisibles()">
   <button
     type="button"
-    class="btn border-0 px-2.5 py-2"
+    class="btn min-h-[44px] min-w-[44px] justify-center border-0 px-2.5 py-2"
     aria-label="Pantalla anterior"
     (click)="avanzar(-1)">
     <pt-icon name="anterior" class="h-5 w-5" />
   </button>
   <button
     type="button"
-    class="btn border-0 px-2.5 py-2"
+    class="btn min-h-[44px] min-w-[44px] justify-center border-0 px-2.5 py-2"
     [attr.aria-label]="
       pausado() ? 'Continuar el carrusel' : 'Pausar el carrusel'
     "
@@ -193,38 +200,30 @@
   </button>
   <button
     type="button"
-    class="btn border-0 px-2.5 py-2"
+    class="btn min-h-[44px] min-w-[44px] justify-center border-0 px-2.5 py-2"
     aria-label="Pantalla siguiente"
     (click)="avanzar(1)">
     <pt-icon name="siguiente" class="h-5 w-5" />
   </button>
-  <span class="h-6 w-px bg-line"></span>
+  <span class="h-6 w-px shrink-0 bg-line"></span>
   <button
     type="button"
-    class="btn border-0 px-2.5 py-2"
+    class="btn min-h-[44px] min-w-[44px] justify-center border-0 px-2.5 py-2"
     aria-label="Cambiar el tema"
     (click)="alternarTema()">
     <pt-icon [name]="themeIcon()" class="h-5 w-5" />
   </button>
   <button
     type="button"
-    class="btn border-0 px-2.5 py-2"
+    class="btn min-h-[44px] min-w-[44px] justify-center border-0 px-2.5 py-2"
     aria-label="Pantalla completa"
     (click)="pantallaCompleta()">
     <pt-icon name="expandir" class="h-5 w-5" />
   </button>
   <a
-    class="btn border-0 px-2.5 py-2"
+    class="btn min-h-[44px] min-w-[44px] justify-center border-0 px-2.5 py-2"
     routerLink="/panel"
     aria-label="Salir del carrusel">
     <pt-icon name="cerrar" class="h-5 w-5" />
   </a>
 </div>
-
-@if (pausado()) {
-  <p
-    class="fixed bottom-24 left-8 z-30 chip bg-accent-soft px-3 py-1.5 text-base text-ink">
-    <pt-icon name="pausa" class="h-4 w-4" />
-    En pausa · toca el encabezado para continuar
-  </p>
-}

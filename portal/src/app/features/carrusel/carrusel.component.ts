@@ -82,7 +82,7 @@ const SIN_VACIA = new Set<Diapositiva['id']>(['resumen', 'equipo']);
   ],
   templateUrl: './carrusel.component.html',
   host: {
-    class: 'block h-dvh overflow-hidden bg-app max-lg:overflow-y-auto',
+    class: 'block h-dvh overflow-hidden bg-app max-sm:overflow-y-auto',
     '(document:keydown)': 'alTeclear($event)',
     '(document:mousemove)': 'despertarControles()'
   }
@@ -143,9 +143,7 @@ export class CarruselComponent {
     Math.min(100, (this.transcurrido() / (this.duracion() * 1000)) * 100)
   );
   readonly controlesVisibles = computed(
-    () =>
-      this.pausado() ||
-      this.ahora().getTime() - this.ultimoMovimiento() < CONTROLES_MS
+    () => this.ahora().getTime() - this.ultimoMovimiento() < CONTROLES_MS
   );
 
   /**

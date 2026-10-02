@@ -14,47 +14,44 @@ import { RelativePipe } from '../../../ui/portal.pipes';
   selector: 'pt-slide-equipo',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RelativePipe],
-  host: { class: 'flex h-full flex-col gap-2 2xl:gap-3' },
+  host: { class: 'flex h-full flex-col gap-1' },
   template: `
     @if (conAsignados() > 0) {
-      <p class="shrink-0 text-center tv-row text-ink-muted">
+      <p class="tv-row shrink-0 text-center text-ink-muted">
         {{ textoConAsignados() }}
       </p>
     }
     @if (cargas().length > 0) {
       <!--
-        Todas las personas, con scroll. La cuadricula se centra con my-auto
-        (no con content-center): si hay mas gente que alto, content-center
-        corta las primeras y ya no se puede subir a verlas.
+        Todas las personas, en una rejilla por ancho (.tv-rejilla), con scroll
+        si no caben.
       -->
-      <div class="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
+      <div
+        class="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain pr-1">
         <ul
-          class="my-auto grid grid-cols-1 gap-2 lg:grid-cols-2 lg:gap-2.5 2xl:grid-cols-1 2xl:gap-3">
+          class="tv-rejilla !flex-none !overflow-visible !pr-0"
+          style="--tv-min: 26rem">
           @for (carga of cargas(); track carga.person.id) {
             <li
-              class="tv-card flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:flex-nowrap lg:gap-4 lg:px-4 lg:py-3 2xl:gap-6 2xl:px-6 2xl:py-4">
+              class="tv-card flex min-w-0 items-center gap-3 px-3 py-2 max-sm:flex-wrap">
               <span
-                class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-soft text-base font-bold text-brand lg:h-12 lg:w-12 lg:text-xl 2xl:h-16 2xl:w-16 2xl:text-2xl">
+                class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-soft text-base font-bold text-brand">
                 {{ iniciales(carga.person.name) }}
               </span>
 
-              <span class="min-w-0 flex-1 basis-40 sm:basis-auto">
-                <span class="line-clamp-2 break-words tv-title leading-tight">{{
+              <span class="min-w-0 flex-1 max-sm:basis-40">
+                <span class="tv-nombre line-clamp-2">{{
                   carga.person.name
                 }}</span>
-                <span
-                  class="block truncate text-sm text-ink-muted lg:text-base 2xl:text-xl">
+                <span class="tv-dato block truncate">
                   {{ carga.person.role ?? 'Sin rol' }}
-                </span>
-                @if (carga.oldestOpen; as viejo) {
-                  <span
-                    class="mt-1 hidden truncate text-sm text-ink-muted lg:block 2xl:text-lg">
-                    Más antiguo: {{ viejo.title }} ·
+                  @if (carga.oldestOpen; as viejo) {
+                    · Más antiguo: {{ viejo.title }} ·
                     {{ viejo.updatedAt | relativo }}
-                  </span>
-                }
+                  }
+                </span>
                 <span
-                  class="mt-1.5 block h-1.5 w-full max-w-md overflow-hidden rounded-full bg-surface-muted 2xl:mt-2 2xl:h-2">
+                  class="mt-1 block h-1.5 w-full overflow-hidden rounded-full bg-surface-muted">
                   <span
                     class="block h-full rounded-full"
                     [class]="carga.overdue > 0 ? 'bg-danger' : 'bg-accent'"
@@ -63,33 +60,33 @@ import { RelativePipe } from '../../../ui/portal.pipes';
               </span>
 
               <span
-                class="flex w-full shrink-0 justify-around gap-3 text-center sm:w-auto sm:justify-start 2xl:gap-6">
-                <span class="min-w-16 lg:min-w-20 2xl:min-w-28">
+                class="flex shrink-0 gap-3 text-center max-sm:w-full max-sm:justify-around">
+                <span class="min-w-[3.25rem]">
                   <span
-                    class="block text-2xl font-bold tabular-nums text-ink lg:text-3xl 2xl:text-5xl">
+                    class="block text-2xl font-bold tabular-nums leading-none text-ink">
                     {{ carga.open }}
                   </span>
-                  <span class="tv-label">Abiertos</span>
+                  <span class="tv-label !tracking-wide">Abiertos</span>
                 </span>
-                <span class="min-w-16 lg:min-w-20 2xl:min-w-28">
+                <span class="min-w-[3.25rem]">
                   <span
-                    class="block text-2xl font-bold tabular-nums lg:text-3xl 2xl:text-5xl"
+                    class="block text-2xl font-bold tabular-nums leading-none"
                     [class]="
                       carga.overdue > 0 ? 'text-danger' : 'text-ink-subtle'
                     ">
                     {{ carga.overdue }}
                   </span>
-                  <span class="tv-label">Vencidos</span>
+                  <span class="tv-label !tracking-wide">Vencidos</span>
                 </span>
-                <span class="min-w-16 lg:min-w-20 2xl:min-w-28">
+                <span class="min-w-[3.25rem]">
                   <span
-                    class="block text-2xl font-bold tabular-nums lg:text-3xl 2xl:text-5xl"
+                    class="block text-2xl font-bold tabular-nums leading-none"
                     [class]="
                       carga.blocked > 0 ? 'text-warn' : 'text-ink-subtle'
                     ">
                     {{ carga.blocked }}
                   </span>
-                  <span class="tv-label">Bloqueados</span>
+                  <span class="tv-label !tracking-wide">Bloqueados</span>
                 </span>
               </span>
             </li>
@@ -98,14 +95,14 @@ import { RelativePipe } from '../../../ui/portal.pipes';
       </div>
     } @else {
       <div class="flex h-full items-center justify-center">
-        <p class="text-3xl text-ink-subtle">
+        <p class="tv-title !font-normal text-ink-subtle">
           Ninguna fuente devolvió pendientes con responsable
         </p>
       </div>
     }
 
     @if (sinAsignar() > 0) {
-      <p class="shrink-0 text-center tv-row text-ink-muted">
+      <p class="tv-row shrink-0 text-center text-ink-muted">
         {{ textoSinAsignar() }}
       </p>
     }

@@ -29,8 +29,12 @@ import { DayPipe, TimePipe } from '../../../ui/portal.pipes';
 import { TaskCardComponent } from '../../../ui/task-card.component';
 import { DiapositivaConContenido } from '../carrusel.model';
 
-/** Tope por columna: a tamaño de television no caben mas sin scroll. */
-const RENGLONES = 12;
+/**
+ * Tope por columna. Con renglones compactos caben ~10 en un iPad apaisado y
+ * ~20 en una television; lo que sobra se desplaza dentro de la columna y el
+ * resto se resume en «y N más».
+ */
+const RENGLONES = 20;
 
 const CLASE_PRIORIDAD: Record<TaskPriority, string> = {
   urgente: 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200',
@@ -73,21 +77,22 @@ const CLASE_DIALOGO = 'con-dialogo';
   },
   template: `
     <div
-      class="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3 lg:grid-rows-[minmax(0,1fr)] lg:gap-5">
+      class="grid min-h-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-3 sm:grid-rows-[minmax(0,1fr)]">
       @for (col of columnas(); track col.id) {
-        <section class="tv-card flex min-h-0 flex-col px-5 py-4">
+        <section class="tv-card flex min-h-0 min-w-0 flex-col px-3 py-2">
           <h2 class="flex shrink-0 items-baseline gap-3">
             <span class="tv-label">{{ col.titulo }}</span>
-            <span class="text-lg font-bold text-ink-muted">
+            <span class="tv-row font-bold text-ink-muted">
               {{ col.tareas.length + col.restantes }}
             </span>
           </h2>
 
           @if (col.tareas.length > 0) {
-            <ul class="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+            <ul
+              class="mt-1.5 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain">
               @for (tarea of col.tareas; track tarea.id) {
                 <li
-                  class="flex shrink-0 cursor-pointer items-start gap-3 rounded-lg border border-line px-3 py-2 transition hover:border-brand/60 hover:bg-surface-muted"
+                  class="flex min-h-[44px] shrink-0 cursor-pointer flex-wrap items-start gap-x-2 gap-y-0.5 rounded-lg border border-line px-2.5 py-1.5 transition hover:border-brand/60 hover:bg-surface-muted"
                   [class.border-danger]="esVencido(tarea)"
                   role="button"
                   aria-haspopup="dialog"
@@ -96,15 +101,13 @@ const CLASE_DIALOGO = 'con-dialogo';
                   (click)="abrir(tarea)"
                   (keydown.enter)="abrir(tarea)">
                   <span
-                    class="mt-2 h-2.5 w-2.5 shrink-0 rounded-full"
+                    class="mt-1.5 h-2 w-2 shrink-0 rounded-full"
                     [class]="punto(tarea)"></span>
-                  <span class="min-w-0 flex-1">
-                    <span
-                      class="line-clamp-3 break-words tv-row font-bold leading-tight text-ink">
+                  <span class="min-w-0 flex-1 basis-32">
+                    <span class="tv-nombre line-clamp-2">
                       {{ tarea.title }}
                     </span>
-                    <span
-                      class="mt-0.5 block truncate text-base text-ink-muted">
+                    <span class="tv-dato block truncate">
                       @if (tarea.company) {
                         {{ tarea.company }} ·
                       }
@@ -113,7 +116,7 @@ const CLASE_DIALOGO = 'con-dialogo';
                         <!-- Llegó un correo del hilo, contestó el equipo, o
                              es un pendiente nuevo que nadie ha abierto. -->
                         <span
-                          class="ml-1 inline-flex items-center gap-1 rounded px-1.5 text-xs font-bold uppercase tracking-wide"
+                          class="ml-1 inline-flex items-center gap-1 rounded px-1 text-[0.65rem] font-bold uppercase tracking-wide"
                           [class]="
                             u.kind === 'respuesta'
                               ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200'
@@ -142,38 +145,36 @@ const CLASE_DIALOGO = 'con-dialogo';
                       }
                     </span>
                   </span>
-                  <span class="shrink-0 text-right">
+                  <span class="ml-auto shrink-0 text-right">
                     @if (col.id === 'sinfecha') {
                       <span
-                        class="chip px-2 py-0.5 text-xs"
+                        class="chip px-2 py-0 text-xs"
                         [class]="clasePrioridad(tarea)">
                         {{ etiquetaPrioridad(tarea) }}
                       </span>
                     } @else if (col.id === 'proximos') {
                       <span
-                        class="block whitespace-nowrap text-base font-bold text-ink">
+                        class="block whitespace-nowrap text-sm font-bold leading-tight text-ink">
                         {{ tarea.dueDate | dia }}
                       </span>
-                      <span
-                        class="block whitespace-nowrap text-sm text-ink-muted">
+                      <span class="tv-dato block whitespace-nowrap">
                         {{ plazo(tarea) }}
                       </span>
                     } @else if (esVencido(tarea)) {
                       <span
-                        class="block whitespace-nowrap text-base font-bold text-danger">
+                        class="block whitespace-nowrap text-sm font-bold leading-tight text-danger">
                         Vencido
                       </span>
-                      <span
-                        class="block whitespace-nowrap text-sm text-ink-muted">
+                      <span class="tv-dato block whitespace-nowrap">
                         {{ tarea.dueDate | dia }}
                       </span>
                     } @else {
                       <span
-                        class="block whitespace-nowrap text-base font-bold text-ink">
+                        class="block whitespace-nowrap text-sm font-bold leading-tight text-ink">
                         {{ tarea.dueHasTime ? (tarea.dueDate | hora) : 'hoy' }}
                       </span>
                       <span
-                        class="chip mt-0.5 px-2 py-0.5 text-xs"
+                        class="chip px-2 py-0 text-xs"
                         [class]="clasePrioridad(tarea)">
                         {{ etiquetaPrioridad(tarea) }}
                       </span>
@@ -185,7 +186,7 @@ const CLASE_DIALOGO = 'con-dialogo';
             @if (col.ampliada || col.restantes > 0) {
               <button
                 type="button"
-                class="mt-2 flex min-h-11 w-full shrink-0 items-center justify-center border-0 bg-transparent text-center text-base text-ink-muted"
+                class="mt-1 flex min-h-[44px] w-full shrink-0 items-center justify-center border-0 bg-transparent text-center text-sm text-ink-muted"
                 (click)="alternarColumna(col.id)">
                 @if (col.ampliada) {
                   ver menos
@@ -197,8 +198,8 @@ const CLASE_DIALOGO = 'con-dialogo';
           } @else {
             <div
               class="flex flex-1 flex-col items-center justify-center gap-2 text-center text-ink-subtle">
-              <pt-icon name="ok" class="h-10 w-10 text-ok" />
-              <p class="text-lg">Nada por aquí</p>
+              <pt-icon name="ok" class="h-8 w-8 text-ok" />
+              <p class="tv-row">Nada por aquí</p>
             </div>
           }
         </section>
@@ -214,16 +215,16 @@ const CLASE_DIALOGO = 'con-dialogo';
     -->
     @if (seleccionada(); as tarea) {
       <div
-        class="dialogo-carrusel fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-0 lg:items-center lg:p-6"
+        class="dialogo-carrusel fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-0 md:items-center md:p-6"
         (click)="cerrar()">
         <div
-          class="card flex h-full w-full max-w-3xl flex-col rounded-none lg:h-auto lg:max-h-[90dvh] lg:rounded-xl"
+          class="card flex h-full w-full max-w-3xl flex-col rounded-none md:h-auto md:max-h-[90dvh] md:rounded-xl"
           role="dialog"
           aria-modal="true"
           aria-labelledby="dialogo-pendiente-titulo"
           (click)="$event.stopPropagation()">
           <header
-            class="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2 lg:px-5">
+            class="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2 md:px-5">
             <h2
               id="dialogo-pendiente-titulo"
               class="text-sm font-semibold text-ink">
@@ -243,7 +244,7 @@ const CLASE_DIALOGO = 'con-dialogo';
               <pt-icon name="cerrar" class="h-5 w-5" />
             </button>
           </header>
-          <div class="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5">
+          <div class="min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
             <pt-task-card [task]="tarea" />
           </div>
         </div>
