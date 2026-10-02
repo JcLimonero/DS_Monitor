@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { normalizarManual } from '../licencias/licencias.util';
-import { limpiarEdiciones, limpiarManuales } from './local-settings';
+import {
+  limpiarEdiciones,
+  limpiarManuales,
+  sanearEdicion
+} from './local-settings';
+import { totalSpend } from '../state/portal.selectors';
+import type { LicenseUsage } from '../models';
 
 describe('lo guardado en localStorage que pudo corromperse', () => {
   it('limpiarManuales deja solo objetos con id y producto', () => {
@@ -97,5 +103,49 @@ describe('una licencia local incompleta no rompe el portal', () => {
     for (const v of [undefined, 3, 'x', [], { id: 1 }]) {
       assert.equal(normalizarManual(v), undefined);
     }
+  });
+});
+
+describe('una corrección local con basura no descuadra el gasto', () => {
+  it('quita costo negativo o no numérico, moneda que no son 3 letras y fechas absurdas', () => {
+    assert.deepEqual(sanearEdicion({ cost: -500, currency: 'MXN' }), {
+      currency: 'MXN'
+    });
+    assert.deepEqual(sanearEdicion({ cost: 'abc', currency: 5 }), {});
+    assert.deepEqual(sanearEdicion({ cost: 1e999, currency: '$' }), {});
+    assert.deepEqual(
+      sanearEdicion({ renewsAt: '0001-01-01T00:00:00.000Z', plan: ' Anual ' }),
+      { plan: 'Anual' }
+    );
+    assert.deepEqual(sanearEdicion({ cost: 1200, currency: 'usd' }), {
+      cost: 1200,
+      currency: 'USD'
+    });
+  });
+
+  it('hidden solo vale si es exactamente true', () => {
+    assert.equal(sanearEdicion({ hidden: 'yes' })?.hidden, undefined);
+    assert.equal(sanearEdicion({ hidden: 1 })?.hidden, undefined);
+    assert.equal(sanearEdicion({ hidden: true })?.hidden, true);
+  });
+
+  it('limpiarEdiciones aplica el saneado a cada id', () => {
+    const r = limpiarEdiciones({
+      'dominios-zeta-com-mx': { cost: -500, currency: 'MXN' },
+      otra: { cost: 99, currency: 'MXN' }
+    });
+    assert.equal(r['dominios-zeta-com-mx']?.cost, undefined);
+    assert.equal(r['otra']?.cost, 99);
+  });
+
+  it('totalSpend suma solo costos numéricos', () => {
+    const licencias = [
+      { cost: 100 },
+      { cost: Number.NaN },
+      { cost: undefined },
+      { cost: '50' as unknown as number },
+      { cost: 25 }
+    ] as unknown as LicenseUsage[];
+    assert.equal(totalSpend(licencias), 125);
   });
 });

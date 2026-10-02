@@ -85,14 +85,68 @@ export function limpiarManuales(valor: unknown): LicenseUsage[] {
     .filter((l): l is NonNullable<typeof l> => l !== undefined);
 }
 
-/** Las correcciones de un localStorage que pudo corromperse: solo las que son objetos. */
+const TEXTO_MAXIMO = 200;
+
+/** Una fecha ISO razonable (2000 a 2100); cualquier otra cosa se descarta. */
+function fechaSana(valor: unknown): string | undefined {
+  if (typeof valor !== 'string') {
+    return undefined;
+  }
+  const t = Date.parse(valor);
+  if (!Number.isFinite(t)) {
+    return undefined;
+  }
+  const anio = new Date(t).getUTCFullYear();
+  return anio >= 2000 && anio <= 2100 ? valor : undefined;
+}
+
+/**
+ * Una correccion de licencia de un localStorage que pudo corromperse (o que
+ * lo capturo la version vieja, que no validaba nada): solo se conserva lo que
+ * es seguro mostrar y sumar. Un costo negativo o no numerico, una moneda que
+ * no son tres letras o una fecha absurda se quitan, para que no descuadren el
+ * gasto del Resumen ni escondan una licencia.
+ */
+export function sanearEdicion(valor: unknown): LicenseEdit | undefined {
+  if (!esObjeto(valor)) {
+    return undefined;
+  }
+  const edicion: LicenseEdit = {};
+  const costo = valor['cost'];
+  if (typeof costo === 'number' && Number.isFinite(costo) && costo >= 0) {
+    edicion.cost = costo;
+  }
+  const moneda = valor['currency'];
+  if (typeof moneda === 'string' && /^[A-Za-z]{3}$/.test(moneda.trim())) {
+    edicion.currency = moneda.trim().toUpperCase();
+  }
+  const plan = valor['plan'];
+  if (typeof plan === 'string' && plan.trim()) {
+    edicion.plan = plan.trim().slice(0, TEXTO_MAXIMO);
+  }
+  const renueva = fechaSana(valor['renewsAt']);
+  if (renueva) {
+    edicion.renewsAt = renueva;
+  }
+  if (valor['hidden'] === true) {
+    edicion.hidden = true;
+  }
+  return edicion;
+}
+
+/** Las correcciones de un localStorage que pudo corromperse, ya saneadas. */
 export function limpiarEdiciones(valor: unknown): Record<string, LicenseEdit> {
   if (!esObjeto(valor)) {
     return {};
   }
-  return Object.fromEntries(
-    Object.entries(valor).filter(([, e]) => esObjeto(e))
-  ) as Record<string, LicenseEdit>;
+  const limpias: Record<string, LicenseEdit> = {};
+  for (const [id, e] of Object.entries(valor)) {
+    const edicion = sanearEdicion(e);
+    if (edicion) {
+      limpias[id] = edicion;
+    }
+  }
+  return limpias;
 }
 
 export function readLocalSettings(): LocalSettings {

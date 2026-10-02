@@ -286,7 +286,14 @@ export function licensesNeedingAttention(
 
 /** Gasto total del periodo, sumando solo lo que viene con costo. */
 export function totalSpend(licenses: readonly LicenseUsage[]): number {
-  return licenses.reduce((suma, license) => suma + (license.cost ?? 0), 0);
+  return licenses.reduce(
+    (suma, license) =>
+      suma +
+      (typeof license.cost === 'number' && Number.isFinite(license.cost)
+        ? license.cost
+        : 0),
+    0
+  );
 }
 
 /**
