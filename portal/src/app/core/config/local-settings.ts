@@ -163,7 +163,10 @@ export function accountIdFor(
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'buzon');
+      .replace(/^-+|-+$/g, '')
+      // El puente acepta ids de hasta 64 caracteres: el nombre se recorta.
+      .slice(0, 40)
+      .replace(/-+$/g, '') || 'buzon');
   let id = base;
   for (let n = 2; taken.has(id); n++) {
     id = `${base}-${n}`;

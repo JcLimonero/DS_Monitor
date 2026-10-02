@@ -85,7 +85,7 @@ function texto(valor: unknown): string | undefined {
 function idCuenta(valor: unknown, que: string): string {
   const id = texto(valor);
   if (!id || !ID_CUENTA.test(id)) {
-    throw new Error(`El id de ${que} no es válido.`);
+    throw new Error(`El id de ${que} no es válido o es demasiado largo.`);
   }
   return id;
 }
@@ -108,7 +108,9 @@ export function validarBuzon(crudo: unknown): CuentaPortal {
   }
   const id = texto(crudo['id']);
   if (!id || !ID_BUZON.test(id)) {
-    throw new Error('El id del buzón debe empezar con "correo-".');
+    throw new Error(
+      'El id del buzón no es válido o es demasiado largo: debe empezar con "correo-", llevar solo minúsculas, números y guiones, y no pasar de 64 caracteres.'
+    );
   }
   const label = texto(crudo['label']);
   if (!label) {
@@ -298,4 +300,30 @@ export function aplicarParche(
   }
   verificarTopes(base);
   return base;
+}
+
+/** Un documento completo choca con ajustes que el servidor ya tiene (409). */
+export class ConflictoAjustes extends Error {}
+
+/**
+ * Un documento completo solo entra cuando el servidor no tiene ajustes (es la
+ * subida de lo que traia un navegador). Con ajustes ya guardados lo pisaria,
+ * y dos dispositivos que suben a la vez se perderian cambios: se rechaza,
+ * salvo que se pida `reemplazar` de forma explicita. El portal, ante el
+ * conflicto, vuelve a leer y reintenta con parches.
+ */
+export function aplicarDocumentoCompleto(
+  previo: AjustesPortal,
+  crudo: unknown,
+  reemplazar: boolean,
+  ahora: string,
+  por: string
+): AjustesPortal {
+  if (previo.actualizadoEn && !reemplazar) {
+    const quien = previo.actualizadoPor ? ` por ${previo.actualizadoPor}` : '';
+    throw new ConflictoAjustes(
+      `El servidor ya tiene ajustes guardados${quien}; un documento completo no los reemplaza. Manda un cambio puntual, o "reemplazar": true si de verdad quieres sustituirlos.`
+    );
+  }
+  return validarDocumento(crudo, ahora, por);
 }

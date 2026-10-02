@@ -3,12 +3,16 @@ import { describe, it } from 'node:test';
 import { Account, AjustesPortal } from '../models';
 import {
   EMPTY_SETTINGS,
+  accountIdFor,
   LocalSettings,
   mailConnection
 } from './local-settings';
 import {
   aplicarAjustesServidor,
+  conSoloOmitidos,
   cuerpoDeGuardado,
+  parchesDeFusion,
+  prepararSubida,
   apagadasAProposito,
   ajustesParaSubir,
   hayAjustesLocales,
@@ -274,5 +278,127 @@ describe('cuerpoDeGuardado (primer guardado contra un servidor vacío)', () => {
       cuentaEnabled: { id: 'claude', enabled: false }
     });
     assert.equal(r.subeLocal, false);
+  });
+});
+
+describe('prepararSubida: lo que no se sube se conserva y se explica', () => {
+  const raro: LocalSettings = {
+    ...EMPTY_SETTINGS,
+    accounts: [
+      buzon('correo-ok'),
+      buzon('otro-b'),
+      buzon(`correo-${'a'.repeat(80)}`),
+      buzon('correo-c', { kind: 'odoo' })
+    ],
+    accountEnabled: { claude: false, 'No Valido': true },
+    connectionMode: { 'odoo-itech': 'gateway', 'pendientes-locales': 'local' },
+    removedAccounts: ['correo-icloud', 'itech']
+  };
+
+  it('parte el documento y los omitidos, con motivos y total', () => {
+    const { documento, omitidos } = prepararSubida(raro);
+    assert.deepEqual(
+      documento.buzonesAgregados.map((a) => a.id),
+      ['correo-ok']
+    );
+    assert.deepEqual(documento.cuentasApagadas, { claude: false });
+    assert.deepEqual(documento.modos, { 'odoo-itech': 'gateway' });
+    assert.deepEqual(documento.buzonesQuitados, ['correo-icloud']);
+    assert.equal(omitidos.accounts.length, 3);
+    assert.deepEqual(omitidos.accountEnabled, { 'No Valido': true });
+    assert.deepEqual(omitidos.connectionMode, {
+      'pendientes-locales': 'local'
+    });
+    assert.deepEqual(omitidos.removedAccounts, ['itech']);
+    assert.equal(omitidos.total, 6);
+    assert.ok(omitidos.motivos.some((m) => /modo «local»/.test(m)));
+    assert.ok(omitidos.motivos.some((m) => /demasiado largo/.test(m)));
+  });
+
+  it('conSoloOmitidos deja en el navegador solo lo que no se subió', () => {
+    const { omitidos } = prepararSubida(raro);
+    const resto = conSoloOmitidos(
+      { ...raro, licenseEdits: { x: { cost: 3 } } },
+      omitidos
+    );
+    assert.equal(resto.accounts.length, 3);
+    assert.deepEqual(resto.removedAccounts, ['itech']);
+    assert.deepEqual(resto.licenseEdits, { x: { cost: 3 } });
+    // Lo que queda ya no tiene nada que subir.
+    const otra = prepararSubida(resto);
+    assert.equal(otra.documento.buzonesAgregados.length, 0);
+    assert.equal(otra.omitidos.total, omitidos.total);
+  });
+
+  it('con solo cosas no subibles, el primer guardado manda el parche', () => {
+    const solo = { ...EMPTY_SETTINGS, removedAccounts: ['itech'] };
+    const parche = { cuentaEnabled: { id: 'claude', enabled: false } };
+    const r = cuerpoDeGuardado(true, solo, parche);
+    assert.equal(r.subeLocal, false);
+    assert.deepEqual(r.cuerpo, parche);
+  });
+});
+
+describe('parchesDeFusion (otro dispositivo subió primero)', () => {
+  const local: LocalSettings = {
+    ...EMPTY_SETTINGS,
+    accounts: [buzon('correo-uno'), buzon('correo-comun')],
+    accountEnabled: { claude: false, cursor: false },
+    connectionMode: { a: 'gateway', b: 'demo' },
+    removedAccounts: ['correo-icloud', 'correo-gmail']
+  };
+  const servidor = ajustes({
+    buzonesAgregados: [buzon('correo-comun'), buzon('correo-dos')],
+    cuentasApagadas: { cursor: true },
+    modos: { b: 'gateway' },
+    buzonesQuitados: ['correo-icloud']
+  });
+
+  it('manda solo lo que al servidor le falta; en los mapas gana el servidor', () => {
+    const p = parchesDeFusion(servidor, local);
+    assert.deepEqual(p, [
+      { agregarBuzon: buzon('correo-uno') },
+      { cuentaEnabled: { id: 'claude', enabled: false } },
+      { modo: { id: 'a', modo: 'gateway' } },
+      { quitarBuzon: 'correo-gmail' }
+    ]);
+  });
+
+  it('nunca manda un documento completo y no repite lo que ya está', () => {
+    const p = parchesDeFusion(servidor, local);
+    assert.ok(p.every((x) => Object.keys(x).length === 1));
+    assert.deepEqual(parchesDeFusion(ajustes(), EMPTY_SETTINGS), []);
+  });
+
+  it('no quita un buzón que el servidor tiene agregado ni agrega uno que quitó', () => {
+    const s = ajustes({
+      buzonesAgregados: [buzon('correo-gmail')],
+      buzonesQuitados: ['correo-uno']
+    });
+    const p = parchesDeFusion(s, local);
+    assert.ok(!p.some((x) => x.quitarBuzon === 'correo-gmail'));
+    assert.ok(!p.some((x) => x.agregarBuzon?.id === 'correo-uno'));
+  });
+});
+
+describe('accountIdFor con etiquetas largas', () => {
+  it('recorta el id para que el puente lo acepte (máx. 64) y sigue siendo único', () => {
+    const largo =
+      'Buzón de la oficina de ventas de la sucursal norte del grupo';
+    const id = accountIdFor(largo, new Set());
+    assert.ok(id.length <= 64, id);
+    assert.ok(id.startsWith('correo-'));
+    const otro = accountIdFor(largo, new Set([id]));
+    assert.notEqual(otro, id);
+    assert.ok(otro.length <= 64, otro);
+    assert.ok(!/-$/.test(id));
+  });
+
+  it('una etiqueta corta queda igual que siempre', () => {
+    assert.equal(accountIdFor('Ventas', new Set()), 'correo-ventas');
+    assert.equal(
+      accountIdFor('Ventas', new Set(['correo-ventas'])),
+      'correo-ventas-2'
+    );
   });
 });

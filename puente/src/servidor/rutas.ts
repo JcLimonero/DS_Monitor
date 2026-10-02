@@ -11,8 +11,9 @@ import { AlmacenCorreo } from '../correo/almacen-correo.js';
 import { AlmacenJson } from '../datos/almacen-json.js';
 import {
   AJUSTES_VACIOS,
+  aplicarDocumentoCompleto,
   aplicarParche,
-  validarDocumento,
+  ConflictoAjustes,
   type AjustesPortal
 } from '../datos/ajustes-portal.js';
 import {
@@ -1110,7 +1111,9 @@ export function construirRutas(
   // Antes eran por navegador; ahora son de todos. Se lee sin token (el portal
   // lo pide en el arranque, antes de armar sus adaptadores) y se guarda con
   // un parche de una sola operacion, o con el documento completo (`ajustes`)
-  // cuando alguien sube lo que traia en su navegador. `actualizadoEn` vacio
+  // cuando alguien sube lo que traia en su navegador; el documento completo
+  // solo entra si el servidor esta vacio (409 si ya hay ajustes, salvo
+  // `reemplazar: true`). `actualizadoEn` vacio
   // es "nadie ha guardado nada". No contiene secretos: solo ids y etiquetas.
 
   router.get('/ajustes-portal', async () => datos.ajustesPortal.leer());
@@ -1124,12 +1127,18 @@ export function construirRutas(
     try {
       nuevo =
         cuerpo['ajustes'] !== undefined
-          ? validarDocumento(cuerpo['ajustes'], ahora, por)
+          ? aplicarDocumentoCompleto(
+              datos.ajustesPortal.leer(),
+              cuerpo['ajustes'],
+              cuerpo['reemplazar'] === true,
+              ahora,
+              por
+            )
           : aplicarParche(datos.ajustesPortal.leer(), cuerpo, ahora, por);
     } catch (error) {
       throw new ErrorPuente(
         error instanceof Error ? error.message : String(error),
-        400
+        error instanceof ConflictoAjustes ? 409 : 400
       );
     }
     return datos.ajustesPortal.escribir(nuevo);

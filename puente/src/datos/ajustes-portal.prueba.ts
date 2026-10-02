@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   AJUSTES_VACIOS,
+  ConflictoAjustes,
   MAX_BUZONES,
+  aplicarDocumentoCompleto,
   aplicarParche,
   validarBuzon,
   validarDocumento,
@@ -278,6 +280,65 @@ describe('validarDocumento', () => {
     assert.throws(
       () => validarDocumento({ buzonesAgregados: muchos }, AHORA, POR),
       /Máximo/
+    );
+  });
+});
+
+describe('aplicarDocumentoCompleto', () => {
+  const doc = {
+    buzonesAgregados: [buzon()],
+    cuentasApagadas: { claude: false }
+  };
+  const conFecha: AjustesPortal = {
+    ...AJUSTES_VACIOS,
+    cuentasApagadas: { plataformas: false },
+    actualizadoEn: AHORA,
+    actualizadoPor: 'otro@ejemplo.mx'
+  };
+
+  it('sin fecha (servidor vacio) lo acepta', () => {
+    const r = aplicarDocumentoCompleto(AJUSTES_VACIOS, doc, false, AHORA, POR);
+    assert.equal(r.buzonesAgregados.length, 1);
+    assert.equal(r.actualizadoEn, AHORA);
+  });
+
+  it('con fecha lo rechaza con un conflicto claro (409 en la ruta)', () => {
+    assert.throws(
+      () => aplicarDocumentoCompleto(conFecha, doc, false, AHORA, POR),
+      (e: unknown) =>
+        e instanceof ConflictoAjustes && /otro@ejemplo\.mx/.test(e.message)
+    );
+  });
+
+  it('con reemplazar explicito si reemplaza', () => {
+    const r = aplicarDocumentoCompleto(conFecha, doc, true, AHORA, POR);
+    assert.deepEqual(r.cuentasApagadas, { claude: false });
+    assert.equal(r.actualizadoPor, POR);
+  });
+
+  it('un documento invalido sigue siendo un error normal, no un conflicto', () => {
+    assert.throws(
+      () => aplicarDocumentoCompleto(AJUSTES_VACIOS, [], false, AHORA, POR),
+      (e: unknown) => e instanceof Error && !(e instanceof ConflictoAjustes)
+    );
+  });
+});
+
+describe('ids demasiado largos', () => {
+  it('el mensaje dice que es invalido o demasiado largo', () => {
+    assert.throws(
+      () => validarBuzon(buzon(`correo-${'a'.repeat(80)}`)),
+      /demasiado largo/
+    );
+    assert.throws(
+      () =>
+        aplicarParche(
+          AJUSTES_VACIOS,
+          { cuentaEnabled: { id: 'a'.repeat(80), enabled: false } },
+          AHORA,
+          POR
+        ),
+      /demasiado largo/
     );
   });
 });

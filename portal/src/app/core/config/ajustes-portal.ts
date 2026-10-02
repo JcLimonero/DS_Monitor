@@ -6,7 +6,7 @@ import {
   isMailKind,
   withLocalSettings
 } from './local-settings';
-import { PortalConfig } from './portal-config.model';
+import { ConnectionMode, PortalConfig } from './portal-config.model';
 
 /**
  * La lógica pura de los ajustes compartidos (los que viven en el puente):
@@ -89,28 +89,71 @@ export function hayAjustesLocales(local: LocalSettings): boolean {
   );
 }
 
-/**
- * Lo del navegador, listo para subir al servidor: lo que el puente no
- * aceptaría (ids raros, modo `local`, buzones que no son de correo) se deja
- * fuera para que un renglón viejo no tire toda la subida.
- */
-export function ajustesParaSubir(local: LocalSettings): {
+/** El documento que se sube: lo del navegador que el puente sí acepta. */
+export interface DocumentoAjustes {
   cuentasApagadas: Record<string, boolean>;
   modos: Record<string, Modo>;
   buzonesAgregados: Account[];
   buzonesQuitados: string[];
+}
+
+/** Lo que no se puede subir: se queda en el navegador hasta que alguien lo descarte. */
+export interface Omitidos {
+  accounts: Account[];
+  accountEnabled: Record<string, boolean>;
+  connectionMode: Record<string, ConnectionMode>;
+  removedAccounts: string[];
+  /** Cuántas entradas son, en total. */
+  total: number;
+  /** Por qué, en palabras: "2 con id no válido o demasiado largo". */
+  motivos: string[];
+}
+
+const MOTIVO_ID = 'con id no válido o demasiado largo';
+const MOTIVO_TIPO = 'buzones de un tipo o color que el servidor no acepta';
+const MOTIVO_LOCAL = 'en modo «local» (solo vale en este navegador)';
+
+/**
+ * Lo del navegador, partido en lo que el puente acepta y lo que no (ids
+ * raros o de más de 64 caracteres, modo `local`, buzones que no son de
+ * correo). Lo segundo no se sube ni se pierde en silencio: queda en
+ * `omitidos`, con sus motivos, para avisarlo.
+ */
+export function prepararSubida(local: LocalSettings): {
+  documento: DocumentoAjustes;
+  omitidos: Omitidos;
 } {
+  const razones = new Map<string, number>();
+  const anotar = (razon: string) =>
+    razones.set(razon, (razones.get(razon) ?? 0) + 1);
   const vistos = new Set<string>();
   const buzonesAgregados: Account[] = [];
+  const omitidos: Omitidos = {
+    accounts: [],
+    accountEnabled: {},
+    connectionMode: {},
+    removedAccounts: [],
+    total: 0,
+    motivos: []
+  };
   for (const a of local.accounts) {
+    if (!a || typeof a.id !== 'string' || !ID_BUZON.test(a.id)) {
+      if (a) {
+        omitidos.accounts.push(a);
+      }
+      anotar(`buzones ${MOTIVO_ID}`);
+      continue;
+    }
+    if (vistos.has(a.id)) {
+      // Repetido: ya va el primero, no hay nada que conservar.
+      continue;
+    }
     if (
-      !a ||
-      typeof a.id !== 'string' ||
-      !ID_BUZON.test(a.id) ||
-      vistos.has(a.id) ||
       !isMailKind(a.kind as SourceKind) ||
       !(ACCOUNT_COLORS as readonly string[]).includes(a.color as AccountColor)
     ) {
+      omitidos.accounts.push(a);
+      anotar(MOTIVO_TIPO);
       continue;
     }
     vistos.add(a.id);
@@ -123,23 +166,112 @@ export function ajustesParaSubir(local: LocalSettings): {
       enabled: a.enabled !== false
     });
   }
+  const cuentasApagadas: Record<string, boolean> = {};
+  for (const [id, v] of Object.entries(local.accountEnabled)) {
+    if (ID_CUENTA.test(id) && typeof v === 'boolean') {
+      cuentasApagadas[id] = v;
+    } else {
+      omitidos.accountEnabled[id] = v;
+      anotar(`cuentas ${MOTIVO_ID}`);
+    }
+  }
+  const modos: Record<string, Modo> = {};
+  for (const [id, m] of Object.entries(local.connectionMode)) {
+    if (!ID_CUENTA.test(id)) {
+      omitidos.connectionMode[id] = m;
+      anotar(`conexiones ${MOTIVO_ID}`);
+    } else if (m === 'gateway' || m === 'demo') {
+      modos[id] = m;
+    } else {
+      omitidos.connectionMode[id] = m;
+      anotar(`conexiones ${MOTIVO_LOCAL}`);
+    }
+  }
+  const buzonesQuitados: string[] = [];
+  for (const id of new Set(local.removedAccounts)) {
+    if (typeof id === 'string' && ID_BUZON.test(id)) {
+      buzonesQuitados.push(id);
+    } else {
+      omitidos.removedAccounts.push(id);
+      anotar(`buzones quitados ${MOTIVO_ID}`);
+    }
+  }
+  omitidos.total = [...razones.values()].reduce((a, b) => a + b, 0);
+  omitidos.motivos = [...razones].map(([r, n]) => `${n} ${r}`);
   return {
-    cuentasApagadas: Object.fromEntries(
-      Object.entries(local.accountEnabled).filter(
-        ([id, v]) => ID_CUENTA.test(id) && typeof v === 'boolean'
-      )
-    ),
-    modos: Object.fromEntries(
-      Object.entries(local.connectionMode).filter(
-        (par): par is [string, Modo] =>
-          ID_CUENTA.test(par[0]) && (par[1] === 'gateway' || par[1] === 'demo')
-      )
-    ),
-    buzonesAgregados,
-    buzonesQuitados: [
-      ...new Set(local.removedAccounts.filter((id) => ID_BUZON.test(id)))
-    ]
+    documento: { cuentasApagadas, modos, buzonesAgregados, buzonesQuitados },
+    omitidos
   };
+}
+
+/** Solo el documento que se sube (ver `prepararSubida`). */
+export function ajustesParaSubir(local: LocalSettings): DocumentoAjustes {
+  return prepararSubida(local).documento;
+}
+
+export function documentoVacio(doc: DocumentoAjustes): boolean {
+  return (
+    doc.buzonesAgregados.length === 0 &&
+    doc.buzonesQuitados.length === 0 &&
+    Object.keys(doc.cuentasApagadas).length === 0 &&
+    Object.keys(doc.modos).length === 0
+  );
+}
+
+/** Los ajustes del navegador conservando solo lo que no se pudo subir. */
+export function conSoloOmitidos(
+  local: LocalSettings,
+  omitidos: Omitidos
+): LocalSettings {
+  return {
+    ...local,
+    accounts: omitidos.accounts,
+    accountEnabled: omitidos.accountEnabled,
+    connectionMode: omitidos.connectionMode,
+    removedAccounts: omitidos.removedAccounts
+  };
+}
+
+/**
+ * Lo que el navegador trae y el servidor aún no tiene, como parches sueltos
+ * (nunca como documento completo): unión de buzones agregados y de quitados,
+ * y en los mapas gana lo del servidor si ya tiene esa clave. Es lo que se
+ * manda cuando otro dispositivo subió primero (409).
+ */
+export function parchesDeFusion(
+  servidor: AjustesPortal,
+  local: LocalSettings
+): ParcheAjustes[] {
+  const doc = ajustesParaSubir(local);
+  const parches: ParcheAjustes[] = [];
+  for (const b of doc.buzonesAgregados) {
+    if (
+      !servidor.buzonesAgregados.some((a) => a.id === b.id) &&
+      !servidor.buzonesQuitados.includes(b.id)
+    ) {
+      parches.push({ agregarBuzon: b });
+    }
+  }
+  for (const [id, enabled] of Object.entries(doc.cuentasApagadas)) {
+    if (!(id in servidor.cuentasApagadas)) {
+      parches.push({ cuentaEnabled: { id, enabled } });
+    }
+  }
+  for (const [id, modo] of Object.entries(doc.modos)) {
+    if (!(id in servidor.modos)) {
+      parches.push({ modo: { id, modo } });
+    }
+  }
+  // Al final: quitar un buzón también olvida su encendido y su modo.
+  for (const id of doc.buzonesQuitados) {
+    if (
+      !servidor.buzonesQuitados.includes(id) &&
+      !servidor.buzonesAgregados.some((a) => a.id === id)
+    ) {
+      parches.push({ quitarBuzon: id });
+    }
+  }
+  return parches;
 }
 
 /**
@@ -177,8 +309,6 @@ export interface ParcheAjustes {
   agregarBuzon?: Account;
   quitarBuzon?: string;
 }
-
-type DocumentoAjustes = ReturnType<typeof ajustesParaSubir>;
 
 /**
  * Aplica una operación sobre un documento (copia nueva). Es la misma regla
@@ -233,11 +363,10 @@ export function cuerpoDeGuardado(
   local: LocalSettings,
   parche: ParcheAjustes
 ): { cuerpo: Record<string, unknown>; subeLocal: boolean } {
-  if (servidorVacio && hayAjustesLocales(local)) {
+  const { documento } = prepararSubida(local);
+  if (servidorVacio && !documentoVacio(documento)) {
     return {
-      cuerpo: {
-        ajustes: aplicarParcheADocumento(ajustesParaSubir(local), parche)
-      },
+      cuerpo: { ajustes: aplicarParcheADocumento(documento, parche) },
       subeLocal: true
     };
   }

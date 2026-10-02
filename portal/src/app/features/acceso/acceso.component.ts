@@ -7,6 +7,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AjustesPortalService } from '../../core/config/ajustes-portal.service';
+import { rutaInternaSegura } from '../../core/acceso/ruta-segura';
 import { SesionService } from '../../core/acceso/sesion.service';
 import { BrandLogoComponent } from '../../ui/brand-logo.component';
 
@@ -73,8 +74,7 @@ export class AccesoComponent {
     this.sesion.entrar(this.correo().trim(), this.codigo()).subscribe({
       next: () => {
         const volver = this.route.snapshot.queryParamMap.get('volver');
-        const destino =
-          volver && !volver.startsWith('/acceso') ? volver : '/panel';
+        const destino = rutaInternaSegura(volver);
         // Los ajustes compartidos piden sesión: si al arrancar no se pudieron
         // leer (no había sesión), se recarga para armar el portal con ellos.
         if (this.ajustes.fallo()) {

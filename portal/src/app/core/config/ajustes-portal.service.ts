@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, defer, firstValueFrom, from, map, of, tap } from 'rxjs';
 import { SesionService } from '../acceso/sesion.service';
@@ -6,10 +6,12 @@ import { Account, AjustesPortal } from '../models';
 import { PuenteAdminService } from '../sources/gateway/puente-admin.service';
 import {
   ParcheAjustes,
-  ajustesParaSubir,
+  conSoloOmitidos,
   cuerpoDeGuardado,
-  hayAjustesLocales,
+  documentoVacio,
   normalizarAjustes,
+  parchesDeFusion,
+  prepararSubida,
   servidorTieneAjustes
 } from './ajustes-portal';
 import { LocalSettingsStore, NewMailAccount } from './local-settings.store';
@@ -46,6 +48,8 @@ export class AjustesPortalService {
   private readonly servidor = signal<AjustesPortal | undefined>(undefined);
   /** El puente no contestó al arrancar (apagado, sin sesión, ruta inexistente). */
   readonly fallo = signal(false);
+  /** El puente es viejo y no tiene `/ajustes-portal` (404): se guarda en local. */
+  readonly sinSoporte = signal(false);
   /** Hubo cambios que solo se ven al recargar. */
   readonly pendienteRecarga = signal(false);
   /**
@@ -102,10 +106,35 @@ export class AjustesPortalService {
     ) {
       return undefined;
     }
-    if (!this.puedeAdministrar() || !hayAjustesLocales(this.local.settings())) {
+    if (!this.puedeAdministrar() || !this.hayParaSubir()) {
       return undefined;
     }
     return this.usaServidor() ? 'descartar' : 'subir';
+  });
+
+  /** Hay algo en el navegador que el servidor sí aceptaría. */
+  private readonly hayParaSubir = computed(
+    () => !documentoVacio(prepararSubida(this.local.settings()).documento)
+  );
+
+  /**
+   * Lo del navegador que no se puede subir (ids no válidos, modo local, tipos
+   * que el puente no acepta): se queda aquí y se avisa, hasta que alguien lo
+   * descarte. Solo para quien administra con el servidor a la mano.
+   */
+  readonly noSubidos = computed(() => {
+    if (
+      !this.conPuente ||
+      !this.servidor() ||
+      this.fallo() ||
+      !this.puedeAdministrar()
+    ) {
+      return undefined;
+    }
+    const { omitidos } = prepararSubida(this.local.settings());
+    return omitidos.total > 0
+      ? { total: omitidos.total, motivos: omitidos.motivos }
+      : undefined;
   });
 
   /** Lo del navegador ya se subió o se descartó en esta sesión. */
@@ -135,10 +164,16 @@ export class AjustesPortalService {
         return undefined;
       }
       this.servidor.set(ajustes);
+      this.fallo.set(false);
+      this.sinSoporte.set(false);
       return servidorTieneAjustes(ajustes) ? ajustes : undefined;
-    } catch {
-      // Sin ajustes del servidor se arranca con lo local, como antes.
+    } catch (error) {
+      // Sin ajustes del servidor se arranca con lo local, como antes. Un 404
+      // es un puente viejo (sin la ruta): se guarda en local como siempre.
       this.fallo.set(true);
+      this.sinSoporte.set(
+        error instanceof HttpErrorResponse && error.status === 404
+      );
       return undefined;
     }
   }
@@ -174,7 +209,7 @@ export class AjustesPortalService {
     input: NewMailAccount,
     taken: ReadonlySet<string>
   ): Observable<Account> {
-    if (!this.conPuente) {
+    if (this.usaLocal()) {
       return defer(() => of(this.local.addMailAccount(input, taken))).pipe(
         tap(() => this.pendienteRecarga.set(true))
       );
@@ -192,9 +227,9 @@ export class AjustesPortalService {
       color: input.color,
       enabled: true
     };
-    return this.guardar({ agregarBuzon: account }, () => undefined).pipe(
-      map(() => account)
-    );
+    return this.guardar({ agregarBuzon: account }, () =>
+      this.local.addMailAccount(input, ocupados)
+    ).pipe(map(() => account));
   }
 
   /** Quita un buzón: si es de fábrica queda marcado como quitado. */
@@ -206,33 +241,54 @@ export class AjustesPortalService {
 
   /**
    * Sube al servidor lo que el navegador traía y limpia esos campos de
-   * `localStorage` (las licencias se quedan). Quien llama recarga al terminar.
-   * Es el único camino que manda lo local: nunca se hace solo.
+   * `localStorage` (las licencias se quedan, y también lo que el servidor no
+   * acepta, que se avisa aparte). Quien llama recarga al terminar. Si otro
+   * dispositivo subió primero (409), se fusiona con parches en vez de pisarlo.
    */
   subirLocales(): Observable<void> {
     return defer(() => {
       this.migrando.set(true);
       this.errorMigracion.set(undefined);
-      return this.admin
-        .guardarAjustesPortal({
-          ajustes: ajustesParaSubir(this.local.settings())
-        })
-        .pipe(
-          tap((nuevo) => this.recibir(nuevo)),
-          tap(() => this.limpiarLocales()),
-          map(() => undefined)
-        );
+      return from(this.subirAsync());
     });
+  }
+
+  private async subirAsync(): Promise<void> {
+    const { documento } = prepararSubida(this.local.settings());
+    try {
+      const nuevo = await firstValueFrom(
+        this.admin.guardarAjustesPortal({ ajustes: documento })
+      );
+      this.recibir(nuevo);
+    } catch (error) {
+      if (estadoHttp(error) !== 409) {
+        throw error;
+      }
+      await this.fusionar();
+    }
+    this.limpiarLocales(true);
   }
 
   /** Tira lo que el navegador traía (el servidor ya tiene ajustes). */
   descartarLocales(): void {
-    this.limpiarLocales();
+    this.limpiarLocales(false);
   }
 
-  private limpiarLocales(): void {
+  /** Tira lo que no se pudo subir (el aviso lo ofrece, nunca se hace solo). */
+  descartarNoSubidos(): void {
+    this.limpiarLocales(false);
+  }
+
+  private limpiarLocales(conservarNoSubidos: boolean): void {
     // Las licencias se quedan; solo se vacían cuentas y modos.
-    this.local.clearAccountSettings();
+    this.local.clearAccountSettings(
+      conservarNoSubidos
+        ? conSoloOmitidos(
+            this.local.settings(),
+            prepararSubida(this.local.settings()).omitidos
+          )
+        : undefined
+    );
     this.localesResueltos.set(true);
   }
 
@@ -240,41 +296,101 @@ export class AjustesPortalService {
     return !!(this.sesion.token() || this.admin.token());
   }
 
+  /** Sin puente, o con uno viejo que no tiene la ruta: todo en `localStorage`. */
+  private usaLocal(): boolean {
+    return !this.conPuente || this.sinSoporte();
+  }
+
   /**
    * Con puente, escribe al servidor y actualiza las señales con lo que
-   * contesta; sin puente, hace lo de siempre en `localStorage`. Los guardados
-   * van uno tras otro: el primero contra un servidor vacío sube lo local, y
-   * los que siguen ya ven al servidor con ajustes y mandan solo su parche.
+   * contesta; sin puente (o con uno viejo), hace lo de siempre en
+   * `localStorage`. Los guardados van uno tras otro: el primero contra un
+   * servidor vacío sube lo local, y los que siguen ya ven al servidor con
+   * ajustes y mandan solo su parche.
    */
   private guardar(
     parche: ParcheAjustes,
     alLocal: () => void
   ): Observable<void> {
-    if (!this.conPuente) {
+    const enLocal = () => {
+      alLocal();
+      this.pendienteRecarga.set(true);
+    };
+    if (this.usaLocal()) {
       return defer(() => {
-        alLocal();
-        this.pendienteRecarga.set(true);
+        enLocal();
         return of(undefined);
       });
     }
-    return this.enCola(() => {
-      const servidorVacio = !!this.servidor() && !this.usaServidor();
-      const { cuerpo, subeLocal } = cuerpoDeGuardado(
-        servidorVacio,
-        this.local.settings(),
-        parche
+    return this.enCola(() => from(this.guardarEnServidor(parche, enLocal)));
+  }
+
+  private async guardarEnServidor(
+    parche: ParcheAjustes,
+    enLocal: () => void
+  ): Promise<void> {
+    // Sin lectura previa no se manda nada a ciegas: un parche podría esconder
+    // lo que este navegador trae. Se reintenta la lectura una vez.
+    if (!this.servidor()) {
+      await this.cargarInicial();
+      if (this.sinSoporte()) {
+        enLocal();
+        return;
+      }
+      if (!this.servidor()) {
+        throw new Error(
+          'No se pudo leer el servidor; intenta de nuevo en un momento.'
+        );
+      }
+    }
+    const { cuerpo, subeLocal } = cuerpoDeGuardado(
+      !this.usaServidor(),
+      this.local.settings(),
+      parche
+    );
+    try {
+      const nuevo = await firstValueFrom(
+        this.admin.guardarAjustesPortal(cuerpo)
       );
-      return this.admin.guardarAjustesPortal(cuerpo).pipe(
-        tap((nuevo) => {
-          this.recibir(nuevo);
-          if (subeLocal) {
-            this.limpiarLocales();
-            this.subidoAlGuardar.set(true);
-          }
-        }),
-        map(() => undefined)
+      this.recibir(nuevo);
+    } catch (error) {
+      // Otro dispositivo subió primero: nada se pisa, se fusiona con parches.
+      if (!subeLocal || estadoHttp(error) !== 409) {
+        throw error;
+      }
+      await this.fusionar(parche);
+    }
+    if (subeLocal) {
+      this.limpiarLocales(true);
+      this.subidoAlGuardar.set(true);
+    }
+  }
+
+  /**
+   * El servidor ya tiene ajustes (de otro dispositivo): se vuelve a leer y se
+   * manda, como parches sueltos, lo de este navegador que el servidor aún no
+   * tiene (unión de buzones y quitados; en los mapas gana el servidor), y al
+   * final el cambio que se estaba haciendo. Nunca un documento completo.
+   */
+  private async fusionar(parche?: ParcheAjustes): Promise<void> {
+    await this.cargarInicial();
+    const actual = this.servidor();
+    if (!actual) {
+      throw new Error(
+        'No se pudo leer el servidor; intenta de nuevo en un momento.'
       );
-    });
+    }
+    const parches = [
+      ...parchesDeFusion(actual, this.local.settings()),
+      ...(parche ? [parche] : [])
+    ];
+    for (const p of parches) {
+      this.recibir(
+        await firstValueFrom(
+          this.admin.guardarAjustesPortal({ ...p } as Record<string, unknown>)
+        )
+      );
+    }
   }
 
   private cola: Promise<unknown> = Promise.resolve();
@@ -310,4 +426,8 @@ function describirTipo(kind: Account['kind']): string {
     default:
       return kind;
   }
+}
+
+function estadoHttp(error: unknown): number | undefined {
+  return error instanceof HttpErrorResponse ? error.status : undefined;
 }

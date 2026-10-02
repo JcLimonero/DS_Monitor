@@ -5,6 +5,7 @@ import { throwError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { PORTAL_CONFIG } from '../config/portal-config.token';
 import { PuenteAdminService } from '../sources/gateway/puente-admin.service';
+import { rutaInternaSegura } from './ruta-segura';
 import { SesionService } from './sesion.service';
 
 /**
@@ -41,7 +42,7 @@ export const sesionInterceptor: HttpInterceptorFn = (req, next) => {
         sesion.requerida.set(true);
         if (!ruta.startsWith('/acceso')) {
           void router.navigate(['/acceso'], {
-            queryParams: { volver: ruta }
+            queryParams: { volver: rutaInternaSegura(ruta) }
           });
         }
       }

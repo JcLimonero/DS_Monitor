@@ -58,6 +58,30 @@ import { AjustesPortalService } from '../../core/config/ajustes-portal.service';
         }
       </section>
     }
+    @if (ajustes.noSubidos(); as no) {
+      <section
+        class="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200"
+        role="status">
+        <p class="font-medium">
+          {{ no.total }}
+          {{
+            no.total === 1
+              ? 'ajuste de este navegador no se subió'
+              : 'ajustes de este navegador no se subieron'
+          }}
+          al servidor.
+        </p>
+        <p class="mt-1 text-xs">
+          Motivo: {{ no.motivos.join('; ') }}. Siguen guardados en este
+          navegador; puedes descartarlos.
+        </p>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <button type="button" class="btn" (click)="descartarNoSubidos()">
+            Descartarlos
+          </button>
+        </div>
+      </section>
+    }
     @if (ajustes.subidoAlGuardar()) {
       <section
         class="mb-4 rounded-lg bg-surface-muted p-3 text-sm text-ink"
@@ -91,6 +115,10 @@ export class AjustesAvisoComponent {
   descartar(): void {
     this.ajustes.descartarLocales();
     location.reload();
+  }
+
+  descartarNoSubidos(): void {
+    this.ajustes.descartarNoSubidos();
   }
 
   recargar(): void {

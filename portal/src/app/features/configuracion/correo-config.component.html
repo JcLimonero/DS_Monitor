@@ -306,6 +306,7 @@
           class="field"
           type="text"
           name="nombre"
+          maxlength="60"
           placeholder="Por ejemplo: Ventas"
           [ngModel]="newMailLabel()"
           (ngModelChange)="newMailLabel.set($event)" />

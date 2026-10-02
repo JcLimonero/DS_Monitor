@@ -278,6 +278,15 @@ locales, para que nada se pierda de vista. Un apagado explícito (`false`) gana
 a `/salud`: una cuenta apagada a propósito sigue apagada aunque el backend
 tenga su integración configurada.
 
+Un documento completo (`{ajustes}`) solo entra si el servidor no tiene ajustes:
+con ajustes ya guardados contesta 409 (salvo `reemplazar: true`, para una
+acción manual), porque dos dispositivos que suben a la vez se pisarían. El
+portal, ante el 409, vuelve a leer el servidor y reintenta con parches,
+fusionando lo suyo (unión de buzones; en los mapas gana lo del servidor si ya
+tiene esa clave). Despliega el puente antes que el portal: un portal nuevo con
+un puente viejo no encuentra `/ajustes-portal` (404) y por eso se queda con sus
+ajustes locales.
+
 ## Dos maneras de traer datos
 
 **Ir por ellos**: el puente consulta la API del proveedor cada tanto. Es lo que
