@@ -255,6 +255,38 @@ y los selectores del portal. Renombrar una empresa reetiqueta los pendientes,
 las ediciones a mano y lo aprendido por remitente; una empresa con pendientes
 abiertos no se puede borrar, solo desactivar.
 
+Los ajustes del portal que antes vivían en cada navegador (apagar una fuente,
+pasar una conexión de demostración a datos reales, agregar o quitar buzones)
+son un solo documento compartido, `ajustes-portal`: `GET /ajustes-portal` (sin
+token, el portal lo pide en el arranque junto con `/salud`) y
+`POST /ajustes-portal/guardar` (administrador), con un parche de una sola
+operación (`cuentaEnabled {id, enabled}`, `modo {id, modo}`, `agregarBuzon`,
+`quitarBuzon`) o el documento completo en `ajustes` (así se suben los ajustes
+viejos de un navegador). Mientras `actualizadoEn` esté vacío nadie ha guardado
+nada y cada portal se queda con lo suyo; en cuanto hay fecha, lo del servidor
+manda en todos los dispositivos. Agregar un buzón aquí solo lo da de alta en el
+portal: su conexión se captura aparte (Integraciones → Correo).
+
+Política, para quien valide: `GET /ajustes-portal` sigue la misma regla que
+`/empresas` (con acceso por código activo pide sesión; no es público porque
+trae correos de buzones), así que un portal sin sesión arranca con lo suyo y
+recarga solo al iniciar sesión. El servidor manda solo si ya tiene ajustes
+(`actualizadoEn` con fecha); vacío o caído, cada portal arranca con lo que
+guardó su navegador. El primer guardado contra un servidor vacío sube el
+documento completo (lo del navegador más el cambio) y limpia esos campos
+locales, para que nada se pierda de vista. Un apagado explícito (`false`) gana
+a `/salud`: una cuenta apagada a propósito sigue apagada aunque el backend
+tenga su integración configurada.
+
+Un documento completo (`{ajustes}`) solo entra si el servidor no tiene ajustes:
+con ajustes ya guardados contesta 409 (salvo `reemplazar: true`, para una
+acción manual), porque dos dispositivos que suben a la vez se pisarían. El
+portal, ante el 409, vuelve a leer el servidor y reintenta con parches,
+fusionando lo suyo (unión de buzones; en los mapas gana lo del servidor si ya
+tiene esa clave). Despliega el puente antes que el portal: un portal nuevo con
+un puente viejo no encuentra `/ajustes-portal` (404) y por eso se queda con sus
+ajustes locales.
+
 ## Dos maneras de traer datos
 
 **Ir por ellos**: el puente consulta la API del proveedor cada tanto. Es lo que

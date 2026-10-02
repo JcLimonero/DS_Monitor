@@ -1,3 +1,10 @@
+@if (ajustesError(); as error) {
+  <p
+    class="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200">
+    {{ error }}
+  </p>
+}
+
 <div class="mt-4 space-y-3">
   @for (row of filas(); track row.connection.id) {
     <section class="card card-pad" [class.opacity-60]="!row.enabled">
@@ -205,10 +212,8 @@
               <label class="flex items-center gap-2 text-xs text-ink">
                 <input
                   type="checkbox"
-                  [checked]="row.connection.mode === 'gateway'"
-                  (change)="
-                    setConnectionMode(row, row.connection.mode !== 'gateway')
-                  " />
+                  [checked]="row.mode === 'gateway'"
+                  (change)="setConnectionMode(row, row.mode !== 'gateway')" />
                 Datos reales
               </label>
             }

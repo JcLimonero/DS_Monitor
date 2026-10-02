@@ -1,4 +1,5 @@
 import { IaService } from '../../core/ia/ia.service';
+import { AjustesPortalService } from '../../core/config/ajustes-portal.service';
 import { Directive, computed, inject, isDevMode, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
@@ -82,6 +83,8 @@ interface ConnectionRow {
   sync?: SyncState;
   kindLabel: string;
   modeLabel: string;
+  /** El modo vigente, con lo que se cambió en esta sesión encima. */
+  mode: ConnectionMode;
   capabilities: string[];
   enabled: boolean;
   /** True si la cuenta se agregó desde Ajustes y se puede quitar. */
@@ -126,6 +129,8 @@ interface LicenseDraft {
 export class ConfiguracionBase {
   private readonly store = inject(PortalStore);
   private readonly local = inject(LocalSettingsStore);
+  /** Cuentas, modos y buzones: compartidos desde el puente (o locales sin él). */
+  readonly ajustes = inject(AjustesPortalService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   readonly admin = inject(PuenteAdminService);
@@ -160,21 +165,33 @@ export class ConfiguracionBase {
     // Lo que se quitó desaparece de inmediato, aunque el resto se aplique al
     // recargar.
     const quitadas = this.quitadas();
+    const encendidasEnSesion = this.ajustes.encendidasEnSesion();
+    const modosEnSesion = this.ajustes.modosEnSesion();
     return this.config.connections
       .filter((c) => !quitadas.has(c.accountId))
       .map((connection) => {
         const account = this.store.accountOf(connection.accountId);
-        const added = this.local.isAdded(connection.accountId);
+        const added = this.ajustes.isAdded(connection.accountId);
+        // Lo cambiado en esta sesión se ve al instante; los adaptadores lo
+        // toman al recargar.
+        const mode =
+          connection.mode === 'local'
+            ? connection.mode
+            : (modosEnSesion[connection.id] ?? connection.mode);
         return {
           connection,
           account,
           sync: syncById.get(connection.id),
           kindLabel: KIND_LABEL[connection.kind],
-          modeLabel: MODE_LABEL[connection.mode],
+          modeLabel: MODE_LABEL[mode],
+          mode,
           capabilities: connection.provides.map(
             (capability) => CAPABILITY_LABEL[capability]
           ),
-          enabled: account?.enabled ?? true,
+          enabled:
+            encendidasEnSesion[connection.accountId] ??
+            account?.enabled ??
+            true,
           added,
           puenteLine:
             added && account && isMailKind(account.kind)
@@ -246,9 +263,15 @@ export class ConfiguracionBase {
   /** Se necesita recargar para que los cambios de cuentas tomen efecto. */
   readonly needsReload = signal(false);
 
+  /** Un ajuste compartido no se pudo guardar en el puente. */
+  readonly ajustesError = signal<string | undefined>(undefined);
+
   setAccountEnabled(accountId: string, enabled: boolean): void {
-    this.local.setAccountEnabled(accountId, enabled);
-    this.needsReload.set(true);
+    this.ajustesError.set(undefined);
+    this.ajustes.setAccountEnabled(accountId, enabled).subscribe({
+      next: () => this.needsReload.set(true),
+      error: (error: unknown) => this.ajustesError.set(describeHttp(error))
+    });
   }
 
   removeAccount(accountId: string): void {
@@ -264,9 +287,17 @@ export class ConfiguracionBase {
       return;
     }
     const terminar = () => {
-      this.local.removeAccount(accountId);
-      this.quitadas.update((q) => new Set([...q, accountId]));
-      this.needsReload.set(true);
+      this.ajustes.removeAccount(accountId).subscribe({
+        next: () => {
+          this.quitadas.update((q) => new Set([...q, accountId]));
+          this.needsReload.set(true);
+        },
+        error: (error: unknown) =>
+          this.pruebas.update((p) => ({
+            ...p,
+            [accountId]: { ok: false, mensaje: describeHttp(error) }
+          }))
+      });
     };
     if (this.admin.disponible) {
       this.admin.borrarBuzon(accountId).subscribe({
@@ -285,11 +316,13 @@ export class ConfiguracionBase {
 
   /** Demostración o datos reales del puente, por conexión. Requiere recargar. */
   setConnectionMode(row: ConnectionRow, gateway: boolean): void {
-    this.local.setConnectionMode(
-      row.connection.id,
-      gateway ? 'gateway' : 'demo'
-    );
-    this.needsReload.set(true);
+    this.ajustesError.set(undefined);
+    this.ajustes
+      .setConnectionMode(row.connection.id, gateway ? 'gateway' : 'demo')
+      .subscribe({
+        next: () => this.needsReload.set(true),
+        error: (error: unknown) => this.ajustesError.set(describeHttp(error))
+      });
   }
 
   reload(): void {
@@ -555,13 +588,11 @@ export class ConfiguracionBase {
             if (row.connection.kind !== nuevo.kind) {
               continue;
             }
-            if (row.connection.mode !== 'gateway') {
-              this.local.setConnectionMode(row.connection.id, 'gateway');
-              this.needsReload.set(true);
+            if (row.mode !== 'gateway') {
+              this.setConnectionMode(row, true);
             }
             if (!row.enabled) {
-              this.local.setAccountEnabled(row.connection.accountId, true);
-              this.needsReload.set(true);
+              this.setAccountEnabled(row.connection.accountId, true);
             }
           }
         }
@@ -906,22 +937,30 @@ export class ConfiguracionBase {
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.newMailEmail().trim())
   );
 
-  addMail(): void {
+  addMail(alTerminar?: () => void): void {
     if (!this.canAddMail()) {
       return;
     }
-    this.local.addMailAccount(
-      {
-        label: this.newMailLabel(),
-        email: this.newMailEmail(),
-        kind: this.newMailKind(),
-        color: this.newMailColor()
-      },
-      new Set(this.config.accounts.map((account) => account.id))
-    );
-    this.newMailLabel.set('');
-    this.newMailEmail.set('');
-    this.needsReload.set(true);
+    this.ajustesError.set(undefined);
+    this.ajustes
+      .addMailAccount(
+        {
+          label: this.newMailLabel(),
+          email: this.newMailEmail(),
+          kind: this.newMailKind(),
+          color: this.newMailColor()
+        },
+        new Set(this.config.accounts.map((account) => account.id))
+      )
+      .subscribe({
+        next: () => {
+          this.newMailLabel.set('');
+          this.newMailEmail.set('');
+          this.needsReload.set(true);
+          alTerminar?.();
+        },
+        error: (error: unknown) => this.ajustesError.set(describeHttp(error))
+      });
   }
 
   // --- Licencias ---

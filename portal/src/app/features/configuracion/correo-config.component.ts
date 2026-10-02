@@ -36,7 +36,7 @@ export class CorreoConfigComponent extends ConfiguracionBase {
     if (!this.canAddMail()) {
       return;
     }
-    this.addMail();
-    this.altaBuzon.set(false);
+    // El diálogo se cierra al guardar; si el puente lo rechaza, se queda con el error.
+    this.addMail(() => this.altaBuzon.set(false));
   }
 }

@@ -26,10 +26,8 @@ import { routes } from './app.routes';
 
 // La raíz del puente y las cuentas agregadas a mano vienen del navegador
 // (ver gateway-override.ts y local-settings.ts).
-const portal = withLocalSettings(
-  withGatewayOverride(environment.portal),
-  readLocalSettings()
-);
+const base = withGatewayOverride(environment.portal);
+const portal = withLocalSettings(base, readLocalSettings());
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -41,7 +39,7 @@ export const appConfig: ApplicationConfig = {
       withInMemoryScrolling({ scrollPositionRestoration: 'top' })
     ),
     provideHttpClient(withFetch(), withInterceptors([sesionInterceptor])),
-    provideCuentasConfiguradas(portal),
+    provideCuentasConfiguradas(portal, base),
     { provide: PORTAL_CONFIG, useValue: portal },
     providePortalSources(portal)
   ]

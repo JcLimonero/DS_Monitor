@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { SesionService } from '../../acceso/sesion.service';
 import { PORTAL_CONFIG } from '../../config/portal-config.token';
 import {
+  AjustesPortal,
   Empresa,
   LlamadaArchivada,
   Person,
@@ -501,6 +502,21 @@ export class PuenteAdminService {
     return this.http.post<Empresa[]>(
       this.url('/empresas/guardar'),
       { empresas },
+      { headers: this.headers() }
+    );
+  }
+
+  /**
+   * Guarda un ajuste compartido del portal: un parche de una sola operación
+   * (`cuentaEnabled`, `modo`, `agregarBuzon`, `quitarBuzon`) o el documento
+   * completo en `ajustes`. Devuelve el documento resultante.
+   */
+  guardarAjustesPortal(
+    cuerpo: Record<string, unknown>
+  ): Observable<AjustesPortal> {
+    return this.http.post<AjustesPortal>(
+      this.url('/ajustes-portal/guardar'),
+      cuerpo,
       { headers: this.headers() }
     );
   }

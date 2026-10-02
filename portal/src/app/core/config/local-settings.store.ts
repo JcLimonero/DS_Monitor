@@ -104,6 +104,25 @@ export class LocalSettingsStore {
     });
   }
 
+  /**
+   * Vacía cuentas y modos (ya viven en el servidor); deja las licencias. Con
+   * `conservar`, se queda solo con eso (lo que no se pudo subir).
+   */
+  clearAccountSettings(
+    conservar?: Pick<
+      LocalSettings,
+      'accounts' | 'accountEnabled' | 'removedAccounts' | 'connectionMode'
+    >
+  ): void {
+    this.commit({
+      ...this.settingsSignal(),
+      accounts: conservar?.accounts ?? [],
+      accountEnabled: conservar?.accountEnabled ?? {},
+      removedAccounts: conservar?.removedAccounts ?? [],
+      connectionMode: conservar?.connectionMode ?? {}
+    });
+  }
+
   editLicense(licenseId: string, edit: LicenseEdit): void {
     const current = this.settingsSignal();
     const merged = { ...current.licenseEdits[licenseId], ...edit };
