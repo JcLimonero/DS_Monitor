@@ -202,6 +202,31 @@ export interface Proveedor {
   actualizadoEn: string;
 }
 
+// --- Llamadas archivadas ---
+
+/**
+ * Una llamada (junta grabada con Fireflies) cuyo texto completo ya quedo en
+ * un Google Doc dentro de la carpeta de Drive del monitor. Mismo contrato que
+ * en portal/src/app/core/models/llamada.model.ts.
+ */
+export interface LlamadaArchivada {
+  /** El id de la transcripcion en Fireflies. */
+  id: string;
+  titulo: string;
+  /** Cuando fue la llamada (ISO). */
+  fecha: string;
+  duracionMin?: number;
+  participantes: string[];
+  resumen?: string;
+  /** Liga para abrir el Google Doc. */
+  docUrl: string;
+  docId: string;
+  /** Cuando se guardo en Drive (ISO). */
+  archivadaEn: string;
+  /** Ya se borro de Fireflies para liberar espacio. */
+  borradaDeFireflies: boolean;
+}
+
 // --- Juntas ---
 
 export type MeetingStatus = 'confirmada' | 'tentativa' | 'cancelada';

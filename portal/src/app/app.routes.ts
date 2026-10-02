@@ -75,6 +75,14 @@ export const routes: Routes = [
           )
       },
       {
+        path: 'llamadas',
+        title: 'Llamadas | DS Monitor',
+        loadComponent: () =>
+          import('./features/llamadas/llamadas.component').then(
+            (m) => m.LlamadasComponent
+          )
+      },
+      {
         path: 'vps',
         title: 'Servidores | DS Monitor',
         loadComponent: () =>

@@ -38,6 +38,33 @@ export class ErrorProveedor extends ErrorPuente {
   }
 }
 
+/**
+ * Google rechazo la llamada porque el permiso guardado no alcanza (la cuenta
+ * se conecto antes de que se pidiera Drive): hay que volver a conectarla.
+ */
+export class ErrorReconectarGoogle extends ErrorProveedor {
+  constructor(detalle?: string) {
+    super(
+      'google',
+      `la cuenta no tiene permiso para Drive: reconecta Google en Integraciones → Correo (Conectar con Google)${detalle ? ` · ${detalle}` : ''}`,
+      403
+    );
+    this.name = 'ErrorReconectarGoogle';
+  }
+}
+
+/** Fireflies no deja borrar con esta cuenta o este plan. */
+export class ErrorBorradoNoPermitido extends ErrorProveedor {
+  constructor(detalle: string) {
+    super(
+      'fireflies',
+      `no permite borrar la transcripción con esta API key (${detalle}); se queda en Fireflies y el Doc ya está en Drive`,
+      403
+    );
+    this.name = 'ErrorBorradoNoPermitido';
+  }
+}
+
 export class ErrorNoEncontrado extends ErrorPuente {
   constructor(ruta: string) {
     super(`No hay nada en ${ruta}`, 404);

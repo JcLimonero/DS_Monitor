@@ -3,7 +3,14 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import { SesionService } from '../../acceso/sesion.service';
 import { PORTAL_CONFIG } from '../../config/portal-config.token';
-import { Empresa, Person, Proveedor, SourceKind, TaskItem } from '../../models';
+import {
+  Empresa,
+  LlamadaArchivada,
+  Person,
+  Proveedor,
+  SourceKind,
+  TaskItem
+} from '../../models';
 
 /** Un dominio registrado, tal como lo guarda el puente. */
 export interface Dominio {
@@ -93,6 +100,31 @@ export interface ServidorVpsEdicion {
   contrasena?: string;
   token?: string;
   etiquetaNombre?: string;
+}
+
+/** Lo que dice el puente del archivado de llamadas en Drive. */
+export interface EstadoLlamadas {
+  /** Hay API key de Fireflies. */
+  fireflies: boolean;
+  /** Hay una cuenta de Google conectada para usar Drive. */
+  google: boolean;
+  cuenta?: string;
+  /** Nombre de la carpeta de Drive donde se guardan los Docs. */
+  carpeta: string;
+  borrarDeFireflies: boolean;
+  enCurso: boolean;
+  ultima?: ResumenLlamadas & { en: string };
+}
+
+/** Lo que pasó en una corrida de archivado. */
+export interface ResumenLlamadas {
+  archivadas: number;
+  borradas: number;
+  /** Cuántas más quedan para la siguiente corrida. */
+  pendientes: number;
+  errores: string[];
+  /** Falta el permiso de Drive: hay que volver a conectar Google. */
+  reconectarGoogle?: boolean;
 }
 
 export interface ResultadoPrueba {
@@ -413,6 +445,39 @@ export class PuenteAdminService {
         `/pendientes/${encodeURIComponent(idPadre)}/subtareas/${encodeURIComponent(subId)}/convertir`
       ),
       {},
+      { headers: this.headers() }
+    );
+  }
+
+  /** Las llamadas ya guardadas en Drive, la más reciente primero. */
+  llamadas(): Observable<LlamadaArchivada[]> {
+    return this.http.get<LlamadaArchivada[]>(this.url('/llamadas'), {
+      headers: this.headers()
+    });
+  }
+
+  estadoLlamadas(): Observable<EstadoLlamadas> {
+    return this.http.get<EstadoLlamadas>(this.url('/llamadas/estado'), {
+      headers: this.headers()
+    });
+  }
+
+  /** Fuerza el archivado (una sola llamada si se da `id`). */
+  archivarLlamadas(id?: string): Observable<ResumenLlamadas> {
+    return this.http.post<ResumenLlamadas>(
+      this.url('/llamadas/archivar'),
+      id ? { id } : {},
+      { headers: this.headers() }
+    );
+  }
+
+  guardarConfigLlamadas(config: {
+    borrarDeFireflies?: boolean;
+    carpetaNombre?: string;
+  }): Observable<{ carpeta: string; borrarDeFireflies: boolean }> {
+    return this.http.post<{ carpeta: string; borrarDeFireflies: boolean }>(
+      this.url('/llamadas/config'),
+      config,
       { headers: this.headers() }
     );
   }

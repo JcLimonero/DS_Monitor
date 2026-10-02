@@ -19,6 +19,10 @@ type _Person = Igual<Portal.Person, Puente.Person>;
 type _TaskItem = Igual<Portal.TaskItem, Puente.TaskItem>;
 type _Empresa = Igual<Portal.Empresa, Puente.Empresa>;
 type _Proveedor = Igual<Portal.Proveedor, Puente.Proveedor>;
+type _LlamadaArchivada = Igual<
+  Portal.LlamadaArchivada,
+  Puente.LlamadaArchivada
+>;
 type _TaskComment = Igual<Portal.TaskComment, Puente.TaskComment>;
 type _TaskEvent = Igual<Portal.TaskEvent, Puente.TaskEvent>;
 type _TaskUnread = Igual<Portal.TaskUnread, Puente.TaskUnread>;
@@ -48,6 +52,7 @@ const comprobado: [
   _TaskItem,
   _Empresa,
   _Proveedor,
+  _LlamadaArchivada,
   _TaskComment,
   _TaskEvent,
   _TaskUnread,
@@ -65,6 +70,7 @@ const comprobado: [
   _RepoPullRequest,
   _RepoCommit
 ] = [
+  true,
   true,
   true,
   true,

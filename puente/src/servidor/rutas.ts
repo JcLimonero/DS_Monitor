@@ -23,6 +23,7 @@ import {
   TABLA_EMISORES,
   TABLA_EMPRESAS,
   TABLA_EQUIPO,
+  TABLA_LLAMADAS,
   TABLA_PROVEEDORES,
   TABLA_LIGAS,
   TABLA_PERSONALES,
@@ -64,6 +65,7 @@ import {
 import type {
   HostedApp,
   LicenseUsage,
+  LlamadaArchivada,
   Meeting,
   MonitorTarget,
   Person,
@@ -139,9 +141,25 @@ import type {
   ConfiguracionVercel
 } from '../config/entorno.js';
 import {
+  borrarTranscripcion,
   transcripcion,
   transcripcionesRecientes
 } from '../proveedores/fireflies.js';
+import {
+  reemplazarLigaDeJunta,
+  reemplazarLigaEnAnotaciones
+} from '../llamadas/archivar.js';
+import {
+  CONFIG_LLAMADAS_POR_OMISION,
+  limpiarConfigLlamadas,
+  type ConfigLlamadas,
+  type EstadoLlamadas
+} from '../llamadas/config.js';
+import {
+  archivarLlamadas,
+  verificacionDeDoc,
+  type Puertos as PuertosLlamadas
+} from '../llamadas/servicio.js';
 import {
   decidirPendienteFireflies,
   marcarSubtareaConvertida,
@@ -162,10 +180,17 @@ import {
 import { INTEGRACIONES, integracion } from '../integraciones/catalogo.js';
 import { ClienteImap } from '../proveedores/imap.js';
 import {
+  archivoDeDrive,
   canjearCodigoGoogle,
+  carpetaDeDrive,
+  documentoPorPropiedad,
   olvidarAccesoGoogle,
   quienSoyGoogle,
+  subirComoDocumento,
+  textoDeDocumento,
+  tienePermisoDrive,
   tokenDeAccesoGoogle,
+  tokenDeDriveGoogle,
   urlDeAutorizacionGoogle
 } from '../proveedores/google.js';
 import {
@@ -223,7 +248,11 @@ import {
   textoServicios
 } from '../nucleo/comandos-telegram.js';
 import { Cache } from '../nucleo/cache.js';
-import { ErrorConfiguracion, ErrorPuente } from '../nucleo/errores.js';
+import {
+  ErrorConfiguracion,
+  ErrorPuente,
+  ErrorReconectarGoogle
+} from '../nucleo/errores.js';
 import { REVISION_MINUTOS } from '../nucleo/programador.js';
 import { licenciasAnthropic } from '../proveedores/anthropic.js';
 import { consumoOpenRouter } from '../proveedores/openrouter.js';
@@ -466,6 +495,12 @@ export interface Datos {
       { en: string; titulo: string; pendientes: number; acuerdos?: number }
     >
   >;
+  /** Las llamadas de Fireflies ya guardadas como Google Doc, mas recientes primero. */
+  llamadas: AlmacenJson<LlamadaArchivada[]>;
+  /** Carpeta, interruptor de borrado y cuenta de Drive del modulo Llamadas. */
+  llamadasConfig: AlmacenJson<ConfigLlamadas>;
+  /** Lo que paso en la ultima corrida de archivado. */
+  llamadasEstado: AlmacenJson<EstadoLlamadas>;
   /**
    * Correos de asignacion/seguimiento ya mandados (persona + titulo → cuando),
    * para no repetir el aviso cuando el mismo correo llego a varios buzones.
@@ -614,6 +649,21 @@ export function abrirDatos(persistencia: Persistencia): Datos {
     firefliesProcesadas: new AlmacenJson(
       persistencia,
       'fireflies-procesadas',
+      {}
+    ),
+    llamadas: new AlmacenTabla<LlamadaArchivada[]>(
+      persistencia,
+      TABLA_LLAMADAS,
+      []
+    ),
+    llamadasConfig: new AlmacenJson<ConfigLlamadas>(
+      persistencia,
+      'llamadas-config',
+      CONFIG_LLAMADAS_POR_OMISION
+    ),
+    llamadasEstado: new AlmacenJson<EstadoLlamadas>(
+      persistencia,
+      'llamadas-estado',
       {}
     ),
     avisosAsignacion: new AlmacenJson<RegistroAvisos>(
@@ -2367,7 +2417,7 @@ export function construirRutas(
         const total = await cliente.seleccionar(cuenta.buzones[0] ?? 'INBOX');
         return {
           ok: true,
-          mensaje: `Entró por IMAP a ${cuenta.host} como ${cuenta.usuario}; "${cuenta.buzones[0] ?? 'INBOX'}" tiene ${total} mensajes.`
+          mensaje: `Entró por IMAP a ${cuenta.host} como ${cuenta.usuario}; "${cuenta.buzones[0] ?? 'INBOX'}" tiene ${total} mensajes.${tienePermisoDrive(cuenta.id) === false ? ' Falta el permiso de Drive (llamadas archivadas): vuelve a "Conectar con Google".' : ''}`
         };
       } finally {
         await cliente.cerrar();
@@ -3832,7 +3882,8 @@ export function construirRutas(
   // cada 15 min; /fireflies/procesar lo fuerza.
   const procesarTranscripcion = async (
     id: string,
-    ahora = new Date()
+    ahora = new Date(),
+    avisar = true
   ): Promise<{ titulo: string; pendientes: number; acuerdos: number }> => {
     const fireflies = cfg().fireflies;
     if (!fireflies) {
@@ -3872,6 +3923,8 @@ export function construirRutas(
     });
     if (agregados > 0) {
       cache.olvidar();
+    }
+    if (agregados > 0 && avisar) {
       void push.avisar({
         titulo: `Junta: ${completa.titulo}`,
         cuerpo:
@@ -3986,6 +4039,225 @@ export function construirRutas(
             `[puente] Fireflies "${t.titulo}": ${(error as Error).message}`
           );
         }
+      }
+      return;
+    }
+  });
+
+  // --- Llamadas: el texto de las juntas de Fireflies, guardado en Drive ---
+  //
+  // Cada transcripcion ya procesada se sube como Google Doc a una carpeta que
+  // crea la propia aplicacion (permiso `drive.file`), se verifica y, solo
+  // entonces, se borra de Fireflies para liberar espacio.
+
+  /** El buzon de Google conectado que se usa para Drive. */
+  const cuentaDrive = (): ConfiguracionCorreo | undefined => {
+    const preferida = datos.llamadasConfig.leer().cuenta;
+    const cuentas = buzones_(cfg(), almacenCorreo).filter(
+      (c) => c.proveedor === 'google' && c.google?.refreshToken
+    );
+    return cuentas.find((c) => c.id === preferida) ?? cuentas[0];
+  };
+
+  const tokenDrive = async (): Promise<string> => {
+    const cuenta = cuentaDrive();
+    if (!cuenta?.google) {
+      throw new ErrorConfiguracion(
+        'Falta conectar una cuenta de Google (Integraciones → Correo → Conectar con Google) para guardar las llamadas en Drive.'
+      );
+    }
+    return tokenDeDriveGoogle(cuenta.id, cuenta.google);
+  };
+
+  const urlDeDoc = (a: { id: string; webViewLink?: string }) =>
+    a.webViewLink ?? `https://docs.google.com/document/d/${a.id}/edit`;
+
+  const puertosLlamadas = (): PuertosLlamadas => {
+    const fireflies = cfg().fireflies;
+    if (!fireflies) {
+      throw new ErrorConfiguracion(
+        'Falta la API key de Fireflies (Integraciones → Fireflies).'
+      );
+    }
+    return {
+      fireflies: {
+        listar: (saltar, limite) =>
+          transcripcionesRecientes(fireflies, 0, limite, saltar),
+        bajar: (id) => transcripcion(fireflies, id),
+        borrar: (id) => borrarTranscripcion(fireflies, id)
+      },
+      drive: {
+        carpeta: async () => {
+          const token = await tokenDrive();
+          const ajustes = datos.llamadasConfig.leer();
+          if (ajustes.carpetaId) {
+            try {
+              const actual = await archivoDeDrive(token, ajustes.carpetaId);
+              if (!actual.trashed && actual.name === ajustes.carpetaNombre) {
+                return ajustes.carpetaId;
+              }
+            } catch (error) {
+              if (error instanceof ErrorReconectarGoogle) {
+                throw error;
+              }
+              // Borrada o inaccesible: se busca por nombre (o se crea de nuevo).
+            }
+          }
+          const id = await carpetaDeDrive(token, ajustes.carpetaNombre);
+          await datos.llamadasConfig.escribir({
+            ...datos.llamadasConfig.leer(),
+            carpetaId: id
+          });
+          return id;
+        },
+        existente: async (carpetaId, firefliesId) => {
+          const token = await tokenDrive();
+          const a = await documentoPorPropiedad(
+            token,
+            carpetaId,
+            'firefliesId',
+            firefliesId
+          );
+          return a ? { id: a.id, url: urlDeDoc(a) } : undefined;
+        },
+        subir: async (carpetaId, nombre, texto, firefliesId) => {
+          const token = await tokenDrive();
+          const a = await subirComoDocumento(token, carpetaId, nombre, texto, {
+            firefliesId
+          });
+          return {
+            id: a.id,
+            url: urlDeDoc({ id: a.id, webViewLink: a.webViewLink })
+          };
+        },
+        verificar: verificacionDeDoc({
+          token: tokenDrive,
+          archivo: archivoDeDrive,
+          exportar: textoDeDocumento
+        })
+      },
+      borrarDeFireflies: () => datos.llamadasConfig.leer().borrarDeFireflies,
+      llamadas: () => datos.llamadas.leer(),
+      guardar: async (lista) => {
+        await datos.llamadas.escribir(lista);
+      },
+      procesada: (id) => datos.firefliesProcesadas.leer()[id] !== undefined,
+      procesar: async (id, avisar) => {
+        await procesarTranscripcion(id, new Date(), avisar);
+      },
+      reemplazarLiga: async (urlVieja, urlNueva) => {
+        const pendientes = reemplazarLigaDeJunta(
+          datos.personales.leer(),
+          urlVieja,
+          urlNueva
+        );
+        if (pendientes.cambios > 0) {
+          await datos.personales.escribir(pendientes.tareas);
+        }
+        const notas = reemplazarLigaEnAnotaciones(
+          datos.anotaciones.leer(),
+          urlVieja,
+          urlNueva
+        );
+        if (notas.cambios > 0) {
+          await datos.anotaciones.escribir(notas.anotaciones);
+        }
+        if (pendientes.cambios + notas.cambios > 0) {
+          cache.olvidar();
+        }
+      },
+      ahora: () => new Date()
+    };
+  };
+
+  let archivandoLlamadas = false;
+  const correrArchivado = async (opciones: {
+    id?: string;
+    maximo?: number;
+  }) => {
+    if (archivandoLlamadas) {
+      throw new ErrorPuente(
+        'Ya hay un archivado en curso; espera a que termine.',
+        409
+      );
+    }
+    archivandoLlamadas = true;
+    try {
+      const resumen = await archivarLlamadas(puertosLlamadas(), opciones);
+      await datos.llamadasEstado.escribir({
+        ultima: {
+          ...resumen,
+          errores: resumen.errores.slice(0, 10),
+          en: new Date().toISOString()
+        }
+      });
+      return resumen;
+    } finally {
+      archivandoLlamadas = false;
+    }
+  };
+
+  router.get('/llamadas', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    return [...datos.llamadas.leer()].sort((a, b) =>
+      b.fecha.localeCompare(a.fecha)
+    );
+  });
+
+  router.get('/llamadas/estado', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const ajustes = datos.llamadasConfig.leer();
+    const cuenta = cuentaDrive();
+    return {
+      fireflies: cfg().fireflies !== undefined,
+      google: cuenta !== undefined,
+      cuenta: cuenta?.google?.conectadaComo ?? cuenta?.usuario,
+      carpeta: ajustes.carpetaNombre,
+      borrarDeFireflies: ajustes.borrarDeFireflies,
+      enCurso: archivandoLlamadas,
+      ultima: datos.llamadasEstado.leer().ultima
+    };
+  });
+
+  router.post('/llamadas/config', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const nueva = limpiarConfigLlamadas(
+      datos.llamadasConfig.leer(),
+      contexto.cuerpo
+    );
+    await datos.llamadasConfig.escribir(nueva);
+    return {
+      carpeta: nueva.carpetaNombre,
+      borrarDeFireflies: nueva.borrarDeFireflies
+    };
+  });
+
+  router.post('/llamadas/archivar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { id } = (contexto.cuerpo ?? {}) as { id?: unknown };
+    if (id !== undefined && (typeof id !== 'string' || !id.trim())) {
+      throw new ErrorPuente('El id de la llamada no es válido.', 400);
+    }
+    return correrArchivado({
+      id: typeof id === 'string' ? id.trim() : undefined
+    });
+  });
+
+  // Cada 6 horas busca llamadas por archivar; es idempotente, asi que un
+  // reinicio no duplica nada. Sin Fireflies o sin Google conectado, no corre.
+  programables.push({
+    nombre: 'llamadas a Drive',
+    cadaMinutos: 360,
+    esperarMinutos: 360,
+    correr: async () => {
+      if (!cfg().fireflies || !cuentaDrive() || archivandoLlamadas) {
+        return 'omitida';
+      }
+      const r = await correrArchivado({});
+      if (r.archivadas > 0 || r.borradas > 0) {
+        console.log(
+          `[puente] llamadas: ${r.archivadas} archivada(s) en Drive, ${r.borradas} borrada(s) de Fireflies`
+        );
       }
       return;
     }
