@@ -10,6 +10,12 @@ import { Acceso, type Sesion } from '../acceso/acceso.js';
 import { AlmacenCorreo } from '../correo/almacen-correo.js';
 import { AlmacenJson } from '../datos/almacen-json.js';
 import {
+  AJUSTES_VACIOS,
+  aplicarParche,
+  validarDocumento,
+  type AjustesPortal
+} from '../datos/ajustes-portal.js';
+import {
   COLECCIONES,
   PersistenciaArchivos,
   type Persistencia
@@ -423,6 +429,8 @@ export interface Datos {
   equipo: AlmacenJson<Person[]>;
   /** Las empresas del grupo (Integraciones → Empresas). */
   empresas: AlmacenJson<Empresa[]>;
+  /** Fuentes apagadas, modos y buzones del portal, compartidos entre dispositivos. */
+  ajustesPortal: AlmacenJson<AjustesPortal>;
   /** Proveedores y clientes externos (Integraciones → Proveedores). */
   proveedores: AlmacenJson<Proveedor[]>;
   dominios: AlmacenJson<Dominio[]>;
@@ -550,6 +558,11 @@ export function abrirDatos(persistencia: Persistencia): Datos {
   return {
     equipo: new AlmacenTabla<Person[]>(persistencia, TABLA_EQUIPO, []),
     empresas: new AlmacenTabla<Empresa[]>(persistencia, TABLA_EMPRESAS, []),
+    ajustesPortal: new AlmacenJson<AjustesPortal>(
+      persistencia,
+      'ajustes-portal',
+      AJUSTES_VACIOS
+    ),
     proveedores: new AlmacenTabla<Proveedor[]>(
       persistencia,
       TABLA_PROVEEDORES,
@@ -1090,6 +1103,36 @@ export function construirRutas(
     }
     await datos.empresas.escribir(limpias);
     return limpias;
+  });
+
+  // --- Ajustes del portal: fuentes apagadas, modos y buzones ---
+  //
+  // Antes eran por navegador; ahora son de todos. Se lee sin token (el portal
+  // lo pide en el arranque, antes de armar sus adaptadores) y se guarda con
+  // un parche de una sola operacion, o con el documento completo (`ajustes`)
+  // cuando alguien sube lo que traia en su navegador. `actualizadoEn` vacio
+  // es "nadie ha guardado nada". No contiene secretos: solo ids y etiquetas.
+
+  router.get('/ajustes-portal', async () => datos.ajustesPortal.leer());
+
+  router.post('/ajustes-portal/guardar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const cuerpo = (contexto.cuerpo ?? {}) as Record<string, unknown>;
+    const por = acceso?.sesionDe(tokenDe(contexto))?.correo ?? 'admin';
+    const ahora = new Date().toISOString();
+    let nuevo: AjustesPortal;
+    try {
+      nuevo =
+        cuerpo['ajustes'] !== undefined
+          ? validarDocumento(cuerpo['ajustes'], ahora, por)
+          : aplicarParche(datos.ajustesPortal.leer(), cuerpo, ahora, por);
+    } catch (error) {
+      throw new ErrorPuente(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
+    }
+    return datos.ajustesPortal.escribir(nuevo);
   });
 
   // --- Proveedores: clientes y proveedores externos ---

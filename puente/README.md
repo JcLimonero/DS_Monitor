@@ -255,6 +255,18 @@ y los selectores del portal. Renombrar una empresa reetiqueta los pendientes,
 las ediciones a mano y lo aprendido por remitente; una empresa con pendientes
 abiertos no se puede borrar, solo desactivar.
 
+Los ajustes del portal que antes vivían en cada navegador (apagar una fuente,
+pasar una conexión de demostración a datos reales, agregar o quitar buzones)
+son un solo documento compartido, `ajustes-portal`: `GET /ajustes-portal` (sin
+token, el portal lo pide en el arranque junto con `/salud`) y
+`POST /ajustes-portal/guardar` (administrador), con un parche de una sola
+operación (`cuentaEnabled {id, enabled}`, `modo {id, modo}`, `agregarBuzon`,
+`quitarBuzon`) o el documento completo en `ajustes` (así se suben los ajustes
+viejos de un navegador). Mientras `actualizadoEn` esté vacío nadie ha guardado
+nada y cada portal se queda con lo suyo; en cuanto hay fecha, lo del servidor
+manda en todos los dispositivos. Agregar un buzón aquí solo lo da de alta en el
+portal: su conexión se captura aparte (Integraciones → Correo).
+
 ## Dos maneras de traer datos
 
 **Ir por ellos**: el puente consulta la API del proveedor cada tanto. Es lo que

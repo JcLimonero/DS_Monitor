@@ -1,5 +1,6 @@
 export * from './common.model';
 export * from './task.model';
+export * from './ajustes.model';
 export * from './empresa.model';
 export * from './proveedor.model';
 export * from './llamada.model';

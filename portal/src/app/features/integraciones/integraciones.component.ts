@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { AjustesAvisoComponent } from './ajustes-aviso.component';
 import { CorreoConfigComponent } from '../configuracion/correo-config.component';
 import { DominiosConfigComponent } from '../configuracion/dominios-config.component';
 import { EmpresasConfigComponent } from '../configuracion/empresas-config.component';
@@ -117,6 +118,7 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
   selector: 'pt-integraciones',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AjustesAvisoComponent,
     AvisosConfigComponent,
     IaUsosComponent,
     IaBitacoraComponent,
