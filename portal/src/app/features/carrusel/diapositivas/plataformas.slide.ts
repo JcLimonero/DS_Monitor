@@ -67,7 +67,7 @@ const CLASE_ESTADO: Record<MonitorStatus, string> = {
                 {{ destino.name }}
               </p>
               <p class="line-clamp-1 break-words text-base text-ink-muted">
-                {{ destino.environment }}
+                {{ entorno(destino) }}
               </p>
             </div>
 

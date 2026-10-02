@@ -28,7 +28,7 @@ const POR_ETAPA = 3;
 /**
  * El embudo de Odoo por etapa y lo que hay que hacer con el.
  *
- * El alto minimo de la diapositiva (min-h-[46rem]) deja a las actividades un
+ * El alto minimo de la diapositiva (min-h-[40rem]) deja a las actividades un
  * espacio razonable aunque la pantalla sea baja: en ese caso se desplaza el
  * carrusel entero en lugar de dejar una sola actividad visible.
  *
@@ -40,7 +40,7 @@ const POR_ETAPA = 3;
   selector: 'pt-slide-embudo',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [DayPipe, IconComponent, MoneyPipe],
-  host: { class: 'flex h-full min-h-[46rem] flex-col gap-4' },
+  host: { class: 'flex h-full min-h-[40rem] flex-col gap-4' },
   template: `
     <div class="grid shrink-0 grid-cols-2 gap-4 lg:grid-cols-4">
       @for (etapa of etapas(); track etapa.stage) {

@@ -56,10 +56,12 @@ const BORDE_ESTADO: Record<DeploymentState, string> = {
         class="shrink-0 rounded-2xl border border-amber-400 bg-amber-50 px-6 py-4 dark:border-amber-500/40 dark:bg-amber-500/10">
         @for (incidente of incidentes(); track incidente.id) {
           <p
-            class="flex items-center gap-3 break-words tv-title text-amber-900 dark:text-amber-200">
+            class="flex items-center gap-3 tv-title text-amber-900 dark:text-amber-200">
             <pt-icon name="alerta" class="h-7 w-7 shrink-0" />
-            {{ incidente.label }}: {{ etiquetaPlataforma(incidente) }} ·
-            {{ incidente.description }}
+            <span class="line-clamp-2 min-w-0 break-words">
+              {{ incidente.label }}: {{ etiquetaPlataforma(incidente) }} ·
+              {{ incidente.description }}
+            </span>
           </p>
         }
       </div>
