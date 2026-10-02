@@ -1,4 +1,15 @@
-<pt-page-header title="Licencias y consumo" [subtitle]="subtitle()" />
+<pt-page-header title="Licencias y consumo" [subtitle]="subtitle()">
+  <button
+    type="button"
+    class="btn"
+    aria-haspopup="dialog"
+    (click)="altaAbierta.set(true)">
+    <pt-icon name="mas" class="h-4 w-4" />
+    Agregar licencia
+  </button>
+</pt-page-header>
+
+<pt-licencias-migracion />
 
 <div class="mb-4">
   <pt-ia-alertas
@@ -39,6 +50,13 @@
             @if (licencia.manual) {
               <span class="chip bg-surface-muted text-ink-muted"
                 >Capturado a mano</span
+              >
+            }
+            @if (soloEnNavegador().has(licencia.id)) {
+              <span
+                class="chip bg-warn/10 text-warn"
+                title="Aún no está en el servidor: los demás dispositivos no la ven"
+                >Solo en este navegador</span
               >
             }
           </div>
@@ -90,6 +108,23 @@
             </dd>
           </div>
         </dl>
+
+        <div
+          class="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
+          <span
+            class="chip px-2.5 py-1"
+            [class]="claseChip(estado(licencia).tono)"
+            [attr.data-estado-renovacion]="estado(licencia).tipo">
+            {{ estado(licencia).texto }}
+          </span>
+          <button
+            type="button"
+            class="btn"
+            aria-haspopup="dialog"
+            (click)="abrirRenovacion(licencia)">
+            Renovación…
+          </button>
+        </div>
 
         @if (licencia.members.length > 0) {
           <div class="border-t border-line pt-3">
@@ -146,4 +181,14 @@
       title="Sin licencias configuradas"
       hint="Las licencias llegan del correo y de los dominios; también se capturan en Integraciones → Licencias." />
   </div>
+}
+
+@if (altaAbierta()) {
+  <pt-licencia-alta-dialogo (cerrar)="altaAbierta.set(false)" />
+}
+
+@if (renovando(); as licencia) {
+  <pt-licencia-renovacion-dialogo
+    [licencia]="licencia"
+    (cerrar)="renovando.set(undefined)" />
 }

@@ -1,9 +1,15 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
-  inject
+  inject,
+  signal
 } from '@angular/core';
+import {
+  claseTono,
+  estadoRenovacion
+} from '../../../core/licencias/licencias.util';
 import {
   LICENSE_PROVIDER_LABEL,
   LICENSE_UNIT_LABEL,
@@ -19,6 +25,9 @@ import { PortalStore } from '../../../core/state/portal.store';
 import { LICENSE_SOURCES } from '../../../core/sources/source.contracts';
 import { plural } from '../../../core/util/text.util';
 import { IconComponent } from '../../../ui/icon.component';
+import { LicenciasMigracionComponent } from '../../../ui/licencias-migracion.component';
+import { LicenciaAltaComponent } from '../../../ui/licencia-alta.component';
+import { LicenciaRenovacionComponent } from '../../../ui/licencia-renovacion.component';
 import { DiapositivaConContenido } from '../carrusel.model';
 
 const CANTIDAD = new Intl.NumberFormat('es-MX', {
@@ -27,19 +36,37 @@ const CANTIDAD = new Intl.NumberFormat('es-MX', {
 });
 const MONTO = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 });
 
+/** Clase en <html> mientras el dialogo esta abierto (ver styles.scss). */
+const CLASE_DIALOGO = 'con-dialogo';
+
 /** Consumo de las suscripciones: cuánto se lleva usado y qué renueva pronto. */
 @Component({
   selector: 'pt-slide-licencias',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
-  host: { class: 'flex h-full flex-col gap-4' },
+  imports: [
+    IconComponent,
+    LicenciaAltaComponent,
+    LicenciaRenovacionComponent,
+    LicenciasMigracionComponent
+  ],
+  host: {
+    class: 'flex h-full flex-col gap-4',
+    '(document:keydown.escape)': 'cerrar()'
+  },
   template: `
     <div
       class="grid min-h-0 flex-1 auto-rows-min grid-cols-1 content-start gap-x-4 gap-y-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
       @for (licencia of licencias(); track licencia.id) {
         <article
-          class="tv-card flex items-center gap-4 px-4 py-2.5"
-          [class.border-warn]="renuevaPronto(licencia)">
+          class="tv-card flex cursor-pointer items-center gap-4 px-4 py-2.5 transition hover:border-brand/60 hover:bg-surface-muted"
+          [class.border-warn]="renuevaPronto(licencia)"
+          role="button"
+          tabindex="0"
+          aria-haspopup="dialog"
+          [attr.aria-label]="'Confirmar renovación de ' + licencia.product"
+          (click)="abrir(licencia)"
+          (keydown.enter)="abrir(licencia)"
+          (keydown.space)="abrir(licencia); $event.preventDefault()">
           <div class="min-w-0 flex-1">
             <p
               class="line-clamp-2 break-words text-lg font-bold leading-tight text-ink 2xl:text-xl">
@@ -50,6 +77,8 @@ const MONTO = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 });
               [class]="claseRenovacion(licencia)">
               @if (renuevaPronto(licencia)) {
                 <pt-icon name="alerta" class="h-4 w-4 shrink-0" />
+              } @else if (renovada(licencia)) {
+                <pt-icon name="ok" class="h-4 w-4 shrink-0" />
               }
               {{ renovacion(licencia) }}
             </p>
@@ -95,7 +124,68 @@ const MONTO = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 });
         }
         {{ textoAvisos() }}
       </p>
+      <!--
+        Centrado y por encima (z-30) de las esquinas del kiosco, que son
+        zonas de clic de 10 rem pegadas a los lados y taparian el boton.
+      -->
+      <div
+        class="relative z-30 flex w-full flex-wrap items-center justify-center gap-x-6 gap-y-2">
+        <pt-licencias-migracion [compacto]="true" />
+        <button
+          type="button"
+          class="btn !h-[40px]"
+          aria-haspopup="dialog"
+          (click)="abrirAlta()">
+          + Agregar licencia
+        </button>
+      </div>
     </div>
+
+    <!--
+      La confirmación de renovación (o el alta), encima del carrusel y de sus
+      controles: igual que el detalle de un pendiente. En celular y iPad
+      vertical es una hoja completa; desde lg, una ventana centrada. Clic
+      fuera, Escape o el botón la cierran, y mientras está abierta el carrusel
+      no avanza (enDialogo).
+    -->
+    @if (dialogoAbierto()) {
+      <div
+        class="dialogo-carrusel fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-0 lg:items-center lg:p-6"
+        (click)="cerrar()">
+        <div
+          class="card flex h-full w-full max-w-xl flex-col rounded-none lg:h-auto lg:max-h-[90dvh] lg:rounded-xl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dialogo-licencia-titulo"
+          (click)="$event.stopPropagation()">
+          <header
+            class="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2 lg:px-5">
+            <h2
+              id="dialogo-licencia-titulo"
+              class="text-sm font-semibold text-ink">
+              {{ seleccionada() ? '¿Ya se renovó?' : 'Agregar una licencia' }}
+            </h2>
+            <button
+              type="button"
+              class="ml-auto flex h-11 w-11 items-center justify-center rounded-lg text-ink-subtle hover:bg-surface-muted hover:text-ink"
+              aria-label="Cerrar"
+              (click)="cerrar()">
+              <pt-icon name="cerrar" class="h-5 w-5" />
+            </button>
+          </header>
+          <div class="min-h-0 flex-1 overflow-y-auto p-4 lg:p-5">
+            @if (seleccionada(); as licencia) {
+              <pt-licencia-renovacion
+                [licencia]="licencia"
+                (cerrar)="cerrar()"
+                (hecho)="cerrar()" />
+            } @else {
+              <pt-licencia-alta (cerrar)="cerrar()" (hecho)="cerrar()" />
+            }
+          </div>
+        </div>
+      </div>
+    }
   `
 })
 export class LicenciasSlideComponent implements DiapositivaConContenido {
@@ -105,6 +195,47 @@ export class LicenciasSlideComponent implements DiapositivaConContenido {
    * Hay que esperarlos todos.
    */
   private readonly licenciasFuente = inject(LICENSE_SOURCES);
+  private readonly destroyRef = inject(DestroyRef);
+
+  /** La licencia que se esta confirmando como renovada (clic en su tarjeta). */
+  readonly seleccionada = signal<LicenseUsage | undefined>(undefined);
+  readonly altaAbierta = signal(false);
+  readonly dialogoAbierto = computed(
+    () => !!this.seleccionada() || this.altaAbierta()
+  );
+
+  /** El carrusel no avanza mientras alguien confirma o agrega una licencia. */
+  readonly enDialogo = this.dialogoAbierto;
+
+  constructor() {
+    // Si el carrusel cambia de diapositiva con el dialogo abierto, la clase no se queda pegada.
+    this.destroyRef.onDestroy(() =>
+      document.documentElement.classList.remove(CLASE_DIALOGO)
+    );
+  }
+
+  abrir(licencia: LicenseUsage): void {
+    this.altaAbierta.set(false);
+    this.seleccionada.set(licencia);
+    // En celular el carrusel achica la raiz; con el dialogo abierto vuelve al
+    // tamaño normal (ver styles.scss).
+    document.documentElement.classList.add(CLASE_DIALOGO);
+  }
+
+  abrirAlta(): void {
+    this.seleccionada.set(undefined);
+    this.altaAbierta.set(true);
+    document.documentElement.classList.add(CLASE_DIALOGO);
+  }
+
+  cerrar(): void {
+    if (!this.dialogoAbierto()) {
+      return;
+    }
+    this.seleccionada.set(undefined);
+    this.altaAbierta.set(false);
+    document.documentElement.classList.remove(CLASE_DIALOGO);
+  }
 
   readonly vacia = computed(() => {
     for (const kind of new Set(
@@ -197,22 +328,17 @@ export class LicenciasSlideComponent implements DiapositivaConContenido {
   }
 
   renovacion(licencia: LicenseUsage): string {
-    const dias = daysToRenewal(licencia);
-    if (dias === undefined) {
-      return 'Sin fecha de renovación';
-    }
-    if (dias < 0) {
-      return 'Renovación vencida';
-    }
-    if (dias === 0) {
-      return 'Renueva hoy';
-    }
-    return `Renueva en ${plural(dias, 'día')}`;
+    return estadoRenovacion(licencia).corto;
+  }
+
+  renovada(licencia: LicenseUsage): boolean {
+    return estadoRenovacion(licencia).tipo === 'confirmada';
   }
 
   claseRenovacion(licencia: LicenseUsage): string {
-    return this.renuevaPronto(licencia)
-      ? 'text-warn font-bold'
-      : 'text-ink-muted';
+    const estado = estadoRenovacion(licencia);
+    return estado.tono === 'neutro'
+      ? 'text-ink-muted'
+      : `${claseTono(estado.tono)} font-bold`;
   }
 }

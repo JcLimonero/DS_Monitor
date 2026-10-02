@@ -34,6 +34,12 @@ type _CrmOpportunity = Igual<Portal.CrmOpportunity, Puente.CrmOpportunity>;
 type _CrmActivity = Igual<Portal.CrmActivity, Puente.CrmActivity>;
 type _LicenseUsage = Igual<Portal.LicenseUsage, Puente.LicenseUsage>;
 type _LicenseMember = Igual<Portal.LicenseMember, Puente.LicenseMember>;
+type _ManualLicense = Igual<Portal.ManualLicense, Puente.ManualLicense>;
+type _LicenseRenewal = Igual<Portal.LicenseRenewal, Puente.LicenseRenewal>;
+type _LicenseAdjustment = Igual<
+  Portal.LicenseAdjustment,
+  Puente.LicenseAdjustment
+>;
 type _Deployment = Igual<Portal.Deployment, Puente.Deployment>;
 type _PlatformStatus = Igual<Portal.PlatformStatus, Puente.PlatformStatus>;
 type _VpsStatus = Igual<Portal.VpsStatus, Puente.VpsStatus>;
@@ -64,12 +70,18 @@ const comprobado: [
   _CrmActivity,
   _LicenseUsage,
   _LicenseMember,
+  _ManualLicense,
+  _LicenseRenewal,
+  _LicenseAdjustment,
   _Deployment,
   _PlatformStatus,
   _RepoStatus,
   _RepoPullRequest,
   _RepoCommit
 ] = [
+  true,
+  true,
+  true,
   true,
   true,
   true,

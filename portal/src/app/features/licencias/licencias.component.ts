@@ -3,8 +3,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  inject
+  inject,
+  signal
 } from '@angular/core';
+import { LicenciasService } from '../../core/licencias/licencias.service';
+import {
+  claseChip,
+  estadoRenovacion
+} from '../../core/licencias/licencias.util';
 import {
   LICENSE_PROVIDER_LABEL,
   LICENSE_UNIT_LABEL,
@@ -23,6 +29,9 @@ import { plural } from '../../core/util/text.util';
 import { AccountChipComponent } from '../../ui/account-chip.component';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { IconComponent } from '../../ui/icon.component';
+import { LicenciaAltaDialogoComponent } from '../../ui/licencia-alta.component';
+import { LicenciaRenovacionDialogoComponent } from '../../ui/licencia-renovacion.component';
+import { LicenciasMigracionComponent } from '../../ui/licencias-migracion.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 import { DayPipe, RelativePipe } from '../../ui/portal.pipes';
 
@@ -42,6 +51,9 @@ const DINERO = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 });
     DayPipe,
     EmptyStateComponent,
     IconComponent,
+    LicenciaAltaDialogoComponent,
+    LicenciaRenovacionDialogoComponent,
+    LicenciasMigracionComponent,
     PageHeaderComponent,
     RelativePipe
   ],
@@ -49,10 +61,16 @@ const DINERO = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 });
 })
 export class LicenciasComponent {
   private readonly store = inject(PortalStore);
+  /** Ids que solo existen en este navegador (aún sin subir al servidor). */
+  readonly soloEnNavegador = inject(LicenciasService).soloEnEsteNavegador;
 
   readonly proveedorLabel = LICENSE_PROVIDER_LABEL;
   readonly unidadLabel = LICENSE_UNIT_LABEL;
   readonly diasAviso = RENEWAL_WARN_DAYS;
+
+  /** La licencia que se está confirmando como renovada, si hay una. */
+  readonly renovando = signal<LicenseUsage | undefined>(undefined);
+  readonly altaAbierta = signal(false);
 
   /** Lo que necesita atención primero; el resto ordenado por proveedor. */
   readonly licencias = computed(() => {
@@ -129,6 +147,17 @@ export class LicenciasComponent {
   renuevaPronto(licencia: LicenseUsage): boolean {
     const dias = this.dias(licencia);
     return dias !== undefined && dias <= RENEWAL_WARN_DAYS;
+  }
+
+  /** Cómo va su renovación: chip de la tarjeta. */
+  estado(licencia: LicenseUsage) {
+    return estadoRenovacion(licencia);
+  }
+
+  claseChip = claseChip;
+
+  abrirRenovacion(licencia: LicenseUsage): void {
+    this.renovando.set(licencia);
   }
 
   inactivos(licencia: LicenseUsage): number {

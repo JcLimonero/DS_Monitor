@@ -3,7 +3,8 @@ import {
   Account,
   AccountColor,
   LicenseProvider,
-  LicenseUsage,
+  ManualLicense,
+  ManualLicensePeriod,
   SourceKind
 } from '../models';
 import {
@@ -30,9 +31,10 @@ export interface NewManualLicense {
   plan?: string;
   cost?: number;
   currency: string;
-  period: 'mensual' | 'anual';
+  period: ManualLicensePeriod;
   renewsAt?: string;
   url?: string;
+  notes?: string;
 }
 
 /**
@@ -147,19 +149,24 @@ export class LocalSettingsStore {
     this.commit({ ...current, licenseEdits });
   }
 
-  addManualLicense(input: NewManualLicense): LicenseUsage {
+  addManualLicense(input: NewManualLicense): ManualLicense {
     const now = new Date();
     const renewsAt =
       input.renewsAt ||
       new Date(
         now.getTime() + (input.period === 'anual' ? 366 : 31) * 86_400_000
       ).toISOString();
-    const license: LicenseUsage = {
+    const license: ManualLicense = {
       id: `manual-${crypto.randomUUID()}`,
       provider: input.provider,
       product: input.product.trim(),
       plan:
-        input.plan?.trim() || (input.period === 'anual' ? 'Anual' : 'Mensual'),
+        input.plan?.trim() ||
+        (input.period === 'anual'
+          ? 'Anual'
+          : input.period === 'mensual'
+            ? 'Mensual'
+            : undefined),
       unit: 'dinero',
       used: input.cost ?? 0,
       periodStart: now.toISOString(),
@@ -168,6 +175,8 @@ export class LocalSettingsStore {
       currency: input.currency,
       renewsAt,
       manual: true,
+      period: input.period,
+      notes: input.notes?.trim() || undefined,
       members: [],
       accountId: input.accountId,
       url: input.url?.trim() || undefined,
@@ -178,6 +187,43 @@ export class LocalSettingsStore {
       manualLicenses: [...this.settingsSignal().manualLicenses, license]
     });
     return license;
+  }
+
+  /** Deja vacías las licencias de este navegador, ya subidas al puente. */
+  clearLocalLicenses(): void {
+    this.commit({
+      ...this.settingsSignal(),
+      licenseEdits: {},
+      manualLicenses: []
+    });
+  }
+
+  /**
+   * Quita de este navegador lo que ya subió al puente y deja solo lo que no se
+   * pudo subir (`quedan`), para que no se pierda.
+   */
+  conservarSoloLicencias(
+    quedan: readonly { id: string; tipo: 'manual' | 'ajuste' }[]
+  ): void {
+    const manuales = new Set(
+      quedan.filter((q) => q.tipo === 'manual').map((q) => q.id)
+    );
+    const ajustes = new Set(
+      quedan.filter((q) => q.tipo === 'ajuste').map((q) => q.id)
+    );
+    const current = this.settingsSignal();
+    this.commit({
+      ...current,
+      // Con un id repetido solo se conserva el ultimo (el que el puente descarto).
+      manualLicenses: current.manualLicenses.filter(
+        (l, i, todas) =>
+          manuales.has(l.id) &&
+          todas.map((otra) => otra.id).lastIndexOf(l.id) === i
+      ),
+      licenseEdits: Object.fromEntries(
+        Object.entries(current.licenseEdits).filter(([id]) => ajustes.has(id))
+      )
+    });
   }
 
   removeManualLicense(licenseId: string): void {
@@ -205,29 +251,4 @@ function describeKind(kind: SourceKind): string {
     default:
       return kind;
   }
-}
-
-/**
- * Las licencias que llegaron de las fuentes, con las correcciones encima, sin
- * las ocultas, y con las capturadas a mano al final.
- */
-export function applyLicenseSettings(
-  fetched: readonly LicenseUsage[],
-  settings: LocalSettings
-): LicenseUsage[] {
-  const edited = fetched
-    .filter((license) => !settings.licenseEdits[license.id]?.hidden)
-    .map((license) => {
-      const edit = settings.licenseEdits[license.id];
-      if (!edit) {
-        return license;
-      }
-      const { hidden: _hidden, ...fields } = edit;
-      const corrected = { ...license, ...fields };
-      // Cuando la unidad es dinero, lo consumido del periodo es el costo.
-      return corrected.unit === 'dinero' && fields.cost !== undefined
-        ? { ...corrected, used: fields.cost }
-        : corrected;
-    });
-  return [...edited, ...settings.manualLicenses];
 }

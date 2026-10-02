@@ -1,4 +1,11 @@
-import { Account, AccountColor, LicenseUsage, SourceKind } from '../models';
+import {
+  Account,
+  AccountColor,
+  LicenseAdjustment,
+  LicenseUsage,
+  SourceKind
+} from '../models';
+import { normalizarManual } from '../licencias/licencias.util';
 import {
   ConnectionMode,
   PortalConfig,
@@ -22,15 +29,14 @@ import {
 
 const STORAGE_KEY = 'ds-monitor.ajustes.v1';
 
-/** Lo que se puede corregir de una licencia que llegó de una fuente. */
-export interface LicenseEdit {
-  cost?: number;
-  currency?: string;
-  plan?: string;
-  renewsAt?: string;
-  /** True para sacarla del tablero sin borrarla de la fuente. */
-  hidden?: boolean;
-}
+/**
+ * Lo que se puede corregir de una licencia que llegó de una fuente. Es lo
+ * mismo que guarda el puente (`LicenseAdjustment`), con el historial opcional:
+ * sin puente, las confirmaciones de renovación también quedan aquí.
+ */
+export type LicenseEdit = Omit<LicenseAdjustment, 'history'> & {
+  history?: LicenseAdjustment['history'];
+};
 
 export interface LocalSettings {
   version: 1;
@@ -62,6 +68,33 @@ export const EMPTY_SETTINGS: LocalSettings = {
   manualLicenses: []
 };
 
+const esObjeto = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * Las licencias a mano de un localStorage que pudo corromperse: solo las que
+ * tienen id y producto, y con lo demás relleno (el portal no debe lanzar con
+ * un `manualLicenses` mal formado).
+ */
+export function limpiarManuales(valor: unknown): LicenseUsage[] {
+  if (!Array.isArray(valor)) {
+    return [];
+  }
+  return valor
+    .map((l) => normalizarManual(l))
+    .filter((l): l is NonNullable<typeof l> => l !== undefined);
+}
+
+/** Las correcciones de un localStorage que pudo corromperse: solo las que son objetos. */
+export function limpiarEdiciones(valor: unknown): Record<string, LicenseEdit> {
+  if (!esObjeto(valor)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(valor).filter(([, e]) => esObjeto(e))
+  ) as Record<string, LicenseEdit>;
+}
+
 export function readLocalSettings(): LocalSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -77,10 +110,8 @@ export function readLocalSettings(): LocalSettings {
         ? parsed.removedAccounts
         : [],
       connectionMode: parsed.connectionMode ?? {},
-      licenseEdits: parsed.licenseEdits ?? {},
-      manualLicenses: Array.isArray(parsed.manualLicenses)
-        ? parsed.manualLicenses
-        : []
+      licenseEdits: limpiarEdiciones(parsed.licenseEdits),
+      manualLicenses: limpiarManuales(parsed.manualLicenses)
     };
   } catch {
     return EMPTY_SETTINGS;

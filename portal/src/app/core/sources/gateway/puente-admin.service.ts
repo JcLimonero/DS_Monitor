@@ -6,12 +6,48 @@ import { PORTAL_CONFIG } from '../../config/portal-config.token';
 import {
   AjustesPortal,
   Empresa,
+  LicenseAdjustment,
+  LicenseRenewal,
   LlamadaArchivada,
+  ManualLicense,
   Person,
   Proveedor,
   SourceKind,
   TaskItem
 } from '../../models';
+
+/** Lo que el puente guarda de licencias a mano y correcciones. */
+export interface EstadoLicencias {
+  manuales: ManualLicense[];
+  ajustes: Record<string, LicenseAdjustment>;
+}
+
+/** Lo que contesta el puente al subir lo capturado en un navegador. */
+export interface ResumenMigracion extends EstadoLicencias {
+  migradas: number;
+  /** Campos que venían mal y se corrigieron o quitaron. */
+  saneadas: { id: string; campo: string; motivo: string }[];
+  /** Registros que no se pudieron subir (siguen en el navegador). */
+  descartadas: { id: string; tipo: 'manual' | 'ajuste'; motivo: string }[];
+  /** Ya existían en el servidor con otros datos: se conservó lo del servidor. */
+  conflictos: {
+    id: string;
+    producto: string;
+    campo: string;
+    local: string;
+    servidor: string;
+  }[];
+}
+
+/** Lo que se manda a "Ya se renovó". */
+export interface RenovacionPedida {
+  id: string;
+  costo?: number;
+  moneda?: string;
+  /** Fecha de la siguiente renovación, `YYYY-MM-DD`. */
+  renuevaEn: string;
+  nota?: string;
+}
 
 /** Un dominio registrado, tal como lo guarda el puente. */
 export interface Dominio {
@@ -517,6 +553,78 @@ export class PuenteAdminService {
     return this.http.post<AjustesPortal>(
       this.url('/ajustes-portal/guardar'),
       cuerpo,
+      { headers: this.headers() }
+    );
+  }
+
+  // --- Licencias a mano, correcciones y renovaciones confirmadas ---
+
+  licenciasManuales(): Observable<ManualLicense[]> {
+    return this.http.get<ManualLicense[]>(this.url('/licencias/manuales'));
+  }
+
+  licenciasAjustes(): Observable<Record<string, LicenseAdjustment>> {
+    return this.http.get<Record<string, LicenseAdjustment>>(
+      this.url('/licencias/ajustes')
+    );
+  }
+
+  guardarLicenciaManual(
+    licencia: Record<string, unknown>
+  ): Observable<ManualLicense> {
+    return this.http.post<ManualLicense>(
+      this.url('/licencias/manuales/guardar'),
+      { licencia },
+      { headers: this.headers() }
+    );
+  }
+
+  borrarLicenciaManual(id: string): Observable<EstadoLicencias> {
+    return this.http.post<EstadoLicencias>(
+      this.url('/licencias/manuales/borrar'),
+      { id },
+      { headers: this.headers() }
+    );
+  }
+
+  /** Corrige una licencia; un campo en `null` quita esa corrección. */
+  guardarLicenciaAjuste(
+    id: string,
+    parche: Record<string, unknown>
+  ): Observable<EstadoLicencias> {
+    return this.http.post<EstadoLicencias>(
+      this.url('/licencias/ajustes/guardar'),
+      { id, ...parche },
+      { headers: this.headers() }
+    );
+  }
+
+  borrarLicenciaAjuste(id: string): Observable<EstadoLicencias> {
+    return this.http.post<EstadoLicencias>(
+      this.url('/licencias/ajustes/borrar'),
+      { id },
+      { headers: this.headers() }
+    );
+  }
+
+  renovarLicencia(
+    pedida: RenovacionPedida
+  ): Observable<EstadoLicencias & { renovacion: LicenseRenewal }> {
+    return this.http.post<EstadoLicencias & { renovacion: LicenseRenewal }>(
+      this.url('/licencias/renovar'),
+      pedida,
+      { headers: this.headers() }
+    );
+  }
+
+  /** Sube lo capturado en este navegador; el puente no pisa lo que ya tiene. */
+  migrarLicencias(datos: {
+    manuales: unknown[];
+    ajustes: Record<string, unknown>;
+  }): Observable<ResumenMigracion> {
+    return this.http.post<ResumenMigracion>(
+      this.url('/licencias/migrar'),
+      datos,
       { headers: this.headers() }
     );
   }

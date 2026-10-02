@@ -3,7 +3,9 @@ import type { ClienteIngesta } from '../config/entorno.js';
 import type { Ejecucion, Ejecuciones } from '../ingesta/ejecuciones.js';
 import type {
   Empresa,
+  LicenseAdjustment,
   LlamadaArchivada,
+  ManualLicense,
   Person,
   Proveedor,
   TaskItem
@@ -693,4 +695,71 @@ export const TABLA_LLAMADAS: DefinicionTabla<LlamadaArchivada[]> = {
     sub: {}
   }),
   deFilas: (filas) => filas.map((f) => objeto<LlamadaArchivada>(f['datos']))
+};
+
+// --- Licencias a mano y sus ajustes -------------------------------------
+
+export const TABLA_LICENCIAS_MANUALES: DefinicionTabla<ManualLicense[]> = {
+  clave: 'licencias-manuales',
+  tabla: 'licencias_manuales',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS licencias_manuales (
+      id text PRIMARY KEY,
+      orden integer NOT NULL DEFAULT 0,
+      producto text NOT NULL,
+      cuenta text NOT NULL,
+      renueva_en timestamptz,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+  `,
+  id: 'id',
+  orden: 'orden',
+  aFilas: (lista) => ({
+    principal: lista.map((l, i) => ({
+      id: l.id,
+      orden: i,
+      producto: l.product,
+      cuenta: l.accountId,
+      renueva_en: fecha(l.renewsAt),
+      actualizado_en: fecha(l.updatedAt) ?? new Date().toISOString(),
+      datos: l
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<ManualLicense>(f['datos']))
+};
+
+export const TABLA_LICENCIAS_AJUSTES: DefinicionTabla<
+  Record<string, LicenseAdjustment>
+> = {
+  clave: 'licencias-ajustes',
+  tabla: 'licencias_ajustes',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS licencias_ajustes (
+      licencia_id text PRIMARY KEY,
+      renovada_en timestamptz,
+      renueva_en timestamptz,
+      oculta boolean NOT NULL DEFAULT false,
+      datos jsonb NOT NULL
+    );
+  `,
+  id: 'licencia_id',
+  aFilas: (todos) => ({
+    principal: Object.entries(todos).map(([id, a]) => ({
+      licencia_id: id,
+      renovada_en: fecha(a.renewedAt),
+      renueva_en: fecha(a.renewsAt),
+      oculta: a.hidden === true,
+      datos: a
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) =>
+    Object.fromEntries(
+      filas.map((f) => [
+        String(f['licencia_id']),
+        objeto<LicenseAdjustment>(f['datos'])
+      ])
+    )
 };

@@ -28,6 +28,8 @@ import {
   TABLA_DOMINIOS,
   TABLA_EJECUCIONES,
   TABLA_EMISORES,
+  TABLA_LICENCIAS_AJUSTES,
+  TABLA_LICENCIAS_MANUALES,
   TABLA_EMPRESAS,
   TABLA_EQUIPO,
   TABLA_LLAMADAS,
@@ -53,6 +55,18 @@ import {
   type Dominio
 } from '../datos/dominios.js';
 import {
+  aplicarAjustes,
+  parchearAjuste,
+  registrarRenovacion,
+  migrarLicencias,
+  idLimpio,
+  MAX_AJUSTES,
+  MAX_MANUALES,
+  validarManual,
+  validarRenovacion,
+  type Ajustes
+} from '../datos/licencias.js';
+import {
   EMPRESAS_INICIALES,
   empresaDeCuenta,
   establecerCatalogo,
@@ -73,6 +87,7 @@ import type {
   HostedApp,
   LicenseUsage,
   LlamadaArchivada,
+  ManualLicense,
   Meeting,
   MonitorTarget,
   Person,
@@ -435,6 +450,10 @@ export interface Datos {
   /** Proveedores y clientes externos (Integraciones → Proveedores). */
   proveedores: AlmacenJson<Proveedor[]>;
   dominios: AlmacenJson<Dominio[]>;
+  /** Licencias capturadas a mano (Licencias → Agregar). */
+  licenciasManuales: AlmacenJson<ManualLicense[]>;
+  /** Correcciones y confirmaciones de renovacion por id de licencia. */
+  licenciasAjustes: AlmacenJson<Ajustes>;
   sesiones: AlmacenJson<Sesion[]>;
   /** Los pendientes personales: los que uno se apunta en el portal. */
   personales: AlmacenJson<TaskItem[]>;
@@ -570,6 +589,16 @@ export function abrirDatos(persistencia: Persistencia): Datos {
       []
     ),
     dominios: new AlmacenTabla<Dominio[]>(persistencia, TABLA_DOMINIOS, []),
+    licenciasManuales: new AlmacenTabla<ManualLicense[]>(
+      persistencia,
+      TABLA_LICENCIAS_MANUALES,
+      []
+    ),
+    licenciasAjustes: new AlmacenTabla<Ajustes>(
+      persistencia,
+      TABLA_LICENCIAS_AJUSTES,
+      {}
+    ),
     sesiones: new AlmacenTabla<Sesion[]>(persistencia, TABLA_SESIONES, []),
     personales: new AlmacenTabla<TaskItem[]>(
       persistencia,
@@ -1407,6 +1436,296 @@ export function construirRutas(
     return datos.dominios.escribir(
       limpios.sort((a, b) => a.venceEn.localeCompare(b.venceEn))
     );
+  });
+
+  // --- Licencias a mano y renovaciones confirmadas ---
+  //
+  // Antes se guardaban en el navegador de quien las capturaba; ahora viven aqui
+  // para que la television del carrusel y las demas computadoras vean lo mismo.
+  // Las lecturas van abiertas como el resto; capturar y confirmar exige admin.
+  // Cada escritura contesta con el estado completo ({ manuales, ajustes }).
+  //
+  // Las escrituras corren de una en una (`enLicencias`) y leen el estado ya
+  // dentro de su turno: con varias renovaciones a la vez, cada una parte de lo
+  // que dejo la anterior y ninguna se pierde.
+
+  let colaLicencias: Promise<unknown> = Promise.resolve();
+  const enLicencias = <T>(trabajo: () => Promise<T>): Promise<T> => {
+    const turno = colaLicencias.then(trabajo);
+    colaLicencias = turno.catch(() => undefined);
+    return turno;
+  };
+
+  const estadoLicencias = () => ({
+    manuales: datos.licenciasManuales.leer(),
+    ajustes: datos.licenciasAjustes.leer()
+  });
+
+  const guardarEstadoLicencias = async (
+    manuales: ManualLicense[],
+    ajustes: Ajustes
+  ) => {
+    await datos.licenciasManuales.escribir(manuales);
+    await datos.licenciasAjustes.escribir(ajustes);
+    return estadoLicencias();
+  };
+
+  /** Un error de validacion del cuerpo es del cliente (400), no del servidor. */
+  const validando = <T>(f: () => T): T => {
+    try {
+      return f();
+    } catch (error) {
+      throw new ErrorPuente(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
+    }
+  };
+
+  /** Quien confirmo: el correo de su sesion, o `admin` con el token del entorno. */
+  const quienEs = (contexto: Contexto): string =>
+    acceso?.sesionDe(tokenDe(contexto))?.correo ?? 'admin';
+
+  /**
+   * El id de una licencia que se corrige o renueva. Una a mano o un dominio se
+   * pueden verificar (404 si no existen); las de proveedor no siempre, asi que
+   * se aceptan, pero con tope de ajustes.
+   */
+  const idDeLicencia = (valor: unknown, ahora: Date): string => {
+    const id = idLimpio(valor);
+    if (!id) {
+      throw new ErrorPuente(
+        'El id de la licencia falta o no es válido (hasta 120 caracteres: letras, números, _ . : -).',
+        400
+      );
+    }
+    if (
+      id.startsWith('manual-') &&
+      !datos.licenciasManuales.leer().some((m) => m.id === id)
+    ) {
+      throw new ErrorPuente('Esa licencia a mano no existe.', 404);
+    }
+    if (
+      id.startsWith('dominios-') &&
+      !dominiosComoLicencias(datos.dominios.leer(), 'dominios', ahora).some(
+        (l) => l.id === id
+      )
+    ) {
+      throw new ErrorPuente('Ese dominio no existe.', 404);
+    }
+    return id;
+  };
+
+  const exigirCupoDeAjuste = (id: string, ajustes: Ajustes): void => {
+    if (!ajustes[id] && Object.keys(ajustes).length >= MAX_AJUSTES) {
+      throw new ErrorPuente(
+        `Ya hay ${MAX_AJUSTES} correcciones de licencias guardadas; quita alguna antes de agregar otra.`,
+        400
+      );
+    }
+  };
+
+  router.get('/licencias/manuales', async () => datos.licenciasManuales.leer());
+
+  router.get('/licencias/ajustes', async () => datos.licenciasAjustes.leer());
+
+  router.post('/licencias/manuales/guardar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { licencia, licencias } = (contexto.cuerpo ?? {}) as {
+      licencia?: unknown;
+      licencias?: unknown;
+    };
+    if (licencia === undefined && !Array.isArray(licencias)) {
+      throw new ErrorPuente('Falta "licencia".', 400);
+    }
+    return enLicencias(async () => {
+      const ahora = new Date();
+      const lista =
+        licencia !== undefined ? [licencia] : (licencias as unknown[]);
+      let manuales = datos.licenciasManuales.leer();
+      const guardadas: ManualLicense[] = [];
+      for (const cruda of lista) {
+        const id = (cruda as { id?: unknown } | null)?.id;
+        const previa =
+          typeof id === 'string'
+            ? manuales.find((m) => m.id === id)
+            : undefined;
+        if (!previa && manuales.length >= MAX_MANUALES) {
+          throw new ErrorPuente(
+            `Ya hay ${MAX_MANUALES} licencias a mano; quita alguna antes de agregar otra.`,
+            400
+          );
+        }
+        const limpia = validando(() => validarManual(cruda, previa, ahora));
+        manuales = previa
+          ? manuales.map((m) => (m.id === limpia.id ? limpia : m))
+          : [...manuales, limpia];
+        guardadas.push(limpia);
+      }
+      await datos.licenciasManuales.escribir(manuales);
+      return licencia !== undefined ? guardadas[0] : guardadas;
+    });
+  });
+
+  router.post('/licencias/manuales/borrar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { id } = (contexto.cuerpo ?? {}) as { id?: unknown };
+    return enLicencias(async () => {
+      const manuales = datos.licenciasManuales.leer();
+      if (typeof id !== 'string' || !manuales.some((m) => m.id === id)) {
+        throw new ErrorPuente('Esa licencia a mano no existe.', 404);
+      }
+      const { [id]: _quitado, ...ajustes } = datos.licenciasAjustes.leer();
+      return guardarEstadoLicencias(
+        manuales.filter((m) => m.id !== id),
+        ajustes
+      );
+    });
+  });
+
+  router.post('/licencias/ajustes/guardar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const cuerpo = (contexto.cuerpo ?? {}) as Record<string, unknown>;
+    return enLicencias(async () => {
+      const id = idDeLicencia(cuerpo['id'], new Date());
+      const manuales = datos.licenciasManuales.leer();
+      const ajustes = { ...datos.licenciasAjustes.leer() };
+      const manual = manuales.find((m) => m.id === id);
+      if (manual) {
+        // En una licencia a mano la correccion va en la licencia misma; solo
+        // "ocultar" queda como ajuste.
+        const { hidden, ...campos } = cuerpo;
+        const limpia = validando(() =>
+          validarManual(
+            {
+              ...manual,
+              ...(campos['cost'] !== undefined ? { cost: campos['cost'] } : {}),
+              ...(campos['currency'] !== undefined
+                ? { currency: campos['currency'] }
+                : {}),
+              ...(campos['plan'] !== undefined ? { plan: campos['plan'] } : {}),
+              ...(campos['renewsAt'] !== undefined
+                ? { renewsAt: campos['renewsAt'] }
+                : {})
+            },
+            manual,
+            new Date()
+          )
+        );
+        if ('hidden' in cuerpo) {
+          exigirCupoDeAjuste(id, ajustes);
+        }
+        const nuevoAjuste = validando(() =>
+          parchearAjuste(ajustes[id], 'hidden' in cuerpo ? { hidden } : {})
+        );
+        if (nuevoAjuste) {
+          ajustes[id] = nuevoAjuste;
+        } else {
+          delete ajustes[id];
+        }
+        return guardarEstadoLicencias(
+          manuales.map((m) => (m.id === id ? limpia : m)),
+          ajustes
+        );
+      }
+      exigirCupoDeAjuste(id, ajustes);
+      const nuevo = validando(() => parchearAjuste(ajustes[id], cuerpo));
+      if (nuevo) {
+        ajustes[id] = nuevo;
+      } else {
+        delete ajustes[id];
+      }
+      return guardarEstadoLicencias(manuales, ajustes);
+    });
+  });
+
+  router.post('/licencias/ajustes/borrar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const { id } = (contexto.cuerpo ?? {}) as { id?: unknown };
+    if (typeof id !== 'string' || !id) {
+      throw new ErrorPuente('Falta el id de la licencia.', 400);
+    }
+    return enLicencias(async () => {
+      const { [id]: _quitado, ...ajustes } = datos.licenciasAjustes.leer();
+      return guardarEstadoLicencias(datos.licenciasManuales.leer(), ajustes);
+    });
+  });
+
+  // "Ya se renovo": deja constancia (quien y cuando), el costo y la siguiente
+  // fecha. En un dominio la fecha y el costo se escriben en el dominio mismo,
+  // que es de donde sale su licencia y su alerta de vencimiento.
+  router.post('/licencias/renovar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const por = quienEs(contexto);
+    return enLicencias(async () => {
+      const ahora = new Date();
+      idDeLicencia(
+        (contexto.cuerpo as { id?: unknown } | undefined)?.id,
+        ahora
+      );
+      const entrada = validando(() =>
+        validarRenovacion(contexto.cuerpo, ahora)
+      );
+      exigirCupoDeAjuste(entrada.id, datos.licenciasAjustes.leer());
+      const lista = datos.dominios.leer();
+      const dominio = dominiosComoLicencias(lista, 'dominios', ahora).findIndex(
+        (l) => l.id === entrada.id
+      );
+      const resultado = registrarRenovacion(
+        estadoLicencias(),
+        entrada,
+        por,
+        ahora,
+        dominio >= 0
+      );
+      if (dominio >= 0) {
+        await datos.dominios.escribir(
+          lista.map((d, i) =>
+            i !== dominio
+              ? d
+              : {
+                  ...d,
+                  venceEn: entrada.renuevaEn,
+                  ...(entrada.costo !== undefined
+                    ? { costo: entrada.costo }
+                    : {}),
+                  ...(entrada.moneda ? { moneda: entrada.moneda } : {})
+                }
+          )
+        );
+      }
+      const estado = await guardarEstadoLicencias(
+        resultado.manuales,
+        resultado.ajustes
+      );
+      console.log(
+        `[puente] licencias: ${resultado.renovacion.by} confirmó la renovación de ${entrada.id} (próxima ${entrada.renuevaEn.slice(0, 10)})`
+      );
+      return { ...estado, renovacion: resultado.renovacion };
+    });
+  });
+
+  // Sube lo que alguien tenia capturado en su navegador. No pisa nada: solo
+  // entra lo que el servidor todavia no tiene (por id), asi que repetirlo, o
+  // hacerlo desde dos navegadores, no duplica. Cada registro se sanea por su
+  // cuenta; ver `migrarLicencias`.
+  router.post('/licencias/migrar', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const cuerpo = (contexto.cuerpo ?? {}) as {
+      manuales?: unknown;
+      ajustes?: unknown;
+    };
+    return enLicencias(async () => {
+      const r = migrarLicencias(estadoLicencias(), cuerpo, new Date());
+      const estado = await guardarEstadoLicencias(r.manuales, r.ajustes);
+      return {
+        ...estado,
+        migradas: r.migradas,
+        saneadas: r.saneadas,
+        descartadas: r.descartadas,
+        conflictos: r.conflictos
+      };
+    });
   });
 
   // --- Licencias ---
@@ -3799,33 +4118,39 @@ export function construirRutas(
       ]);
     },
     juntas: () => porBuzon<Meeting>('juntas', 'juntas'),
-    licencias: async () => [
-      ...(await porBuzon<LicenseUsage>('licencias', 'licencias')),
-      ...dominiosComoLicencias(datos.dominios.leer(), 'dominios'),
-      ...(await siHay(cfg().anthropic, () =>
-        cache.obtener('licencias:anthropic', ttl.licencias, () =>
-          licenciasAnthropic(exigir(cfg().anthropic, 'anthropic'))
-        )
-      ).catch(() => [])),
-      ...(await siHay(cfg().cursor, () =>
-        cache.obtener('licencias:cursor', ttl.licencias, () =>
-          licenciasCursor(exigir(cfg().cursor, 'cursor'))
-        )
-      ).catch(() => [])),
-      ...(await siHay(cfg().figma, () =>
-        cache.obtener('licencias:figma', ttl.licencias, () =>
-          licenciasFigma(exigir(cfg().figma, 'figma'))
-        )
-      ).catch(() => [])),
-      ...(await siHay(cfg().ia, () =>
-        cache.obtener('licencias:openrouter', ttl.licencias, () =>
-          consumoOpenRouter(exigir(cfg().ia, 'openrouter'))
-        )
-      ).catch(() => [])),
-      ...(cfg().vercel
-        ? licenciasVercel(cfg().vercel as ConfiguracionVercel)
-        : [])
-    ],
+    licencias: async () =>
+      aplicarAjustes(
+        [
+          ...(await porBuzon<LicenseUsage>('licencias', 'licencias')),
+          ...dominiosComoLicencias(datos.dominios.leer(), 'dominios'),
+          ...(await siHay(cfg().anthropic, () =>
+            cache.obtener('licencias:anthropic', ttl.licencias, () =>
+              licenciasAnthropic(exigir(cfg().anthropic, 'anthropic'))
+            )
+          ).catch(() => [])),
+          ...(await siHay(cfg().cursor, () =>
+            cache.obtener('licencias:cursor', ttl.licencias, () =>
+              licenciasCursor(exigir(cfg().cursor, 'cursor'))
+            )
+          ).catch(() => [])),
+          ...(await siHay(cfg().figma, () =>
+            cache.obtener('licencias:figma', ttl.licencias, () =>
+              licenciasFigma(exigir(cfg().figma, 'figma'))
+            )
+          ).catch(() => [])),
+          ...(await siHay(cfg().ia, () =>
+            cache.obtener('licencias:openrouter', ttl.licencias, () =>
+              consumoOpenRouter(exigir(cfg().ia, 'openrouter'))
+            )
+          ).catch(() => [])),
+          ...(cfg().vercel
+            ? licenciasVercel(cfg().vercel as ConfiguracionVercel)
+            : [])
+        ],
+        datos.licenciasManuales.leer(),
+        datos.licenciasAjustes.leer(),
+        new Date()
+      ),
     dominios: () => datos.dominios.leer(),
     monitoreo: () =>
       siHay(cfg().monitoreo, () =>
