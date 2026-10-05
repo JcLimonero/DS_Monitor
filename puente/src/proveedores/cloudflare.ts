@@ -26,6 +26,12 @@ export const MAXIMO_PAGINAS = 100;
 const MENSAJE_PERMISO =
   'token sin permiso (necesita Zone:Read y DNS:Read). Revisa el token en Integraciones → Servicios → Cloudflare.';
 
+/** Los ID de cuenta de Cloudflare son 32 caracteres hexadecimales. */
+const ID_CUENTA = /^[a-f0-9]{32}$/i;
+
+const MENSAJE_CUENTA =
+  'el ID de la cuenta no es válido o el token no la ve. Debe ser el código de 32 letras y números de la URL del panel (no el nombre de la cuenta); si el token solo ve una cuenta, deja el campo vacío en Integraciones → Servicios → Cloudflare.';
+
 /** El token no alcanza (401/403): la pantalla lo distingue de otras fallas. */
 export class ErrorCloudflareSinPermiso extends ErrorProveedor {
   constructor() {
@@ -204,12 +210,28 @@ export interface ZonaCloudflare {
 export async function zonas(
   config: ConfiguracionCloudflare
 ): Promise<ZonaCloudflare[]> {
-  const { filas } = await pedirTodas(
-    config,
-    '/zones',
-    POR_PAGINA_ZONAS,
-    config.accountId ? { 'account.id': config.accountId } : {}
-  );
+  if (config.accountId && !ID_CUENTA.test(config.accountId)) {
+    throw new ErrorProveedor('Cloudflare', MENSAJE_CUENTA);
+  }
+  let filas: Crudo[];
+  try {
+    ({ filas } = await pedirTodas(
+      config,
+      '/zones',
+      POR_PAGINA_ZONAS,
+      config.accountId ? { 'account.id': config.accountId } : {}
+    ));
+  } catch (error) {
+    // Con el filtro de cuenta, un 400 es "esa cuenta no existe para el token".
+    if (
+      config.accountId &&
+      error instanceof ErrorCloudflareHttp &&
+      error.http === 400
+    ) {
+      throw new ErrorProveedor('Cloudflare', MENSAJE_CUENTA);
+    }
+    throw error;
+  }
   const salida: ZonaCloudflare[] = [];
   for (const z of filas) {
     const id = texto(z['id']);

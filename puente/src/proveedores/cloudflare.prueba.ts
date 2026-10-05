@@ -113,6 +113,36 @@ describe('zonas de Cloudflare', () => {
     assert.equal(llamados[0]!.url.searchParams.get('account.id'), CUENTA);
   });
 
+  it('un ID de cuenta con formato invalido no llega a Cloudflare', async () => {
+    const llamados = simular(() => sobre([], { total_pages: 1 }));
+    await assert.rejects(
+      zonas({ ...config, accountId: 'Mi cuenta' }),
+      (e: unknown) =>
+        e instanceof ErrorProveedor && /ID de la cuenta/.test(e.message)
+    );
+    assert.equal(llamados.length, 0);
+  });
+
+  it('un 400 con cuenta configurada explica que la cuenta no existe', async () => {
+    simular(
+      () =>
+        new Response(
+          JSON.stringify({
+            success: false,
+            errors: [{ message: "account with given Tag doesn't exist" }]
+          }),
+          { status: 400 }
+        )
+    );
+    await assert.rejects(
+      zonas({ ...config, accountId: CUENTA }),
+      (e: unknown) =>
+        e instanceof ErrorProveedor &&
+        /ID de la cuenta/.test(e.message) &&
+        !/Tag/.test(e.message)
+    );
+  });
+
   it('401 y 403 dicen que el token no tiene permiso', async () => {
     for (const status of [401, 403]) {
       simular(
