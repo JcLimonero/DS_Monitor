@@ -14,6 +14,10 @@ import {
   ocultarSecretos,
   validarAppPropia
 } from '../correo/app-propia.js';
+import {
+  SEGUIMIENTO_VACIO,
+  type SeguimientoCrm
+} from '../datos/crm-seguimiento.js';
 import { AlmacenJson } from '../datos/almacen-json.js';
 import {
   AJUSTES_VACIOS,
@@ -156,6 +160,10 @@ import {
   yaAvisado,
   type RegistroAvisos
 } from '../pendientes/avisos-asignacion.js';
+import {
+  AJUSTES_COTIZACIONES_VACIOS,
+  type AjustesCotizaciones
+} from '../pendientes/cotizaciones.js';
 import {
   conRespuesta,
   conSolicitud,
@@ -344,6 +352,7 @@ import {
   type Programable,
   type ServiciosIa
 } from './rutas-ia.js';
+import { registrarCotizaciones } from './rutas-cotizaciones.js';
 
 /**
  * Las rutas del contrato que consume el portal.
@@ -367,7 +376,8 @@ const CREDENCIAL_DE: Record<string, string> = {
   cloudflare: 'CLOUDFLARE_API_TOKEN',
   github: 'GITHUB_TOKEN',
   odoo: 'ODOO_URL, ODOO_DB, ODOO_USUARIO y ODOO_API_KEY',
-  ops: 'un emisor con tipo pendientes (Pendientes → API)'
+  ops: 'un emisor con tipo pendientes (Pendientes → API)',
+  cotizaciones: 'un emisor con tipo crm (INGESTA_CLIENTES)'
 };
 
 function exigir<T>(valor: T | undefined, conexion: string): T {
@@ -396,7 +406,8 @@ export function estadoDeConexiones(
     new PersistenciaArchivos({ correo: config.directorioCorreo })
   ),
   hayEmisoresOps: () => boolean = () => false,
-  hayServidores: () => boolean = () => false
+  hayServidores: () => boolean = () => false,
+  hayEmisoresCrm: () => boolean = () => false
 ): Estado[] {
   const filas: [string, boolean, string[]][] = [
     ['anthropic', config.anthropic !== undefined, ['licenses']],
@@ -416,6 +427,13 @@ export function estadoDeConexiones(
         (c) => c.tipos.includes('pendientes') && !c.nombre.startsWith('correo-')
       ) || hayEmisoresOps(),
       ['tasks']
+    ],
+    // Las cotizaciones (y cualquier CRM) que un emisor manda por /ingesta/crm.
+    [
+      'cotizaciones',
+      config.clientesIngesta.some((c) => c.tipos.includes('crm')) ||
+        hayEmisoresCrm(),
+      ['crm']
     ]
   ];
 
@@ -554,6 +572,10 @@ export interface Datos {
    * para no repetir el aviso cuando el mismo correo llego a varios buzones.
    */
   avisosAsignacion: AlmacenJson<RegistroAvisos>;
+  /** Cuando cambio cada cotizacion de etapa y lo que se movio a mano. */
+  crmSeguimiento: AlmacenJson<SeguimientoCrm>;
+  /** Dias sin movimiento por etapa antes de crear el pendiente de la cotizacion. */
+  crmAjustes: AlmacenJson<AjustesCotizaciones>;
 }
 
 /** Lee todos los almacenes (una sola lectura de la coleccion); al arrancar. */
@@ -733,6 +755,16 @@ export function abrirDatos(persistencia: Persistencia): Datos {
       persistencia,
       'avisos-asignacion',
       {}
+    ),
+    crmSeguimiento: new AlmacenJson<SeguimientoCrm>(
+      persistencia,
+      'crm-seguimiento',
+      SEGUIMIENTO_VACIO
+    ),
+    crmAjustes: new AlmacenJson<AjustesCotizaciones>(
+      persistencia,
+      'crm-ajustes',
+      AJUSTES_COTIZACIONES_VACIOS
     )
   };
 }
@@ -950,7 +982,8 @@ export function construirRutas(
       cfg(),
       almacenCorreo,
       hayOps,
-      () => datos.servidores.leer().length > 0
+      () => datos.servidores.leer().length > 0,
+      () => datos.emisores.leer().some((e) => e.tipos.includes('crm'))
     )
   }));
 
@@ -5863,8 +5896,34 @@ export function construirRutas(
     {
       leer: () => datos.ejecuciones.leer(),
       escribir: (e) => datos.ejecuciones.escribir(e)
+    },
+    {
+      leer: () => datos.crmSeguimiento.leer(),
+      escribir: (s) => datos.crmSeguimiento.escribir(s)
     }
   );
+
+  // Cotizaciones: mover la etapa desde el tablero y el pendiente cuando una
+  // abierta lleva demasiado sin movimiento.
+  registrarCotizaciones({
+    router,
+    datos,
+    almacen,
+    emisores: todosLosEmisores,
+    exigirAdmin: (contexto) => exigirAdmin(contexto, cfg(), acceso),
+    correoDeSesion: (contexto) => acceso.sesionDe(tokenDe(contexto))?.correo,
+    equipo: equipoCompleto,
+    correosDelDueno: () => [...correosDelDueno()],
+    asignar: (id, quien, tarea) =>
+      asignarPendiente(
+        id,
+        quien,
+        tarea,
+        undefined,
+        'cotización sin movimiento'
+      ),
+    programables
+  });
 
   // El propio puente se reporta en Ejecuciones: cada tarea programada deja su
   // corrida (emisor "ds-monitor") al terminar, con duracion y error si lo hubo.

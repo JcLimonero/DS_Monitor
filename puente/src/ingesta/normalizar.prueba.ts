@@ -260,4 +260,29 @@ describe('esJuntaDeIngesta', () => {
       ['Revisar cotización']
     );
   });
+
+  it('los seis estados de una cotizacion caen en su etapa', () => {
+    // Los nombres que manda la app de cotizaciones del dueño.
+    const esperadas: [string, string][] = [
+      ['Generada', 'nuevo'],
+      ['Calificada', 'calificado'],
+      ['Cotización enviada', 'propuesta'],
+      ['En negociación', 'negociacion'],
+      ['Ganada', 'ganado'],
+      ['Perdida', 'perdido']
+    ];
+    for (const [estado, etapa] of esperadas) {
+      assert.equal(etapaCrm(estado), etapa, estado);
+    }
+  });
+
+  it('trampa: un estado que no se reconoce cae en nuevo (Aceptada, Rechazada)', () => {
+    // "Aceptada" y "Rechazada" suenan a cierre pero no llevan "gana" ni
+    // "perdi": el puente no las adivina y quedan en nuevo. Quien integre debe
+    // mandar Ganada/Perdida, o el pendiente de vencimiento las seguira
+    // vigilando como cotizaciones abiertas.
+    assert.equal(etapaCrm('Aceptada'), 'nuevo');
+    assert.equal(etapaCrm('Rechazada'), 'nuevo');
+    assert.equal(etapaCrm(undefined), 'nuevo');
+  });
 });

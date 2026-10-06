@@ -5,6 +5,8 @@ import { SesionService } from '../../acceso/sesion.service';
 import { PORTAL_CONFIG } from '../../config/portal-config.token';
 import {
   AjustesPortal,
+  CrmOpportunity,
+  CrmStage,
   Empresa,
   LicenseAdjustment,
   LicenseRenewal,
@@ -462,6 +464,19 @@ export class PuenteAdminService {
     return this.http.post<{ enviados: string[]; errores: string[] }>(
       this.url('/equipo/solicitar-estatus'),
       { ids },
+      { headers: this.headers() }
+    );
+  }
+
+  /**
+   * Mueve la etapa de una cotización que llega por ingesta. El puente la sirve
+   * en la etapa nueva hasta que su emisor la confirme y devuelve la
+   * oportunidad ya con eso.
+   */
+  moverEtapaCrm(id: string, etapa: CrmStage): Observable<CrmOpportunity> {
+    return this.http.post<CrmOpportunity>(
+      this.url(`/crm/oportunidades/${encodeURIComponent(id)}/etapa`),
+      { etapa },
       { headers: this.headers() }
     );
   }

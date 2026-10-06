@@ -20,6 +20,14 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       color: 'violet',
       enabled: false
     },
+    {
+      id: 'cotizaciones',
+      label: 'Cotizaciones',
+      detail: 'Cotizaciones que manda la app por la API',
+      kind: 'ops',
+      color: 'teal',
+      enabled: false
+    },
     // --- Buzones de correo ---
     //
     // De cada uno se sacan tres cosas: las juntas (invitaciones con archivo
@@ -184,6 +192,14 @@ export const PORTAL_DEFAULTS: Pick<PortalConfig, 'accounts' | 'connections'> = {
       mode: 'demo',
       provides: ['crm', 'tasks'],
       path: '/odoo/itech'
+    },
+    {
+      id: 'cotizaciones',
+      accountId: 'cotizaciones',
+      kind: 'ops',
+      mode: 'gateway',
+      provides: ['crm'],
+      path: '/ops/cotizaciones'
     },
     // Cada buzón es una conexión: así se enciende de uno en uno y Ajustes dice
     // cuál falta. La ruta lleva el identificador de la cuenta.

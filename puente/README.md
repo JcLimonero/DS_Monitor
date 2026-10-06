@@ -385,6 +385,7 @@ puente credenciales de esos sistemas.
 
 La segunda va a ser la común, y tiene su propio documento con el cuerpo exacto
 de cada envío: **[INGESTA.md](INGESTA.md)**.
+Las cotizaciones de una app propia entran por `/ingesta/crm` con seguimiento de estatus, etapa movible desde el tablero y pendiente por falta de movimiento: sección *Cotizaciones* de ese documento.
 
 Recibir trae tres problemas que ir por ellos no tiene, y los tres están
 resueltos: los envíos llegan fuera de orden (se descartan los viejos por
@@ -480,6 +481,11 @@ GET  /correo/oauth/callback            -> regreso de Microsoft, redirige al port
 POST /ingesta/{tipo}                   <- recibir datos (ver INGESTA.md)
 GET  /recibido/{emisor}/{recurso}      -> lo recibido, ya traducido
 GET  /ingesta/estado                   -> emisores, rutas y frescura
+GET  /ingesta/cambios                  -> etapas movidas a mano en el tablero (token de emisor crm)
+POST /ingesta/cambios/confirmar        <- { ids } que el emisor ya aplicó (token de emisor crm)
+POST /crm/oportunidades/{id}/etapa     <- { etapa }: mover una cotización   (sesión o PUENTE_ADMIN_TOKEN)
+GET  /ops/cotizaciones/opportunities   -> cotizaciones de los emisores crm, con su seguimiento
+GET  /crm/seguimiento/ajustes          -> días sin movimiento por etapa antes del pendiente
 ```
 
 Lo de `/odoo/itech/tasks` merece una nota: el portal le pide a la conexión de

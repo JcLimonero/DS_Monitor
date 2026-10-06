@@ -31,6 +31,7 @@ type _Meeting = Igual<Portal.Meeting, Puente.Meeting>;
 type _MonitorTarget = Igual<Portal.MonitorTarget, Puente.MonitorTarget>;
 type _MonitorCheck = Igual<Portal.MonitorCheck, Puente.MonitorCheck>;
 type _CrmOpportunity = Igual<Portal.CrmOpportunity, Puente.CrmOpportunity>;
+type _CrmStageManual = Igual<Portal.CrmStageManual, Puente.CrmStageManual>;
 type _CrmActivity = Igual<Portal.CrmActivity, Puente.CrmActivity>;
 type _LicenseUsage = Igual<Portal.LicenseUsage, Puente.LicenseUsage>;
 type _LicenseMember = Igual<Portal.LicenseMember, Puente.LicenseMember>;
@@ -67,6 +68,7 @@ const comprobado: [
   _MonitorTarget,
   _MonitorCheck,
   _CrmOpportunity,
+  _CrmStageManual,
   _CrmActivity,
   _LicenseUsage,
   _LicenseMember,
@@ -79,6 +81,7 @@ const comprobado: [
   _RepoPullRequest,
   _RepoCommit
 ] = [
+  true,
   true,
   true,
   true,

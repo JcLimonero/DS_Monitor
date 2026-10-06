@@ -286,6 +286,17 @@ export type CrmStage =
   'nuevo' | 'calificado' | 'propuesta' | 'negociacion' | 'ganado' | 'perdido';
 export type CrmActivityType = 'llamada' | 'correo' | 'reunion' | 'tarea';
 
+/**
+ * Movimiento de etapa hecho a mano desde el tablero que el emisor todavia no
+ * confirma: mientras tanto `stage` es la etapa manual.
+ */
+export interface CrmStageManual {
+  by: string;
+  at: string;
+  /** La etapa que el emisor sigue mandando. */
+  reported: CrmStage;
+}
+
 export interface CrmOpportunity {
   id: string;
   name: string;
@@ -299,6 +310,13 @@ export interface CrmOpportunity {
   accountId: string;
   url?: string;
   updatedAt: string;
+  /** Viene de un emisor (/ingesta/crm): su etapa se puede mover desde el tablero. */
+  ingested?: boolean;
+  /** Ultimo cambio de etapa que el puente vio (del emisor o a mano). */
+  stageChangedAt?: string;
+  /** Ultimo movimiento: el cambio de etapa o la ultima actividad nueva ligada. */
+  lastMovementAt?: string;
+  stageManual?: CrmStageManual;
 }
 
 export interface CrmActivity {

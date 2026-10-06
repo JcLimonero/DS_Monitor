@@ -1,5 +1,13 @@
 import type { ClienteIngesta, Configuracion } from '../config/entorno.js';
-import type { MonitorTarget } from '../nucleo/contrato.js';
+import {
+  aplicarSeguimiento,
+  cambiosPendientes,
+  confirmar,
+  registrarEnvio,
+  type PedidoConfirmar,
+  type SeguimientoCrm
+} from '../datos/crm-seguimiento.js';
+import type { CrmOpportunity, MonitorTarget } from '../nucleo/contrato.js';
 import { ErrorPuente } from '../nucleo/errores.js';
 import type { Contexto, Router } from '../servidor/router.js';
 import { AlmacenIngesta, origenValido } from './almacen.js';
@@ -196,6 +204,14 @@ export function registrarRutasIngesta(
   ejecuciones?: {
     leer: () => Ejecuciones;
     escribir: (e: Ejecuciones) => Promise<unknown>;
+  },
+  /**
+   * El seguimiento de las cotizaciones (cuando cambio cada etapa, lo movido a
+   * mano). Sin esto el CRM se recibe y se sirve igual que antes.
+   */
+  crm?: {
+    leer: () => SeguimientoCrm;
+    escribir: (s: SeguimientoCrm) => Promise<unknown>;
   }
 ): void {
   const clientes = (): ClienteIngesta[] => [
@@ -261,6 +277,18 @@ export function registrarRutasIngesta(
           generadoEn,
           actividades
         );
+        if (crm && (unaCosa.guardado || otraCosa.guardado)) {
+          await crm.escribir(
+            registrarEnvio(crm.leer(), {
+              emisor: cliente.nombre,
+              generadoEn,
+              modo,
+              ahora,
+              oportunidades: unaCosa.guardado ? oportunidades : undefined,
+              actividades: otraCosa.guardado ? actividades : undefined
+            })
+          );
+        }
         return {
           recibido: unaCosa.guardado || otraCosa.guardado,
           motivo: unaCosa.motivo ?? otraCosa.motivo,
@@ -330,6 +358,23 @@ export function registrarRutasIngesta(
   }
 
   // --- Devolver lo recibido ---
+
+  /** Lo recibido; las oportunidades, con lo que el puente sabe de ellas. */
+  const servir = (
+    cliente: ClienteIngesta,
+    tipo: TipoIngesta,
+    recurso: string,
+    origen: string
+  ): unknown[] => {
+    const elementos = servirRecibido(almacen, cliente, tipo, origen);
+    return crm && tipo === 'crm' && recurso === 'opportunities'
+      ? aplicarSeguimiento(
+          elementos as CrmOpportunity[],
+          cliente.nombre,
+          crm.leer()
+        )
+      : elementos;
+  };
   //
   // Se registra una ruta por cada combinacion de origen y recurso que los
   // clientes del entorno pueden alimentar. Registrarlas explicitamente hace
@@ -351,7 +396,7 @@ export function registrarRutasIngesta(
             tipo === 'crm'
               ? `${cliente.nombre}__${recurso === 'opportunities' ? 'oportunidades' : 'actividades'}`
               : cliente.nombre;
-          return servirRecibido(almacen, cliente, tipo, origen);
+          return servir(cliente, tipo, recurso, origen);
         });
       }
     }
@@ -374,8 +419,52 @@ export function registrarRutasIngesta(
       tipo === 'crm'
         ? `${nombre}__${recurso === 'opportunities' ? 'oportunidades' : 'actividades'}`
         : nombre;
-    return servirRecibido(almacen, cliente, tipo, origen);
+    return servir(cliente, tipo, recurso, origen);
   });
+
+  // --- Cambios hechos a mano en el tablero ---
+  //
+  // Un movimiento de etapa en el tablero no toca al emisor: este lo recoge
+  // aqui, lo aplica en su sistema y lo confirma. El emisor sale del token, asi
+  // que solo ve y confirma lo suyo.
+
+  if (crm) {
+    router.get('/ingesta/cambios', async (contexto) => {
+      const cliente = autenticar(contexto, clientes(), 'crm');
+      return { cambios: cambiosPendientes(crm.leer(), cliente.nombre) };
+    });
+
+    router.post('/ingesta/cambios/confirmar', async (contexto) => {
+      const cliente = autenticar(contexto, clientes(), 'crm');
+      const ids = (contexto.cuerpo as { ids?: unknown } | undefined)?.ids;
+      if (
+        !Array.isArray(ids) ||
+        ids.length > 1000 ||
+        !ids.every(
+          (i) =>
+            typeof i === 'string' ||
+            (typeof i === 'object' &&
+              i !== null &&
+              typeof (i as { id?: unknown }).id === 'string')
+        )
+      ) {
+        throw new ErrorPuente(
+          '"ids" debe ser una lista de identificadores (o de {id, en}).',
+          400
+        );
+      }
+      const { seguimiento, confirmados } = confirmar(
+        crm.leer(),
+        cliente.nombre,
+        ids as PedidoConfirmar[]
+      );
+      if (confirmados > 0) {
+        await crm.escribir(seguimiento);
+      }
+      // Los ids ajenos o inexistentes se ignoran sin distinguirlos.
+      return { confirmados };
+    });
+  }
 
   // --- Diagnostico ---
 
