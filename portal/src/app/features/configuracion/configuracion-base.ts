@@ -359,7 +359,13 @@ export class ConfiguracionBase {
         correo,
         mensaje: params.get('mensaje') ?? ''
       });
-      void this.router.navigate([], { queryParams: {}, replaceUrl: true });
+      // Se quitan solo los parametros del resultado; `tab` se conserva para no
+      // sacar al usuario de la pestana de Correo.
+      void this.router.navigate([], {
+        queryParams: { correo: null, oauth: null, mensaje: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true
+      });
     }
     if (this.admin.disponible) {
       this.loadConnections();
@@ -492,7 +498,9 @@ export class ConfiguracionBase {
       return;
     }
     this.ocupado.set(id);
-    const volver = `${location.origin}/correo`;
+    // Directo a la pestana de Correo: la ruta vieja `/correo` redirige y la
+    // redireccion pierde los parametros del resultado (oauth, correo, mensaje).
+    const volver = `${location.origin}/integraciones?tab=correo`;
     this.admin.iniciarOauth(id, volver).subscribe({
       next: ({ url }) => {
         location.assign(url);
