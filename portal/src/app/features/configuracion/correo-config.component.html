@@ -216,16 +216,72 @@
                     (ngModelChange)="updateCred({ tenant: $event })" />
                 </label>
                 <p class="text-xs text-ink-muted sm:col-span-2">
-                  La aplicación de Entra ID es una sola para todos los buzones
-                  de Microsoft y se configura en Integraciones → Microsoft
-                  (client ID, secret y tenant). Aquí solo va el correo del
-                  buzón; el tenant se puede cambiar si esta cuenta pertenece a
-                  otro directorio. La URI de redirección registrada debe ser
+                  Por omisión el buzón usa la aplicación general de Entra ID
+                  (Integraciones → Microsoft: client ID, secret y tenant),
+                  compartida por todos los buzones de Microsoft. El tenant se
+                  puede cambiar si esta cuenta pertenece a otro directorio. La
+                  URI de redirección registrada debe ser
                   <code class="font-mono">{{
                     estadoDe(row.connection.accountId)?.redirectUri
                   }}</code
                   >. Después, "Conectar con Microsoft" abre el consentimiento.
                 </p>
+                <fieldset
+                  class="grid gap-3 rounded-lg border border-line p-3 sm:col-span-2 sm:grid-cols-2">
+                  <legend class="px-1 text-xs font-medium text-ink">
+                    Usar una aplicación propia para este buzón (opcional)
+                  </legend>
+                  <p class="text-xs text-ink-muted sm:col-span-2">
+                    Solo si el directorio de este buzón no deja usar la
+                    aplicación general. Los demás buzones no cambian. El tenant
+                    de arriba es el de esta aplicación (si se deja
+                    <code class="font-mono">common</code>, la aplicación debe
+                    admitir cuentas de cualquier directorio). Al poner, cambiar
+                    o quitar la aplicación hay que volver a usar "Conectar con
+                    Microsoft".
+                    @if (
+                      estadoDe(row.connection.accountId)?.appPropiaDefinida
+                    ) {
+                      <strong class="font-semibold text-ink"
+                        >Este buzón ya usa su aplicación propia.</strong
+                      >
+                    }
+                  </p>
+                  <label>
+                    <span class="mb-1 block text-xs font-medium text-ink-muted"
+                      >Client ID</span
+                    >
+                    <input
+                      class="field min-h-[44px] font-mono"
+                      type="text"
+                      name="appPropiaClientId"
+                      autocomplete="off"
+                      placeholder="00000000-0000-0000-0000-000000000000"
+                      [ngModel]="credDraft().clientId"
+                      (ngModelChange)="updateCred({ clientId: $event })" />
+                  </label>
+                  <label>
+                    <span class="mb-1 block text-xs font-medium text-ink-muted"
+                      >Client secret</span
+                    >
+                    <input
+                      class="field min-h-[44px]"
+                      type="password"
+                      name="appPropiaClientSecret"
+                      autocomplete="new-password"
+                      [placeholder]="
+                        estadoDe(row.connection.accountId)?.appPropiaDefinida
+                          ? '(sin cambio si va vacío; un espacio la quita)'
+                          : ''
+                      "
+                      [ngModel]="credDraft().clientSecret"
+                      (ngModelChange)="updateCred({ clientSecret: $event })" />
+                    <span class="mt-1 block text-xs text-ink-subtle"
+                      >El valor del secreto, no su ID. Se guarda en el puente y
+                      no se vuelve a mostrar.</span
+                    >
+                  </label>
+                </fieldset>
               } @else {
                 <label>
                   <span class="mb-1 block text-xs font-medium text-ink-muted"

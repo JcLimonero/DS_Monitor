@@ -150,14 +150,23 @@ export interface EstadoBuzon {
   conContrasena: boolean;
   conAplicacion: boolean;
   tenant?: string;
+  /** El client ID con el que se conecta el buzón (el propio o el general). */
   clientId?: string;
+  /** El buzón tiene su propia aplicación de Entra ID (no la general). */
+  appPropiaDefinida?: boolean;
+  /** Client ID de la aplicación propia; el secreto nunca viaja de vuelta. */
+  appPropiaClientId?: string;
   conectadaComo?: string;
   faltante?: string;
   /** La URI de regreso que hay que registrar en la aplicación de Entra ID. */
   redirectUri: string;
 }
 
-/** Lo que se manda al puente al guardar un buzón. Lo vacío no pisa nada. */
+/**
+ * Lo que se manda al puente al guardar un buzón. Lo vacío no pisa nada. En el
+ * secreto de la aplicación propia, un espacio la quita (el buzón vuelve a usar
+ * la general).
+ */
 export interface CredencialesBuzon {
   proveedor?: SourceKind;
   usuario?: string;

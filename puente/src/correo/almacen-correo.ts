@@ -1,4 +1,5 @@
 import type { Persistencia } from '../datos/persistencia.js';
+import { appPropiaDe, appPropiaDistinta } from './app-propia.js';
 import type {
   ConfiguracionCorreo,
   ConfiguracionGoogle,
@@ -66,23 +67,45 @@ export class AlmacenCorreo {
     return [...this.guardadas.keys()];
   }
 
-  /** Mezcla lo nuevo con lo que habia y lo escribe. */
+  /**
+   * Mezcla lo nuevo con lo que habia y lo escribe.
+   *
+   * `quitarAppMicrosoft` borra la aplicacion propia del buzon (client ID y
+   * secret) para que vuelva a usar la general. Cuando la aplicacion propia
+   * cambia de ID (se pone, se cambia o se quita), el refresh token guardado
+   * se descarta: lo emitio otra aplicacion y con esta ya no sirve, hay que
+   * volver a conectar el buzon.
+   */
   async guardar(
     id: string,
-    cambios: Omit<CredencialesGuardadas, 'actualizadoEn'>
+    cambios: Omit<CredencialesGuardadas, 'actualizadoEn'>,
+    opciones: { quitarAppMicrosoft?: boolean } = {}
   ): Promise<CredencialesGuardadas> {
     if (!/^[a-z0-9][a-z0-9_-]{0,48}$/i.test(id)) {
       throw new Error(`Identificador de buzón inválido: "${id}"`);
     }
     const anterior = this.guardadas.get(id);
+    let microsoft: Partial<ConfiguracionMicrosoft> | undefined =
+      cambios.microsoft || anterior?.microsoft
+        ? { ...anterior?.microsoft, ...sinVacios(cambios.microsoft ?? {}) }
+        : undefined;
+    if (microsoft && opciones.quitarAppMicrosoft) {
+      const { clientId: _i, clientSecret: _s, ...resto } = microsoft;
+      microsoft = resto;
+    }
+    if (
+      microsoft &&
+      appPropiaDe(anterior?.microsoft)?.clientId.toLowerCase() !==
+        appPropiaDe(microsoft)?.clientId.toLowerCase()
+    ) {
+      const { refreshToken: _r, conectadaComo: _c, ...resto } = microsoft;
+      microsoft = resto;
+    }
     const nuevo: CredencialesGuardadas = {
       ...anterior,
       ...sinVacios(cambios),
       borrado: false,
-      microsoft:
-        cambios.microsoft || anterior?.microsoft
-          ? { ...anterior?.microsoft, ...sinVacios(cambios.microsoft ?? {}) }
-          : undefined,
+      microsoft,
       google:
         cambios.google || anterior?.google
           ? { ...anterior?.google, ...sinVacios(cambios.google ?? {}) }
@@ -145,21 +168,39 @@ export class AlmacenCorreo {
   }
 }
 
+/**
+ * La aplicacion de un buzon de Microsoft: la propia guardada (client ID y
+ * secret, siempre juntos) o, si no tiene, la de `base` (la del entorno o la
+ * general). El tenant guardado manda sobre el de la base; con aplicacion
+ * propia y sin tenant guardado se usa `common`, porque el tenant de la general
+ * no tiene por que ser el de otra aplicacion.
+ */
 function mezclarMicrosoft(
   base: Partial<ConfiguracionMicrosoft> | undefined,
   guardado: Partial<ConfiguracionMicrosoft> | undefined
 ): ConfiguracionMicrosoft | undefined {
-  const clientId = guardado?.clientId ?? base?.clientId;
-  const clientSecret = guardado?.clientSecret ?? base?.clientSecret;
+  // El ID y el secreto guardados mandan (aunque repitan los de la base);
+  // `propia` solo es la que de verdad es otra aplicacion.
+  const guardada = appPropiaDe(guardado);
+  const propia = appPropiaDistinta(guardado, base);
+  const clientId = guardada?.clientId ?? base?.clientId;
+  const clientSecret = guardada?.clientSecret ?? base?.clientSecret;
   if (!clientId || !clientSecret) {
     return undefined;
   }
   return {
-    tenant: guardado?.tenant ?? base?.tenant ?? 'common',
+    tenant:
+      guardado?.tenant ?? (propia ? 'common' : (base?.tenant ?? 'common')),
     clientId,
     clientSecret,
-    refreshToken: guardado?.refreshToken ?? base?.refreshToken,
-    conectadaComo: guardado?.conectadaComo ?? base?.conectadaComo
+    // El refresh token es de la aplicacion que lo emitio: con una propia solo
+    // vale el que se guardo al conectar con ella, nunca el de la base.
+    refreshToken: propia
+      ? guardado?.refreshToken
+      : (guardado?.refreshToken ?? base?.refreshToken),
+    conectadaComo: propia
+      ? guardado?.conectadaComo
+      : (guardado?.conectadaComo ?? base?.conectadaComo)
   };
 }
 
