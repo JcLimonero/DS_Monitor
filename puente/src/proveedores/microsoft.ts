@@ -27,6 +27,7 @@ import {
 } from './aria.js';
 import type { EncabezadoCorreo } from './imap.js';
 import { sinEtiquetas } from './mime.js';
+import { ocultarSecretos } from '../correo/app-propia.js';
 
 /**
  * Buzones de Microsoft por Microsoft Graph.
@@ -102,9 +103,14 @@ async function pedirToken(
   });
   const datos = (await respuesta.json().catch(() => ({}))) as RespuestaToken;
   if (!respuesta.ok || !datos.access_token) {
+    // Lo que contesta Entra puede repetir lo que se le mando: nunca sale un
+    // secreto de aqui, ni el de la aplicacion ni los tokens ni el codigo.
     throw new ErrorProveedor(
       'microsoft',
-      `${datos.error ?? respuesta.status}: ${recortar(datos.error_description ?? 'no entrego token')}`
+      ocultarSecretos(
+        `${datos.error ?? respuesta.status}: ${recortar(datos.error_description ?? 'no entrego token')}`,
+        [microsoft.clientSecret, cuerpo['refresh_token'], cuerpo['code']]
+      )
     );
   }
   return datos;
@@ -162,13 +168,19 @@ export async function comprobarAplicacionMicrosoft(
   ) {
     throw new ErrorProveedor(
       'microsoft',
-      `${datos.error ?? respuesta.status}: ${recortar(descripcion)}`
+      ocultarSecretos(
+        `${datos.error ?? respuesta.status}: ${recortar(descripcion)}`,
+        [app.clientSecret]
+      )
     );
   }
   // Lo demas (politicas de acceso condicional, tenant "common" sin token de
   // aplicacion) no dice nada del secreto: la cuenta se prueba de verdad al
   // conectarla con el consentimiento del usuario.
-  return `Entra reconoce la aplicación y el secreto (el token de aplicación lo bloquea una política: ${recortar(descripcion.split(' Trace ID')[0] ?? '')}). Conecta cada buzón con "Conectar con Microsoft".`;
+  return ocultarSecretos(
+    `Entra reconoce la aplicación y el secreto (el token de aplicación lo bloquea una política: ${recortar(descripcion.split(' Trace ID')[0] ?? '')}). Conecta cada buzón con "Conectar con Microsoft".`,
+    [app.clientSecret]
+  );
 }
 
 /** Tokens de acceso vigentes, uno por buzon, para no pedir uno por peticion. */

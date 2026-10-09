@@ -39,6 +39,7 @@ import {
   ResultadoPrueba
 } from '../../core/sources/gateway/puente-admin.service';
 import { PortalStore } from '../../core/state/portal.store';
+import { credencialesParaGuardar } from '../../core/util/credenciales-buzon.util';
 import { plural } from '../../core/util/text.util';
 
 const KIND_LABEL: Record<SourceKind, string> = {
@@ -406,7 +407,10 @@ export class ConfiguracionBase {
       puerto: estado?.puerto ?? 993,
       contrasena: '',
       tenant: estado?.tenant ?? 'common',
-      clientId: estado?.clientId ?? '',
+      // Solo el client ID de la aplicación PROPIA del buzón; el de la general
+      // no se copia aquí (se vería como si fuera del buzón). El secreto nunca
+      // regresa del puente: arranca vacío.
+      clientId: estado?.appPropiaClientId ?? '',
       clientSecret: ''
     });
     this.conexionEditando.set(row.connection.accountId);
@@ -414,6 +418,7 @@ export class ConfiguracionBase {
 
   cancelConnectionEdit(): void {
     this.conexionEditando.set(undefined);
+    this.credDraft.set({});
   }
 
   updateCred(patch: Partial<CredencialesBuzon>): void {
@@ -422,19 +427,12 @@ export class ConfiguracionBase {
 
   saveConnection(row: ConnectionRow): void {
     const id = row.connection.accountId;
-    // La aplicación de Entra ID se configura una vez en Integraciones; por
-    // buzón solo viajan el correo y, si acaso, el tenant.
-    const {
-      clientId: _clientId,
-      clientSecret: _clientSecret,
-      ...draft
-    } = this.credDraft();
+    // La aplicación general de Entra ID se configura una vez en Integraciones;
+    // por buzón viajan el correo, el tenant y, si se escribió, la aplicación
+    // propia (client ID y secret).
     this.ocupado.set(id);
     this.admin
-      .guardar(id, {
-        ...draft,
-        puerto: Number(draft.puerto) || undefined
-      })
+      .guardar(id, credencialesParaGuardar(this.credDraft()))
       .subscribe({
         next: (estado) => {
           this.conexiones.update((c) => ({ ...c, [id]: { estado } }));
@@ -443,6 +441,8 @@ export class ConfiguracionBase {
             [id]: { ok: true, mensaje: 'Guardado.' }
           }));
           this.conexionEditando.set(undefined);
+          // El secreto escrito no se queda en memoria del portal.
+          this.credDraft.set({});
           this.ocupado.set(undefined);
         },
         error: (error: unknown) => {

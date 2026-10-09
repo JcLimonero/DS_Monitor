@@ -164,6 +164,37 @@ Microsoft incluidas (para Outlook.com), permisos delegados `Mail.Read`,
 `Calendars.Read`, `User.Read` y `offline_access`, un client secret, y la URI de
 redirección `<PUENTE_URL_PUBLICA>/correo/oauth/callback`.
 
+**Aplicación propia por buzón (Microsoft).** Por omisión todos los buzones de
+Microsoft usan la aplicación general (Integraciones → Microsoft, o
+`MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT`). Un
+buzón puede traer la suya cuando su directorio no deja consentir la general:
+`POST /correo/{id}/guardar` acepta `clientId`, `clientSecret` y `tenant`, y
+se guardan en el documento de ese buzón (`microsoft.{clientId, clientSecret,
+tenant}`); los demás buzones no cambian. Reglas:
+
+- Cuenta como propia solo si están el client ID **y** el secreto; un ID solo
+  nunca se mezcla con el secreto de la general. Sin tenant guardado, una app
+  propia usa `common` (no el tenant de la general).
+- Validación (400, sin repetir el valor): `clientId` GUID; `tenant` GUID,
+  dominio de directorio, o `common`/`organizations`/`consumers`; secreto de 8 a
+  256 caracteres ASCII sin espacios. Cambiar el client ID exige mandar su
+  secreto. Misma semántica que los secretos de Integraciones: vacío = sin
+  cambio, un espacio (en el secreto o el ID) = quitar la aplicación propia.
+- Poner, cambiar o quitar la aplicación (cambia el client ID) descarta el
+  refresh token del buzón: lo emitió otra aplicación, hay que volver a pasar
+  por "Conectar con Microsoft". Rotar solo el secreto (mismo ID) lo conserva.
+- Autorización, canje del código, refresco de token y la prueba usan la
+  aplicación **del buzón**. El `state` de OAuth guarda también el client ID con
+  el que se pidió el consentimiento: si la aplicación del buzón cambia antes del
+  regreso, el código se rechaza sin canjearse. La URI de redirección es la misma.
+- `GET /correo/{id}/estado` dice `appPropiaDefinida` y `appPropiaClientId`, nunca
+  el secreto. Los errores de Entra se pasan por `ocultarSecretos` antes de
+  salir (mensajes, redirección al portal). Ojo: `GET /respaldo` (solo admin)
+  incluye el documento completo del buzón, con sus secretos, como el resto de
+  las credenciales.
+- Los datos guardados antes siguen igual: un buzón sin ID/secreto propios usa la
+  general, y uno que ya tuviera ID **y** secreto guardados cuenta como propio.
+
 **El barrido de Mail.app** (`npm run barrido`) corre en la Mac donde ya están
 abiertos todos los buzones, les pide a Mail los encabezados por AppleScript,
 corre las mismas reglas que el puente usa con IMAP, y manda licencias y
@@ -440,8 +471,8 @@ GET /correo/{id}/meetings?from=&to=    -> Meeting[]       (invitaciones .ics o c
 GET  /integraciones                    -> variables de cada integración, sin secretos
 POST /integraciones/{id}/guardar       <- variables                  (PUENTE_ADMIN_TOKEN)
 POST /integraciones/{id}/probar        -> { ok, mensaje }            (PUENTE_ADMIN_TOKEN)
-GET  /correo/{id}/estado               -> qué tiene y qué le falta al buzón
-POST /correo/{id}/guardar              <- credenciales del buzón   (PUENTE_ADMIN_TOKEN)
+GET  /correo/{id}/estado               -> qué tiene y qué le falta al buzón (sin secretos)
+POST /correo/{id}/guardar              <- credenciales del buzón, y app propia de Microsoft (PUENTE_ADMIN_TOKEN)
 POST /correo/{id}/probar               -> { ok, mensaje }          (PUENTE_ADMIN_TOKEN)
 POST /correo/{id}/oauth/inicio         -> { url } de Microsoft     (PUENTE_ADMIN_TOKEN)
 GET  /correo/oauth/callback            -> regreso de Microsoft, redirige al portal

@@ -8,6 +8,11 @@ import {
 import { join } from 'node:path';
 import { Acceso, type Sesion } from '../acceso/acceso.js';
 import { AlmacenCorreo } from '../correo/almacen-correo.js';
+import {
+  appPropiaDe,
+  ocultarSecretos,
+  validarAppPropia
+} from '../correo/app-propia.js';
 import { AlmacenJson } from '../datos/almacen-json.js';
 import {
   AJUSTES_VACIOS,
@@ -2948,6 +2953,15 @@ export function construirRutas(
         : cuenta.microsoft !== undefined,
     tenant: cuenta.microsoft?.tenant,
     clientId: cuenta.microsoft?.clientId ?? cuenta.google?.clientId,
+    // La aplicacion propia del buzon: solo se dice SI la hay y con que client
+    // ID (que no es secreto); el secreto no sale por ninguna ruta.
+    appPropiaDefinida:
+      cuenta.proveedor === 'microsoft' &&
+      appPropiaDe(almacenCorreo.obtener(cuenta.id)?.microsoft) !== undefined,
+    appPropiaClientId:
+      cuenta.proveedor === 'microsoft'
+        ? appPropiaDe(almacenCorreo.obtener(cuenta.id)?.microsoft)?.clientId
+        : undefined,
     conectadaComo:
       cuenta.microsoft?.conectadaComo ?? cuenta.google?.conectadaComo,
     faltante:
@@ -2975,22 +2989,36 @@ export function construirRutas(
     exigirAdmin(contexto, cfg(), acceso);
     const id = contexto.segmentos[1] as string;
     const cuerpo = (contexto.cuerpo ?? {}) as CuerpoGuardar;
-    await almacenCorreo.guardar(id, {
-      proveedor: cuerpo.proveedor,
-      usuario: texto(cuerpo.usuario),
-      host: texto(cuerpo.host),
-      puerto: cuerpo.puerto ? Number(cuerpo.puerto) || undefined : undefined,
-      contrasena: texto(cuerpo.contrasena),
-      buzones: Array.isArray(cuerpo.buzones) ? cuerpo.buzones : undefined,
-      microsoft:
-        cuerpo.tenant || cuerpo.clientId || cuerpo.clientSecret
-          ? {
-              tenant: texto(cuerpo.tenant),
-              clientId: texto(cuerpo.clientId),
-              clientSecret: texto(cuerpo.clientSecret)
-            }
-          : undefined
-    });
+    const guardado = almacenCorreo.obtener(id);
+    // Se valida todo antes de escribir nada. Los mensajes no repiten lo recibido.
+    const app = validarAppPropia(cuerpo, appPropiaDe(guardado?.microsoft));
+    if (!app.ok) {
+      throw new ErrorPuente(app.error, 400);
+    }
+    const proveedor =
+      cuerpo.proveedor ??
+      guardado?.proveedor ??
+      cfg().correos.find((c) => c.id === id)?.proveedor;
+    if ((app.app || app.quitar) && proveedor !== 'microsoft') {
+      throw new ErrorPuente(
+        'La aplicación propia solo aplica a buzones de Microsoft.',
+        400
+      );
+    }
+    await almacenCorreo.guardar(
+      id,
+      {
+        proveedor: cuerpo.proveedor,
+        usuario: texto(cuerpo.usuario),
+        host: texto(cuerpo.host),
+        puerto: cuerpo.puerto ? Number(cuerpo.puerto) || undefined : undefined,
+        contrasena: texto(cuerpo.contrasena),
+        buzones: Array.isArray(cuerpo.buzones) ? cuerpo.buzones : undefined,
+        microsoft:
+          app.tenant || app.app ? { tenant: app.tenant, ...app.app } : undefined
+      },
+      { quitarAppMicrosoft: app.quitar }
+    );
     cache.olvidar(`correo:${id}`);
     olvidarAcceso(id);
     return estadoDeBuzon(buzon(id));
@@ -3064,9 +3092,19 @@ export function construirRutas(
   // El consentimiento de Microsoft: se manda a la persona a login.microsoftonline.com
   // con un `state` que solo vive aqui diez minutos, y al regresar se cambia el
   // codigo por el refresh token y se guarda.
+  //
+  // El `state` guarda tambien con que aplicacion (client ID) se pidio el
+  // consentimiento: si la aplicacion del buzon cambia antes del regreso, el
+  // codigo ya no corresponde y se rechaza en lugar de canjearlo con otra.
   const estadosOauth = new Map<
     string,
-    { id: string; volver: string; vence: number }
+    {
+      id: string;
+      volver: string;
+      vence: number;
+      proveedor: ConfiguracionCorreo['proveedor'];
+      clientId: string;
+    }
   >();
 
   router.post('/correo/:id/oauth/inicio', async (contexto) => {
@@ -3091,7 +3129,9 @@ export function construirRutas(
     estadosOauth.set(state, {
       id: cuenta.id,
       volver: volver || '/',
-      vence: Date.now() + 10 * 60_000
+      vence: Date.now() + 10 * 60_000,
+      proveedor: cuenta.proveedor,
+      clientId: (app.clientId ?? '').toLowerCase()
     });
     const redirectUri = `${cfg().urlPublica}/correo/oauth/callback`;
     return {
@@ -3140,6 +3180,17 @@ export function construirRutas(
     }
     const cuenta = buzon(pendiente.id);
     const redirectUri = `${cfg().urlPublica}/correo/oauth/callback`;
+    const appActual =
+      cuenta.proveedor === 'google' ? cuenta.google : cuenta.microsoft;
+    if (
+      cuenta.proveedor !== pendiente.proveedor ||
+      (appActual?.clientId ?? '').toLowerCase() !== pendiente.clientId
+    ) {
+      return regresar(
+        'error',
+        'La aplicación del buzón cambió mientras se daba el consentimiento. Vuelve a conectar desde Ajustes.'
+      );
+    }
     try {
       if (cuenta.proveedor === 'google') {
         if (!cuenta.google) {
@@ -3184,9 +3235,17 @@ export function construirRutas(
       olvidarAcceso(cuenta.id);
       return regresar('ok', `Conectada como ${quien}`);
     } catch (error) {
+      // Este mensaje viaja en la URL de regreso al portal: sin secretos.
       return regresar(
         'error',
-        error instanceof Error ? error.message : String(error)
+        ocultarSecretos(
+          error instanceof Error ? error.message : String(error),
+          [
+            cuenta.microsoft?.clientSecret,
+            cuenta.google?.clientSecret,
+            parametros.get('code') ?? undefined
+          ]
+        )
       );
     }
   });
