@@ -369,6 +369,13 @@ export class PortalStore {
     });
   }
 
+  /** Cambia una oportunidad en memoria con lo que contestó el puente. */
+  actualizarOportunidad(opportunity: CrmOpportunity): void {
+    this.opportunitiesSignal.update((items) =>
+      items.map((item) => (item.id === opportunity.id ? opportunity : item))
+    );
+  }
+
   refreshLicenses(): void {
     // Lo que se confirmó o se agregó desde otro dispositivo.
     this.licenciasService.cargar();

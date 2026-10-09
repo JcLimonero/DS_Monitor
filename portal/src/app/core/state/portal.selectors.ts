@@ -168,6 +168,22 @@ export function pipelineByStage(
   });
 }
 
+/**
+ * Días enteros que lleva quieta una oportunidad que llega por ingesta (el
+ * puente cuenta el último cambio de etapa o la última actividad nueva).
+ * `undefined` si el puente no lo sabe: las de Odoo no traen el dato.
+ */
+export function daysWithoutMovement(
+  opportunity: CrmOpportunity,
+  now = new Date()
+): number | undefined {
+  const since = Date.parse(opportunity.lastMovementAt ?? '');
+  if (Number.isNaN(since)) {
+    return undefined;
+  }
+  return Math.max(0, Math.floor((now.getTime() - since) / 86_400_000));
+}
+
 /** Importe ponderado por probabilidad de las oportunidades aún abiertas. */
 export function weightedPipeline(
   opportunities: readonly CrmOpportunity[]

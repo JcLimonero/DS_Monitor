@@ -73,6 +73,45 @@
                     Cierre {{ close | dia }}
                   </p>
                 }
+                @if (opportunity.ingested) {
+                  <div class="mt-2 space-y-1.5 border-t border-line pt-2">
+                    @if (opportunity.stageManual) {
+                      <p
+                        class="rounded-lg bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900 dark:bg-amber-500/10 dark:text-amber-200"
+                        [attr.title]="manualTitle(opportunity)">
+                        Movida aquí, falta confirmación del emisor
+                      </p>
+                    }
+                    @if (quietLabel(opportunity); as quiet) {
+                      <p class="text-xs text-ink-muted">{{ quiet }}</p>
+                    }
+                    <label class="block">
+                      <span class="sr-only"
+                        >Etapa de {{ opportunity.name }}</span
+                      >
+                      <select
+                        class="field !h-11"
+                        [value]="opportunity.stage"
+                        [disabled]="moving() !== undefined"
+                        (change)="move(opportunity, $event)">
+                        @for (option of stageOrder; track option) {
+                          <option
+                            [value]="option"
+                            [selected]="option === opportunity.stage">
+                            {{ stageLabel[option] }}
+                          </option>
+                        }
+                      </select>
+                    </label>
+                    @if (moveError(); as failed) {
+                      @if (failed.id === opportunity.id) {
+                        <p class="text-xs text-danger" role="alert">
+                          {{ failed.message }}
+                        </p>
+                      }
+                    }
+                  </div>
+                }
               </li>
             } @empty {
               <li class="px-1 py-3 text-center text-xs text-ink-subtle">
@@ -171,7 +210,10 @@
                 </p>
                 <p class="text-xs text-ink-muted">
                   {{ opportunity.partner }} ·
-                  {{ opportunity.updatedAt | relativo }}
+                  {{
+                    opportunity.lastMovementAt ?? opportunity.updatedAt
+                      | relativo
+                  }}
                 </p>
               </li>
             }

@@ -222,6 +222,121 @@ Aquí `datos` es un objeto, no una lista.
 clasifica por palabras. Una etapa que no reconoce cae en `nuevo`, que es la
 lectura conservadora del embudo.
 
+### Cotizaciones — `POST /ingesta/crm`
+
+Una app que genera cotizaciones las manda como oportunidades del CRM. Es el
+mismo envío de arriba, con una convención de estados, y el puente le agrega
+tres cosas: seguimiento del estatus, mover la etapa desde el tablero y un
+pendiente cuando una cotización abierta se queda quieta. El emisor necesita el
+tipo `crm`.
+
+**Estados.** El puente clasifica el texto de `etapa` por palabras. Con estos
+seis nombres cae donde debe:
+
+| `etapa` que manda la app | Etapa del tablero |
+| --- | --- |
+| `Generada` | Nuevo |
+| `Calificada` | Calificado |
+| `Cotización enviada` | Propuesta |
+| `En negociación` | Negociación |
+| `Ganada` | Ganado |
+| `Perdida` | Perdido |
+
+**Trampa con los nombres:** lo que no lleva "gana", "perdi", "negocia",
+"propuesta", "cotiza" ni "calific" cae en **Nuevo**, que es la lectura
+conservadora. `Aceptada`, `Rechazada`, `Cerrada` o `Cancelada` NO se entienden
+como cierre: la cotización se vería como nueva y el pendiente de vencimiento
+la seguiría vigilando. Usa `Ganada` y `Perdida`. Ojo también con nombres que
+mezclan palabras (`Cotización perdida` es Perdido; `Cotización enviada` es
+Propuesta, no Perdido por llevar "cotiza").
+
+```json
+{
+  "version": 1,
+  "modo": "reemplazar",
+  "generadoEn": "2026-10-06T15:00:00Z",
+  "datos": {
+    "oportunidades": [
+      {
+        "id": "COT-2031",
+        "nombre": "Licencias anuales",
+        "cliente": "Grupo Delta",
+        "etapa": "Cotización enviada",
+        "importe": 48000,
+        "vendedor": { "nombre": "Juan Carlos", "correo": "jc@example.com" },
+        "url": "https://cotizaciones.example.com/COT-2031"
+      }
+    ],
+    "actividades": [
+      {
+        "id": "ACT-77",
+        "resumen": "Dar seguimiento por WhatsApp",
+        "venceEn": "2026-10-08T17:00:00Z",
+        "oportunidadId": "COT-2031"
+      }
+    ]
+  }
+}
+```
+
+**Seguimiento.** El puente recuerda cuándo cambió la etapa (la primera vez es
+el `generadoEn` del envío; un `generadoEn` en el futuro se toma como ahora) y
+cuándo vio por primera vez cada actividad ligada por `oportunidadId`. "Sin
+movimiento" es el mayor de las dos fechas: un cambio de etapa o una actividad
+nueva cuentan; reenviar lo mismo no. Con `reemplazar`, lo que ya no mandas se
+olvida; con `agregar` se conserva.
+
+**Mover la etapa desde el tablero.** En CRM, cada cotización trae un selector
+de etapa. El cambio no toca tu sistema: el puente la sirve en la etapa nueva
+(con "Movida aquí, falta confirmación del emisor") **aunque tú sigas mandando
+otra**, hasta que la confirmes. Tu app lo recoge así, con su mismo token:
+
+```
+GET  {base}/ingesta/cambios
+-> { "cambios": [ { "id": "COT-2031", "etapa": "negociacion",
+                    "por": "ana@example.com", "en": "2026-10-06T16:20:00Z" } ] }
+
+POST {base}/ingesta/cambios/confirmar
+{ "ids": ["COT-2031"] }
+-> { "confirmados": 1 }
+```
+
+- `id` es el que tú mandaste (sin el prefijo del emisor). `etapa` es una de
+  `nuevo`, `calificado`, `propuesta`, `negociacion`, `ganado`, `perdido`: tradúcela
+  a tus estados con la tabla de arriba.
+- Solo ves y confirmas **lo tuyo**: el emisor sale del token. Un id que no es
+  tuyo o no existe se ignora sin avisar (`confirmados` solo cuenta los tuyos).
+- Para no confirmar un movimiento que no alcanzaste a leer, manda
+  `{ "ids": [{ "id": "COT-2031", "en": "2026-10-06T16:20:00Z" }] }`: si
+  alguien la movió otra vez después de tu lectura, ese nuevo cambio sigue
+  pendiente.
+- Una vez confirmado, vuelve a mandar tu etapa. Lo normal: aplicas el cambio en
+  tu sistema, lo confirmas, y tu siguiente envío ya trae la etapa nueva.
+
+**Pendiente por falta de movimiento.** Cada hora el puente revisa las
+cotizaciones abiertas. Si una lleva más tiempo quieta del que corresponde a su
+etapa (por omisión: Nuevo 1 día, Calificado 2, Propuesta 3, Negociación 5),
+crea **un** pendiente propio, `cotizacion-{id}`: «Revisar cotización {nombre}
+({cliente}): lleva N días en {etapa}», con la `url` de la cotización. El
+responsable es el vendedor si coincide exactamente (correo o nombre completo)
+con alguien del equipo; si no, el dueño. Al dueño no se le manda correo, y a
+nadie se le repite el mismo aviso en 24 h. Si la cotización se mueve (etapa o
+actividad nueva) o llega a Ganada/Perdida, el pendiente se marca hecho. Si lo
+marcas hecho o lo borras a mano, no se recrea hasta que haya un movimiento
+nuevo y vuelva a vencer (entonces se reabre el mismo). Un emisor que dejó de
+mandar (pasó su ventana de frescura) no genera pendientes, y un emisor recién
+conectado no inunda: máximo 20 pendientes nuevos por pasada.
+
+Los días se cambian con `POST /crm/seguimiento/ajustes/guardar`
+`{ "dias": { "propuesta": 7 } }` (entero de 0 a 365; `0` = no vigilar esa
+etapa; `null` = volver al valor de fábrica) con sesión o el token de
+administración, y se leen en `GET /crm/seguimiento/ajustes`. El portal todavía
+no tiene pantalla para editarlos.
+
+El portal las lee de `/ops/cotizaciones/opportunities` y `/activities` (todos
+los emisores `crm` juntos), la conexión "Cotizaciones", que se enciende sola en
+cuanto hay un emisor con tipo `crm`.
+
 ### Licencias — `POST /ingesta/licencias`
 
 ```json
@@ -420,7 +535,7 @@ GET {base}/recibido/{emisor}/{recurso}
 | `equipo` | `/recibido/{emisor}/team` (y mezclado en `/equipo`) |
 | `juntas` | `/recibido/{emisor}/meetings` |
 | `monitoreo` | `/recibido/{emisor}/targets` |
-| `crm` | `/recibido/{emisor}/opportunities` y `/activities` |
+| `crm` | `/recibido/{emisor}/opportunities` y `/activities` (y todos juntos en `/ops/cotizaciones/…`, con el seguimiento) |
 | `licencias` | `/recibido/{emisor}/licenses` |
 | `despliegues` | `/recibido/{emisor}/deployments` |
 | `repos` | `/recibido/{emisor}/repos` |

@@ -31,6 +31,17 @@ export const CRM_ACTIVITY_LABEL: Record<CrmActivityType, string> = {
   tarea: 'Tarea'
 };
 
+/**
+ * Movimiento de etapa hecho a mano desde el tablero que el emisor todavía no
+ * confirma: mientras tanto `stage` es la etapa manual.
+ */
+export interface CrmStageManual {
+  by: string;
+  at: string;
+  /** La etapa que el emisor sigue mandando. */
+  reported: CrmStage;
+}
+
 export interface CrmOpportunity {
   id: string;
   name: string;
@@ -47,6 +58,13 @@ export interface CrmOpportunity {
   accountId: string;
   url?: string;
   updatedAt: string;
+  /** Viene de un emisor (/ingesta/crm): su etapa se puede mover desde el tablero. */
+  ingested?: boolean;
+  /** Último cambio de etapa que el puente vio (del emisor o a mano). */
+  stageChangedAt?: string;
+  /** Último movimiento: el cambio de etapa o la última actividad nueva ligada. */
+  lastMovementAt?: string;
+  stageManual?: CrmStageManual;
 }
 
 /** Actividad programada en Odoo (mail.activity): la lista de "que sigue". */

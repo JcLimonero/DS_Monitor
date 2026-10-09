@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Person, TaskItem, TaskStatus } from '../models';
-import { teamWorkload } from './portal.selectors';
+import { CrmOpportunity, Person, TaskItem, TaskStatus } from '../models';
+import { daysWithoutMovement, teamWorkload } from './portal.selectors';
 
 const AHORA = new Date('2026-09-21T18:00:00Z');
 
@@ -84,6 +84,48 @@ describe('teamWorkload', () => {
     assert.deepEqual(
       teamWorkload([tarea('solo', { status: 'pendiente' })], AHORA),
       []
+    );
+  });
+});
+
+describe('daysWithoutMovement', () => {
+  const oportunidad = (lastMovementAt?: string): CrmOpportunity => ({
+    id: 'cot-1',
+    name: 'Licencias',
+    partner: 'Grupo Delta',
+    stage: 'propuesta',
+    amount: 100,
+    currency: 'MXN',
+    probability: 0,
+    accountId: 'cot',
+    updatedAt: AHORA.toISOString(),
+    lastMovementAt
+  });
+
+  it('cuenta días enteros desde el último movimiento', () => {
+    assert.equal(
+      daysWithoutMovement(oportunidad('2026-09-18T18:00:00Z'), AHORA),
+      3
+    );
+    assert.equal(
+      daysWithoutMovement(oportunidad('2026-09-19T19:00:00Z'), AHORA),
+      1
+    );
+    assert.equal(
+      daysWithoutMovement(oportunidad('2026-09-21T10:00:00Z'), AHORA),
+      0
+    );
+  });
+
+  it('no inventa el dato si el puente no lo manda o viene mal', () => {
+    assert.equal(daysWithoutMovement(oportunidad(undefined), AHORA), undefined);
+    assert.equal(daysWithoutMovement(oportunidad('mañana'), AHORA), undefined);
+  });
+
+  it('un movimiento en el futuro (reloj distinto) cuenta como hoy', () => {
+    assert.equal(
+      daysWithoutMovement(oportunidad('2026-09-25T00:00:00Z'), AHORA),
+      0
     );
   });
 });
