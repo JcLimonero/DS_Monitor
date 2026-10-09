@@ -107,9 +107,11 @@ async function pedirToken(
     // secreto de aqui, ni el de la aplicacion ni los tokens ni el codigo.
     throw new ErrorProveedor(
       'microsoft',
-      ocultarSecretos(
-        `${datos.error ?? respuesta.status}: ${recortar(datos.error_description ?? 'no entrego token')}`,
-        [microsoft.clientSecret, cuerpo['refresh_token'], cuerpo['code']]
+      recortar(
+        ocultarSecretos(
+          `${datos.error ?? respuesta.status}: ${datos.error_description ?? 'no entrego token'}`,
+          [microsoft.clientSecret, cuerpo['refresh_token'], cuerpo['code']]
+        )
       )
     );
   }
@@ -168,19 +170,20 @@ export async function comprobarAplicacionMicrosoft(
   ) {
     throw new ErrorProveedor(
       'microsoft',
-      ocultarSecretos(
-        `${datos.error ?? respuesta.status}: ${recortar(descripcion)}`,
-        [app.clientSecret]
+      recortar(
+        ocultarSecretos(`${datos.error ?? respuesta.status}: ${descripcion}`, [
+          app.clientSecret
+        ])
       )
     );
   }
   // Lo demas (politicas de acceso condicional, tenant "common" sin token de
   // aplicacion) no dice nada del secreto: la cuenta se prueba de verdad al
   // conectarla con el consentimiento del usuario.
-  return ocultarSecretos(
-    `Entra reconoce la aplicación y el secreto (el token de aplicación lo bloquea una política: ${recortar(descripcion.split(' Trace ID')[0] ?? '')}). Conecta cada buzón con "Conectar con Microsoft".`,
-    [app.clientSecret]
+  const motivo = recortar(
+    ocultarSecretos(descripcion.split(' Trace ID')[0] ?? '', [app.clientSecret])
   );
+  return `Entra reconoce la aplicación y el secreto (el token de aplicación lo bloquea una política: ${motivo}). Conecta cada buzón con "Conectar con Microsoft".`;
 }
 
 /** Tokens de acceso vigentes, uno por buzon, para no pedir uno por peticion. */

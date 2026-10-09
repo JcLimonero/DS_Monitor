@@ -56,6 +56,23 @@ export function appPropiaDe(
     : undefined;
 }
 
+/**
+ * La aplicacion propia solo cuenta como propia si es DISTINTA de la base (la
+ * general o la del entorno). Un documento viejo con el ID y el secreto de la
+ * general guardados en el buzon sigue siendo, para todo efecto, la general:
+ * conserva su tenant y su refresh token.
+ */
+export function appPropiaDistinta(
+  guardado: { clientId?: unknown; clientSecret?: unknown } | undefined,
+  base: { clientId?: string } | undefined
+): AppMicrosoft | undefined {
+  const propia = appPropiaDe(guardado);
+  return propia &&
+    propia.clientId.toLowerCase() !== (base?.clientId ?? '').toLowerCase()
+    ? propia
+    : undefined;
+}
+
 export type ResultadoAppPropia =
   | {
       ok: true;
@@ -159,8 +176,11 @@ export function validarAppPropia(
 }
 
 /**
- * Quita de un texto (mensaje de error, URL) cada secreto que pudiera traer.
- * Los valores muy cortos no se tocan: no son secretos y destrozarian el texto.
+ * Quita de un texto (mensaje de error, URL) cada secreto que pudiera traer, en
+ * crudo y en sus versiones codificadas (encodeURIComponent y formulario). Se
+ * aplica ANTES de recortar el texto: un secreto partido por el corte ya no se
+ * reconoceria. Los valores muy cortos no se tocan: no son secretos y
+ * destrozarian el texto.
  */
 export function ocultarSecretos(
   texto: string,
@@ -168,8 +188,17 @@ export function ocultarSecretos(
 ): string {
   let salida = texto;
   for (const secreto of secretos) {
-    if (secreto && secreto.length >= 6) {
-      salida = salida.split(secreto).join('[oculto]');
+    if (!secreto || secreto.length < 6) {
+      continue;
+    }
+    const variantes = new Set([
+      secreto,
+      encodeURIComponent(secreto),
+      new URLSearchParams({ x: secreto }).toString().slice(2)
+    ]);
+    // La mas larga primero, para que una no deje restos de otra.
+    for (const variante of [...variantes].sort((a, b) => b.length - a.length)) {
+      salida = salida.split(variante).join('[oculto]');
     }
   }
   return salida;

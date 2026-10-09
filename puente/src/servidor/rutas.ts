@@ -10,6 +10,7 @@ import { Acceso, type Sesion } from '../acceso/acceso.js';
 import { AlmacenCorreo } from '../correo/almacen-correo.js';
 import {
   appPropiaDe,
+  appPropiaDistinta,
   ocultarSecretos,
   validarAppPropia
 } from '../correo/app-propia.js';
@@ -2938,6 +2939,16 @@ export function construirRutas(
   // El estado se puede consultar sin token porque no expone secretos: dice
   // que hay y que falta. Guardar, probar y conectar piden PUENTE_ADMIN_TOKEN.
 
+  /** Su aplicacion propia, si es otra distinta de la general (o de la del entorno). */
+  const appPropiaDelBuzon = (cuenta: ConfiguracionCorreo) =>
+    cuenta.proveedor === 'microsoft'
+      ? appPropiaDistinta(
+          almacenCorreo.obtener(cuenta.id)?.microsoft,
+          cfg().correos.find((c) => c.id === cuenta.id)?.microsoft ??
+            cfg().microsoftApp
+        )
+      : undefined;
+
   const estadoDeBuzon = (cuenta: ConfiguracionCorreo) => ({
     id: cuenta.id,
     proveedor: cuenta.proveedor,
@@ -2955,13 +2966,8 @@ export function construirRutas(
     clientId: cuenta.microsoft?.clientId ?? cuenta.google?.clientId,
     // La aplicacion propia del buzon: solo se dice SI la hay y con que client
     // ID (que no es secreto); el secreto no sale por ninguna ruta.
-    appPropiaDefinida:
-      cuenta.proveedor === 'microsoft' &&
-      appPropiaDe(almacenCorreo.obtener(cuenta.id)?.microsoft) !== undefined,
-    appPropiaClientId:
-      cuenta.proveedor === 'microsoft'
-        ? appPropiaDe(almacenCorreo.obtener(cuenta.id)?.microsoft)?.clientId
-        : undefined,
+    appPropiaDefinida: appPropiaDelBuzon(cuenta) !== undefined,
+    appPropiaClientId: appPropiaDelBuzon(cuenta)?.clientId,
     conectadaComo:
       cuenta.microsoft?.conectadaComo ?? cuenta.google?.conectadaComo,
     faltante:
@@ -3180,16 +3186,27 @@ export function construirRutas(
     }
     const cuenta = buzon(pendiente.id);
     const redirectUri = `${cfg().urlPublica}/correo/oauth/callback`;
-    const appActual =
-      cuenta.proveedor === 'google' ? cuenta.google : cuenta.microsoft;
-    if (
-      cuenta.proveedor !== pendiente.proveedor ||
-      (appActual?.clientId ?? '').toLowerCase() !== pendiente.clientId
-    ) {
-      return regresar(
+    // Sigue siendo la misma aplicacion con la que se pidio el consentimiento?
+    // Se vuelve a preguntar justo antes de guardar el token, SIN ningun await
+    // entre la pregunta y la escritura: el canje tarda y, mientras, un
+    // /guardar pudo cambiar la aplicacion; un token emitido por la A no puede
+    // quedar bajo la B.
+    const mismaApp = (): boolean => {
+      const vigente = buzon(pendiente.id);
+      const app =
+        vigente.proveedor === 'google' ? vigente.google : vigente.microsoft;
+      return (
+        vigente.proveedor === pendiente.proveedor &&
+        (app?.clientId ?? '').toLowerCase() === pendiente.clientId
+      );
+    };
+    const appCambio = () =>
+      regresar(
         'error',
         'La aplicación del buzón cambió mientras se daba el consentimiento. Vuelve a conectar desde Ajustes.'
       );
+    if (!mismaApp()) {
+      return appCambio();
     }
     try {
       if (cuenta.proveedor === 'google') {
@@ -3205,6 +3222,9 @@ export function construirRutas(
           redirectUri
         );
         const quien = await quienSoyGoogle(tokens.accessToken);
+        if (!mismaApp()) {
+          return appCambio();
+        }
         await almacenCorreo.guardar(cuenta.id, {
           google: { refreshToken: tokens.refreshToken, conectadaComo: quien }
         });
@@ -3228,6 +3248,9 @@ export function construirRutas(
         cuenta.microsoft,
         tokens.accessToken
       );
+      if (!mismaApp()) {
+        return appCambio();
+      }
       await almacenCorreo.guardar(cuenta.id, {
         microsoft: { refreshToken: tokens.refreshToken, conectadaComo: quien }
       });

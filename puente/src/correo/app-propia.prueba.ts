@@ -7,6 +7,7 @@ import { PersistenciaArchivos } from '../datos/persistencia.js';
 import { AlmacenCorreo } from './almacen-correo.js';
 import {
   appPropiaDe,
+  appPropiaDistinta,
   esGuid,
   esTenantValido,
   ocultarSecretos,
@@ -148,6 +149,17 @@ describe('validacion de la aplicacion propia', () => {
       'mal [oculto] y [oculto]'
     );
     assert.equal(ocultarSecretos('hola', ['']), 'hola');
+  });
+
+  it('ocultarSecretos cubre las versiones codificadas del secreto', () => {
+    const secreto = 'sec/ret+o=falso~Z9';
+    const texto = [
+      secreto,
+      encodeURIComponent(secreto),
+      new URLSearchParams({ x: secreto }).toString().slice(2)
+    ].join(' | ');
+    const limpio = ocultarSecretos(texto, [secreto]);
+    assert.equal(limpio, '[oculto] | [oculto] | [oculto]');
   });
 
   it('appPropiaDe exige los dos y tolera basura', () => {
@@ -343,6 +355,33 @@ describe('almacen de buzones con aplicacion propia', () => {
     assert.equal(guardado?.refreshToken, undefined);
     const e = almacen.efectiva('itech', undefined, 30, GENERAL);
     assert.equal(e?.microsoft?.clientId, ID_GENERAL);
+  });
+
+  it('ID y secreto iguales a los de la general (documento viejo) no cuentan como otra app', async () => {
+    const { almacen, persistencia } = await almacenNuevo();
+    await persistencia.guardar('correo', 'viejo3', {
+      proveedor: 'microsoft',
+      usuario: 'v@falso.test',
+      microsoft: {
+        clientId: ID_GENERAL.toUpperCase(),
+        clientSecret: SECRETO_GENERAL,
+        refreshToken: 'rt-falso',
+        conectadaComo: 'v@falso.test'
+      },
+      actualizadoEn: '2026-01-01T00:00:00.000Z'
+    });
+    await almacen.cargar();
+    const e = almacen.efectiva('viejo3', undefined, 30, {
+      ...GENERAL,
+      tenant: TENANT
+    });
+    assert.equal(e?.microsoft?.tenant, TENANT);
+    assert.equal(e?.microsoft?.refreshToken, 'rt-falso');
+    assert.equal(e?.microsoft?.clientSecret, SECRETO_GENERAL);
+    assert.equal(
+      appPropiaDistinta(almacen.obtener('viejo3')?.microsoft, GENERAL),
+      undefined
+    );
   });
 
   it('el tenant solo (sin app propia) conserva el token', async () => {

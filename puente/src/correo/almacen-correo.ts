@@ -1,5 +1,5 @@
 import type { Persistencia } from '../datos/persistencia.js';
-import { appPropiaDe } from './app-propia.js';
+import { appPropiaDe, appPropiaDistinta } from './app-propia.js';
 import type {
   ConfiguracionCorreo,
   ConfiguracionGoogle,
@@ -179,9 +179,12 @@ function mezclarMicrosoft(
   base: Partial<ConfiguracionMicrosoft> | undefined,
   guardado: Partial<ConfiguracionMicrosoft> | undefined
 ): ConfiguracionMicrosoft | undefined {
-  const propia = appPropiaDe(guardado);
-  const clientId = propia?.clientId ?? base?.clientId;
-  const clientSecret = propia?.clientSecret ?? base?.clientSecret;
+  // El ID y el secreto guardados mandan (aunque repitan los de la base);
+  // `propia` solo es la que de verdad es otra aplicacion.
+  const guardada = appPropiaDe(guardado);
+  const propia = appPropiaDistinta(guardado, base);
+  const clientId = guardada?.clientId ?? base?.clientId;
+  const clientSecret = guardada?.clientSecret ?? base?.clientSecret;
   if (!clientId || !clientSecret) {
     return undefined;
   }

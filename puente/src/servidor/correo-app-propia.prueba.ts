@@ -6,6 +6,7 @@ import { after, afterEach, beforeEach, describe, it } from 'node:test';
 import { leerConfiguracion } from '../config/entorno.js';
 import { PersistenciaArchivos } from '../datos/persistencia.js';
 import { ErrorPuente } from '../nucleo/errores.js';
+import { canjearCodigo } from '../proveedores/microsoft.js';
 import { Redireccion } from './router.js';
 import { abrirDatos, cargarDatos, construirRutas } from './rutas.js';
 
@@ -39,9 +40,12 @@ interface PeticionToken {
 }
 let tokens: PeticionToken[] = [];
 let respuestaToken: () => { estado: number; json: unknown };
+/** Si existe, el endpoint de token no contesta hasta que se resuelva. */
+let compuertaToken: Promise<void> | undefined;
 
 beforeEach(() => {
   tokens = [];
+  compuertaToken = undefined;
   respuestaToken = () => ({
     estado: 200,
     json: {
@@ -57,6 +61,7 @@ beforeEach(() => {
         url,
         cuerpo: new URLSearchParams(String(opciones?.body ?? ''))
       });
+      await compuertaToken;
       const r = respuestaToken();
       return new Response(JSON.stringify(r.json), { status: r.estado });
     }
@@ -72,7 +77,7 @@ afterEach(() => {
   globalThis.fetch = fetchOriginal;
 });
 
-async function montar() {
+async function montar(tenantGeneral = 'common') {
   const dir = await mkdtemp(join(tmpdir(), 'puente-appprop-rutas-'));
   dirs.push(dir);
   const persistencia = new PersistenciaArchivos({
@@ -86,7 +91,7 @@ async function montar() {
     PUENTE_URL_PUBLICA: URL_PUBLICA,
     MICROSOFT_CLIENT_ID: ID_GENERAL,
     MICROSOFT_CLIENT_SECRET: SECRETO_GENERAL,
-    MICROSOFT_TENANT: 'common'
+    MICROSOFT_TENANT: tenantGeneral
   });
   const datos = abrirDatos(persistencia);
   await cargarDatos(datos, persistencia);
@@ -434,5 +439,85 @@ describe('aplicacion propia por buzon', () => {
     const e = await b.estado('correo-a');
     assert.equal(e.metodo, 'graph');
     assert.equal(e.appPropiaDefinida, false);
+  });
+
+  it('carrera: si /guardar cambia la app durante el canje, el token de A no queda bajo B', async () => {
+    for (const cambio of [
+      { clientId: ID_OTRO, clientSecret: SECRETO_NUEVO },
+      { clientSecret: ' ' }
+    ]) {
+      const b = await montar();
+      await conDosBuzones(b);
+      const itech = await b.inicio('correo-itech');
+      let soltar!: () => void;
+      compuertaToken = new Promise<void>((r) => (soltar = r));
+      const pendiente = b.regreso(itech.state);
+      while (tokens.length < 1) {
+        await new Promise((r) => setImmediate(r));
+      }
+      // El canje con la app A esta en vuelo; el administrador cambia la app.
+      await b.guardar('correo-itech', cambio);
+      soltar();
+      const r = await pendiente;
+      assert.equal(new URL(r.url).searchParams.get('oauth'), 'error');
+      const e = await b.estado('correo-itech');
+      assert.notEqual(e.metodo, 'graph', 'quedo un token de la app anterior');
+      assert.equal(e.conectadaComo, undefined);
+      // Y reconectar con la app vigente si funciona.
+      compuertaToken = undefined;
+      const nuevo = await b.inicio('correo-itech');
+      const ok = await b.regreso(nuevo.state);
+      assert.equal(new URL(ok.url).searchParams.get('oauth'), 'ok');
+      assert.equal((await b.estado('correo-itech')).metodo, 'graph');
+    }
+  });
+
+  it('un documento viejo con el ID y secreto de la general sigue siendo la general', async () => {
+    const b = await montar(TENANT);
+    await b.guardar('correo-a', {
+      proveedor: 'microsoft',
+      usuario: 'a@falso.test',
+      clientId: ID_GENERAL.toUpperCase(),
+      clientSecret: SECRETO_GENERAL
+    });
+    const e = await b.estado('correo-a');
+    assert.equal(e.appPropiaDefinida, false);
+    assert.equal(e.appPropiaClientId, undefined);
+    assert.equal(e.tenant, TENANT);
+    const { url } = await b.inicio('correo-a');
+    assert.equal(url.searchParams.get('client_id'), ID_GENERAL);
+    assert.ok(url.pathname.startsWith(`/${TENANT}/`));
+  });
+
+  it('los errores de Entra no dejan secretos partidos por el corte ni codificados', async () => {
+    const secreto = 'sec/ret+o=falso~Z9y8x7';
+    const codificados = [
+      secreto,
+      encodeURIComponent(secreto),
+      new URLSearchParams({ x: secreto }).toString().slice(2)
+    ];
+    const descripcion = `${'a'.repeat(175)}${secreto} ${codificados[1]} ${codificados[2]} ${'b'.repeat(50)}`;
+    respuestaToken = () => ({
+      estado: 400,
+      json: { error: 'invalid_client', error_description: descripcion }
+    });
+    await assert.rejects(
+      () =>
+        canjearCodigo(
+          { tenant: 'common', clientId: ID_PROPIO, clientSecret: secreto },
+          'codigo-falso-1',
+          `${URL_PUBLICA}/correo/oauth/callback`
+        ),
+      (e: unknown) => {
+        const m = (e as Error).message;
+        for (const c of codificados) {
+          assert.ok(!m.includes(c), 'trae el secreto');
+          // Ni un trozo largo: el corte no debe dejar la mitad del secreto.
+          assert.ok(!m.includes(c.slice(0, 8)), 'trae un trozo del secreto');
+        }
+        assert.ok(m.includes('[oculto]'));
+        return true;
+      }
+    );
   });
 });
