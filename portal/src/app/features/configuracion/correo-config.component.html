@@ -1,3 +1,19 @@
+@if (oauthNotice(); as aviso) {
+  @if (aviso.ok) {
+    <p
+      role="status"
+      class="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200">
+      Conexión con Microsoft completada ({{ aviso.correo }}).
+      {{ aviso.mensaje }}
+    </p>
+  } @else {
+    <p role="alert" class="banner banner-danger mb-4">
+      No se pudo conectar {{ aviso.correo }} con Microsoft.
+      {{ aviso.mensaje || "Vuelve a intentarlo." }}
+    </p>
+  }
+}
+
 @if (microsoftApp(); as app) {
   <ng-container
     *ngTemplateOutlet="tarjetaIntegracion; context: { estado: app }" />
