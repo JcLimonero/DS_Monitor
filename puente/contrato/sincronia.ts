@@ -49,6 +49,25 @@ type _HostedApp = Igual<Portal.HostedApp, Puente.HostedApp>;
 type _RepoStatus = Igual<Portal.RepoStatus, Puente.RepoStatus>;
 type _RepoPullRequest = Igual<Portal.RepoPullRequest, Puente.RepoPullRequest>;
 type _RepoCommit = Igual<Portal.RepoCommit, Puente.RepoCommit>;
+type _CrmCliente = Igual<Portal.CrmCliente, Puente.CrmCliente>;
+type _CrmContacto = Igual<Portal.CrmContacto, Puente.CrmContacto>;
+type _CrmProyecto = Igual<Portal.CrmProyecto, Puente.CrmProyecto>;
+type _CrmCotizacion = Igual<Portal.CrmCotizacion, Puente.CrmCotizacion>;
+type _CrmPagoProgramado = Igual<
+  Portal.CrmPagoProgramado,
+  Puente.CrmPagoProgramado
+>;
+type _CrmProximoPaso = Igual<Portal.CrmProximoPaso, Puente.CrmProximoPaso>;
+type _CrmActividadCliente = Igual<
+  Portal.CrmActividadCliente,
+  Puente.CrmActividadCliente
+>;
+type _CrmFuncionalidad = Igual<
+  Portal.CrmFuncionalidad,
+  Puente.CrmFuncionalidad
+>;
+type _RolCrm = Igual<Portal.RolCrm, Puente.RolCrm>;
+type _UsuarioCrm = Igual<Portal.UsuarioCrm, Puente.UsuarioCrm>;
 
 /**
  * Las marcas de abajo solo existen para que el compilador evalue los alias de
@@ -79,8 +98,28 @@ const comprobado: [
   _PlatformStatus,
   _RepoStatus,
   _RepoPullRequest,
-  _RepoCommit
+  _RepoCommit,
+  _CrmCliente,
+  _CrmContacto,
+  _CrmProyecto,
+  _CrmCotizacion,
+  _CrmPagoProgramado,
+  _CrmProximoPaso,
+  _CrmActividadCliente,
+  _CrmFuncionalidad,
+  _RolCrm,
+  _UsuarioCrm
 ] = [
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
   true,
   true,
   true,

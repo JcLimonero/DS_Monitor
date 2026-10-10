@@ -331,6 +331,277 @@ export interface CrmActivity {
   url?: string;
 }
 
+// --- CRM nativo (clientes propios del grupo) ---
+
+/** Tipo de cliente: directo, intermediario (factura por otro) o final. */
+export type CrmClienteTipo = 'directo' | 'intermediario' | 'final';
+
+/**
+ * Un cliente del CRM nativo: vive en el puente, no en Odoo.
+ * Empresas: Dealer Solutions, Nexus Q Tech, Operativ AI, LimonLabs.
+ */
+export interface CrmCliente {
+  id: string;
+  nombre: string;
+  razonSocial?: string;
+  rfc?: string;
+  /** directo = factura y paga; intermediario = factura a un final; final = paga un intermediario. */
+  tipo: CrmClienteTipo;
+  /**
+   * Si este cliente es final, el intermediario que le factura.
+   * Ej: Nexus factura a Total Dealer → cliente final es Grupo Popul.
+   */
+  clienteFacturacionId?: string;
+  /** Carpeta en Drive del cliente. */
+  driveFolderUrl?: string;
+  notas?: string;
+  actualizadoEn: string;
+}
+
+/** Un contacto de un cliente del CRM nativo. */
+export interface CrmContacto {
+  id: string;
+  clienteId: string;
+  nombre: string;
+  puesto?: string;
+  correo?: string;
+  telefono?: string;
+  /** Responsable del lado del cliente para proyectos (a quien se mandan cotizaciones). */
+  esResponsableProyecto: boolean;
+  actualizadoEn: string;
+}
+
+/** Estado de un proyecto del CRM nativo. */
+export type CrmProyectoEstado =
+  | 'prospecto'
+  | 'en_cotizacion'
+  | 'aprobado'
+  | 'en_desarrollo'
+  | 'en_pruebas'
+  | 'entregado'
+  | 'en_soporte'
+  | 'pausado'
+  | 'cancelado';
+
+/** Un proyecto de un cliente del CRM nativo. */
+export interface CrmProyecto {
+  id: string;
+  /** Cliente que paga (puede ser intermediario). */
+  clienteId: string;
+  /** Cliente final si el que paga es intermediario. */
+  clienteFinalId?: string;
+  /** Empresa del grupo que atiende (Dealer Solutions, Nexus Q Tech, etc.). */
+  empresaAtiendeId?: string;
+  nombre: string;
+  alcance?: string;
+  /** Responsable interno (alguien del equipo). */
+  responsableInterno?: Person;
+  /** Contacto del cliente que es responsable del proyecto. */
+  responsableClienteId?: string;
+  fechaInicio?: string;
+  fechaFinEstimada?: string;
+  estado: CrmProyectoEstado;
+  /** Porcentaje de avance (0–100). */
+  avancePct?: number;
+  /** Carpeta en Drive del proyecto. */
+  driveUrl?: string;
+  /** URLs de repositorios. */
+  repos?: string[];
+  notas?: string;
+  actualizadoEn: string;
+}
+
+/** Esquema de cobro de una cotizacion. */
+export type CrmEsquemaCobro = 'unico' | 'parcialidades' | 'mensual';
+
+/** Estado de una cotizacion. */
+export type CrmCotizacionEstatus =
+  'borrador' | 'enviada' | 'aprobada' | 'rechazada' | 'vencida' | 'obsoleta';
+
+/** Una cotizacion del CRM nativo. */
+export interface CrmCotizacion {
+  id: string;
+  /** Proyecto al que pertenece. */
+  proyectoId: string;
+  /** Folio (ej. DS-2026-042, NQ-2026-015). */
+  folio?: string;
+  /** Version de la cotizacion (1, 2, 3...). */
+  version?: number;
+  /** Empresa del grupo que factura ESTA cotizacion. */
+  empresaFacturaId?: string;
+  nombre: string;
+  fechaEmision?: string;
+  /** Dias de vigencia desde emision. */
+  vigenciaDias?: number;
+  /** Fecha de vencimiento calculada o fija. */
+  fechaVencimiento?: string;
+  subtotal: number;
+  iva: number;
+  total: number;
+  moneda: string;
+  esquemaCobro: CrmEsquemaCobro;
+  estatus: CrmCotizacionEstatus;
+  /** Cuando se envio al cliente. */
+  fechaEnvio?: string;
+  /** Contacto al que se envio. */
+  enviadaAId?: string;
+  /** Cuando Carlos autorizo el envio (obligatorio antes de enviar). */
+  autorizadaPorCarlosEn?: string;
+  /** Cuando el cliente aprobo. */
+  fechaAprobacion?: string;
+  /** Nombre de quien aprobo del lado del cliente. */
+  aprobadoPor?: string;
+  /** Numero de orden de compra del cliente. */
+  ordenCompra?: string;
+  /** URL del PDF de la cotizacion. */
+  pdfUrl?: string;
+  /** Liga con una cotizacion de ingesta si corresponde. */
+  cotizacionExternaId?: string;
+  actualizadoEn: string;
+}
+
+/** Estado de un pago programado. */
+export type CrmPagoEstatus =
+  'por_facturar' | 'facturado' | 'pagado' | 'vencido';
+
+/** Un pago programado (parcialidad o mensualidad). */
+export interface CrmPagoProgramado {
+  id: string;
+  cotizacionId: string;
+  /** Numero de pago (1 de 3, 2 de 3, etc.). */
+  numero: number;
+  /** Total de pagos de esta cotizacion. */
+  totalPagos: number;
+  monto: number;
+  moneda: string;
+  fechaEsperada: string;
+  estatus: CrmPagoEstatus;
+  /** Fecha real de pago. */
+  fechaPagoReal?: string;
+  /** Nota (ej. "Octubre 2026"). */
+  nota?: string;
+  actualizadoEn: string;
+}
+
+/** Tipo de actividad en la bitacora de un cliente. */
+export type CrmActividadClienteTipo = 'llamada' | 'junta' | 'correo' | 'nota';
+
+/** Proximo paso de una actividad: genera un pendiente en Pendientes. */
+export interface CrmProximoPaso {
+  descripcion: string;
+  fecha: string;
+}
+
+/** Una actividad en la bitacora de un cliente. */
+export interface CrmActividadCliente {
+  id: string;
+  clienteId: string;
+  /** Proyecto relacionado (opcional). */
+  proyectoId?: string;
+  /** Cotizacion relacionada (opcional). */
+  cotizacionId?: string;
+  tipo: CrmActividadClienteTipo;
+  resumen: string;
+  fecha: string;
+  proximoPaso?: CrmProximoPaso;
+  responsable?: Person;
+  actualizadoEn: string;
+}
+
+/** Estado de una funcionalidad en desarrollo. */
+export type CrmFuncionalidadEstado =
+  'por_hacer' | 'en_progreso' | 'en_revision' | 'hecho' | 'bloqueado';
+
+/** Prioridad de una funcionalidad. */
+export type CrmFuncionalidadPrioridad = 'baja' | 'media' | 'alta' | 'urgente';
+
+/**
+ * Una funcionalidad o tarea de desarrollo dentro de un proyecto.
+ * Permite llevar el control del avance real del proyecto.
+ */
+export interface CrmFuncionalidad {
+  id: string;
+  proyectoId: string;
+  titulo: string;
+  descripcion?: string;
+  estado: CrmFuncionalidadEstado;
+  /** Id del responsable interno (del catalogo de Equipo). */
+  responsableId?: string;
+  prioridad: CrmFuncionalidadPrioridad;
+  /** Fecha compromiso de entrega. */
+  fechaCompromiso?: string;
+  /** Enlace a repo, PR, issue, etc. */
+  enlace?: string;
+  /** Id del pendiente existente ligado (si aplica). */
+  pendienteId?: string;
+  /** Orden dentro del proyecto (para drag & drop). */
+  orden?: number;
+  actualizadoEn: string;
+}
+
+// --- Control de acceso por roles ---
+
+/**
+ * Areas del sistema que se pueden proteger.
+ * Las areas personales de Carlos (licencias, correo, servidores, integraciones,
+ * configuracion) son solo para Director.
+ */
+export type AreaPermiso =
+  | 'clientes'
+  | 'proyectos'
+  | 'cotizaciones'
+  | 'cobranza'
+  | 'costos'
+  | 'desarrollo'
+  | 'actividades'
+  | 'equipo'
+  | 'licencias'
+  | 'correo'
+  | 'servidores'
+  | 'integraciones'
+  | 'configuracion';
+
+/** Nivel de acceso a un area. */
+export type NivelAcceso = 'ninguno' | 'lectura' | 'escritura';
+
+/**
+ * Un rol configurable con permisos por area.
+ * Los roles de fabrica (esSistema) no se pueden borrar.
+ */
+export interface RolCrm {
+  id: string;
+  nombre: string;
+  descripcion?: string;
+  /** Permisos por area; lo que no esta es 'ninguno'. */
+  permisos: Partial<Record<AreaPermiso, NivelAcceso>>;
+  /** Los de fabrica no se pueden borrar. */
+  esSistema: boolean;
+  actualizadoEn: string;
+}
+
+/**
+ * Un usuario del CRM con roles y alcance.
+ * Se suma al acceso por codigo de correo (ACCESO_CORREOS) y al equipo.
+ */
+export interface UsuarioCrm {
+  id: string;
+  correo: string;
+  nombre: string;
+  /** IDs de los roles asignados (un usuario puede tener varios). */
+  roles: string[];
+  /**
+   * Alcance limitado: si no esta definido, ve todo lo que su rol permita.
+   * Si esta definido, solo ve los registros de esas empresas/clientes/proyectos.
+   */
+  alcance?: {
+    empresas?: string[];
+    clientes?: string[];
+    proyectos?: string[];
+  };
+  activo: boolean;
+  actualizadoEn: string;
+}
+
 // --- Licencias ---
 
 export type LicenseProvider =

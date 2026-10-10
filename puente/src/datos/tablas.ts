@@ -763,3 +763,359 @@ export const TABLA_LICENCIAS_AJUSTES: DefinicionTabla<
       ])
     )
 };
+
+// --- CRM nativo: clientes, contactos, proyectos, cotizaciones, etc. ------
+
+import type {
+  CrmActividadCliente,
+  CrmCliente,
+  CrmContacto,
+  CrmCotizacion,
+  CrmFuncionalidad,
+  CrmPagoProgramado,
+  CrmProyecto,
+  RolCrm,
+  UsuarioCrm
+} from '../nucleo/contrato.js';
+
+export const TABLA_CRM_CLIENTES: DefinicionTabla<CrmCliente[]> = {
+  clave: 'crm-clientes',
+  tabla: 'crm_clientes',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_clientes (
+      id text PRIMARY KEY,
+      nombre text NOT NULL,
+      razon_social text,
+      rfc text,
+      tipo text NOT NULL,
+      cliente_facturacion_id text,
+      drive_folder_url text,
+      notas text,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_clientes_nombre ON crm_clientes (nombre);
+    CREATE INDEX IF NOT EXISTS crm_clientes_tipo ON crm_clientes (tipo);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((c) => ({
+      id: c.id,
+      nombre: c.nombre,
+      razon_social: c.razonSocial ?? null,
+      rfc: c.rfc ?? null,
+      tipo: c.tipo,
+      cliente_facturacion_id: c.clienteFacturacionId ?? null,
+      drive_folder_url: c.driveFolderUrl ?? null,
+      notas: c.notas ?? null,
+      actualizado_en: c.actualizadoEn,
+      datos: c
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmCliente>(f['datos']))
+};
+
+export const TABLA_CRM_CONTACTOS: DefinicionTabla<CrmContacto[]> = {
+  clave: 'crm-contactos',
+  tabla: 'crm_contactos',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_contactos (
+      id text PRIMARY KEY,
+      cliente_id text NOT NULL,
+      nombre text NOT NULL,
+      puesto text,
+      correo text,
+      telefono text,
+      es_responsable_proyecto boolean NOT NULL DEFAULT false,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_contactos_cliente ON crm_contactos (cliente_id);
+    CREATE INDEX IF NOT EXISTS crm_contactos_correo ON crm_contactos (correo);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((c) => ({
+      id: c.id,
+      cliente_id: c.clienteId,
+      nombre: c.nombre,
+      puesto: c.puesto ?? null,
+      correo: c.correo ?? null,
+      telefono: c.telefono ?? null,
+      es_responsable_proyecto: c.esResponsableProyecto,
+      actualizado_en: c.actualizadoEn,
+      datos: c
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmContacto>(f['datos']))
+};
+
+export const TABLA_CRM_PROYECTOS: DefinicionTabla<CrmProyecto[]> = {
+  clave: 'crm-proyectos',
+  tabla: 'crm_proyectos',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_proyectos (
+      id text PRIMARY KEY,
+      cliente_id text NOT NULL,
+      cliente_final_id text,
+      empresa_atiende_id text,
+      nombre text NOT NULL,
+      estado text NOT NULL,
+      avance_pct integer,
+      fecha_inicio timestamptz,
+      fecha_fin_estimada timestamptz,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_proyectos_cliente ON crm_proyectos (cliente_id);
+    CREATE INDEX IF NOT EXISTS crm_proyectos_empresa ON crm_proyectos (empresa_atiende_id);
+    CREATE INDEX IF NOT EXISTS crm_proyectos_estado ON crm_proyectos (estado);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((p) => ({
+      id: p.id,
+      cliente_id: p.clienteId,
+      cliente_final_id: p.clienteFinalId ?? null,
+      empresa_atiende_id: p.empresaAtiendeId ?? null,
+      nombre: p.nombre,
+      estado: p.estado,
+      avance_pct: p.avancePct ?? null,
+      fecha_inicio: fecha(p.fechaInicio),
+      fecha_fin_estimada: fecha(p.fechaFinEstimada),
+      actualizado_en: p.actualizadoEn,
+      datos: p
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmProyecto>(f['datos']))
+};
+
+export const TABLA_CRM_COTIZACIONES: DefinicionTabla<CrmCotizacion[]> = {
+  clave: 'crm-cotizaciones',
+  tabla: 'crm_cotizaciones',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_cotizaciones (
+      id text PRIMARY KEY,
+      proyecto_id text NOT NULL,
+      folio text,
+      version integer,
+      empresa_factura_id text,
+      nombre text NOT NULL,
+      total numeric,
+      moneda text,
+      esquema_cobro text NOT NULL,
+      estatus text NOT NULL,
+      fecha_emision timestamptz,
+      fecha_envio timestamptz,
+      fecha_aprobacion timestamptz,
+      autorizada_en timestamptz,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_cotizaciones_proyecto ON crm_cotizaciones (proyecto_id);
+    CREATE INDEX IF NOT EXISTS crm_cotizaciones_estatus ON crm_cotizaciones (estatus);
+    CREATE INDEX IF NOT EXISTS crm_cotizaciones_empresa ON crm_cotizaciones (empresa_factura_id);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((c) => ({
+      id: c.id,
+      proyecto_id: c.proyectoId,
+      folio: c.folio ?? null,
+      version: c.version ?? null,
+      empresa_factura_id: c.empresaFacturaId ?? null,
+      nombre: c.nombre,
+      total: c.total ?? null,
+      moneda: c.moneda ?? null,
+      esquema_cobro: c.esquemaCobro,
+      estatus: c.estatus,
+      fecha_emision: fecha(c.fechaEmision),
+      fecha_envio: fecha(c.fechaEnvio),
+      fecha_aprobacion: fecha(c.fechaAprobacion),
+      autorizada_en: fecha(c.autorizadaPorCarlosEn),
+      actualizado_en: c.actualizadoEn,
+      datos: c
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmCotizacion>(f['datos']))
+};
+
+export const TABLA_CRM_PAGOS: DefinicionTabla<CrmPagoProgramado[]> = {
+  clave: 'crm-pagos',
+  tabla: 'crm_pagos',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_pagos (
+      id text PRIMARY KEY,
+      cotizacion_id text NOT NULL,
+      numero integer NOT NULL,
+      total_pagos integer NOT NULL,
+      monto numeric NOT NULL,
+      moneda text NOT NULL,
+      fecha_esperada timestamptz NOT NULL,
+      estatus text NOT NULL,
+      fecha_pago_real timestamptz,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_pagos_cotizacion ON crm_pagos (cotizacion_id);
+    CREATE INDEX IF NOT EXISTS crm_pagos_estatus ON crm_pagos (estatus);
+    CREATE INDEX IF NOT EXISTS crm_pagos_fecha ON crm_pagos (fecha_esperada);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((p) => ({
+      id: p.id,
+      cotizacion_id: p.cotizacionId,
+      numero: p.numero,
+      total_pagos: p.totalPagos,
+      monto: p.monto,
+      moneda: p.moneda,
+      fecha_esperada: p.fechaEsperada,
+      estatus: p.estatus,
+      fecha_pago_real: fecha(p.fechaPagoReal),
+      actualizado_en: p.actualizadoEn,
+      datos: p
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmPagoProgramado>(f['datos']))
+};
+
+export const TABLA_CRM_ACTIVIDADES: DefinicionTabla<CrmActividadCliente[]> = {
+  clave: 'crm-actividades',
+  tabla: 'crm_actividades',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_actividades (
+      id text PRIMARY KEY,
+      cliente_id text NOT NULL,
+      proyecto_id text,
+      cotizacion_id text,
+      tipo text NOT NULL,
+      resumen text NOT NULL,
+      fecha timestamptz NOT NULL,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_actividades_cliente ON crm_actividades (cliente_id);
+    CREATE INDEX IF NOT EXISTS crm_actividades_proyecto ON crm_actividades (proyecto_id);
+    CREATE INDEX IF NOT EXISTS crm_actividades_fecha ON crm_actividades (fecha DESC);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((a) => ({
+      id: a.id,
+      cliente_id: a.clienteId,
+      proyecto_id: a.proyectoId ?? null,
+      cotizacion_id: a.cotizacionId ?? null,
+      tipo: a.tipo,
+      resumen: a.resumen,
+      fecha: a.fecha,
+      actualizado_en: a.actualizadoEn,
+      datos: a
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmActividadCliente>(f['datos']))
+};
+
+export const TABLA_CRM_FUNCIONALIDADES: DefinicionTabla<CrmFuncionalidad[]> = {
+  clave: 'crm-funcionalidades',
+  tabla: 'crm_funcionalidades',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_funcionalidades (
+      id text PRIMARY KEY,
+      proyecto_id text NOT NULL,
+      titulo text NOT NULL,
+      estado text NOT NULL,
+      responsable_id text,
+      prioridad text NOT NULL,
+      fecha_compromiso timestamptz,
+      orden integer,
+      pendiente_id text,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_funcionalidades_proyecto ON crm_funcionalidades (proyecto_id);
+    CREATE INDEX IF NOT EXISTS crm_funcionalidades_responsable ON crm_funcionalidades (responsable_id);
+    CREATE INDEX IF NOT EXISTS crm_funcionalidades_estado ON crm_funcionalidades (estado);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((f) => ({
+      id: f.id,
+      proyecto_id: f.proyectoId,
+      titulo: f.titulo,
+      estado: f.estado,
+      responsable_id: f.responsableId ?? null,
+      prioridad: f.prioridad,
+      fecha_compromiso: fecha(f.fechaCompromiso),
+      orden: f.orden ?? null,
+      pendiente_id: f.pendienteId ?? null,
+      actualizado_en: f.actualizadoEn,
+      datos: f
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmFuncionalidad>(f['datos']))
+};
+
+export const TABLA_ROLES_CRM: DefinicionTabla<RolCrm[]> = {
+  clave: 'roles-crm',
+  tabla: 'roles_crm',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS roles_crm (
+      id text PRIMARY KEY,
+      nombre text NOT NULL,
+      descripcion text,
+      es_sistema boolean NOT NULL DEFAULT false,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((r) => ({
+      id: r.id,
+      nombre: r.nombre,
+      descripcion: r.descripcion ?? null,
+      es_sistema: r.esSistema,
+      actualizado_en: r.actualizadoEn,
+      datos: r
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<RolCrm>(f['datos']))
+};
+
+export const TABLA_USUARIOS_CRM: DefinicionTabla<UsuarioCrm[]> = {
+  clave: 'usuarios-crm',
+  tabla: 'usuarios_crm',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS usuarios_crm (
+      id text PRIMARY KEY,
+      correo text NOT NULL UNIQUE,
+      nombre text NOT NULL,
+      activo boolean NOT NULL DEFAULT true,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS usuarios_crm_correo ON usuarios_crm (correo);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((u) => ({
+      id: u.id,
+      correo: u.correo,
+      nombre: u.nombre,
+      activo: u.activo,
+      actualizado_en: u.actualizadoEn,
+      datos: u
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<UsuarioCrm>(f['datos']))
+};
