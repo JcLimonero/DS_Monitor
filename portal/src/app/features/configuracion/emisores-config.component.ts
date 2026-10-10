@@ -45,6 +45,7 @@ export class EmisoresConfigComponent {
   readonly emisores = signal<Emisor[] | undefined>(undefined);
   readonly tiposDisponibles = signal<string[]>([]);
   readonly nuevoNombre = signal('');
+  readonly tiposNuevos = signal<string[]>([]);
   readonly creado = signal<{ nombre: string; token: string } | undefined>(
     undefined
   );
@@ -103,9 +104,19 @@ export class EmisoresConfigComponent {
 
   abrirAlta(): void {
     this.nuevoNombre.set('');
+    this.tiposNuevos.set([...this.tipos()]);
     this.creado.set(undefined);
     this.mensaje.set(undefined);
     this.dialogo.set(true);
+  }
+
+  toggleTipoNuevo(tipo: string): void {
+    const actuales = this.tiposNuevos();
+    if (actuales.includes(tipo)) {
+      this.tiposNuevos.set(actuales.filter((t) => t !== tipo));
+    } else {
+      this.tiposNuevos.set([...actuales, tipo]);
+    }
   }
 
   cerrarDialogo(): void {
@@ -120,7 +131,12 @@ export class EmisoresConfigComponent {
     }
     this.ocupado.set(true);
     this.admin
-      .crearEmisor({ nombre, tipos: this.tipos(), accountId: this.cuenta() })
+      .crearEmisor({
+        nombre,
+        tipos:
+          this.tiposNuevos().length > 0 ? this.tiposNuevos() : this.tipos(),
+        accountId: this.cuenta()
+      })
       .subscribe({
         next: (emisor) => {
           this.creado.set({ nombre: emisor.nombre, token: emisor.token });

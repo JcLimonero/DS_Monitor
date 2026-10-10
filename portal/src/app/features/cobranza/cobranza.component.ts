@@ -13,7 +13,10 @@ import {
   CrmPagoEstatus,
   type CrmCliente,
   type CrmCotizacion,
+  type CrmFactura,
+  type CrmOrdenCompra,
   type CrmPagoProgramado,
+  type CrmPartida,
   type CrmProyecto
 } from '../../core/models/crm-nativo.model';
 import { CrmService } from '../../core/sources/gateway/crm.service';
@@ -96,8 +99,105 @@ interface PagoConContexto extends CrmPagoProgramado {
         </select>
       </div>
 
-      <!-- Lista de pagos -->
-      @if (pagosFiltrados().length === 0) {
+      @if (crm.puedeVerCobranza()) {
+        <div class="mb-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="btn"
+            [class.btn-activo]="vista() === 'pagos'"
+            (click)="vista.set('pagos')">
+            Pagos
+          </button>
+          <button
+            type="button"
+            class="btn"
+            [class.btn-activo]="vista() === 'oc'"
+            (click)="vista.set('oc')">
+            Órdenes de compra
+          </button>
+          <button
+            type="button"
+            class="btn"
+            [class.btn-activo]="vista() === 'facturas'"
+            (click)="vista.set('facturas')">
+            Facturas
+          </button>
+          @if (crm.puedeVerCostos()) {
+            <button
+              type="button"
+              class="btn"
+              [class.btn-activo]="vista() === 'margen'"
+              (click)="vista.set('margen')">
+              Partidas y margen
+            </button>
+          }
+        </div>
+      }
+
+      @if (vista() === 'oc') {
+        @if (ordenes().length === 0) {
+          <pt-empty-state
+            icon="monitoreo"
+            title="Sin órdenes de compra"
+            hint="Aún no hay OC registradas." />
+        } @else {
+          <div class="lista">
+            @for (oc of ordenes(); track oc.id) {
+              <div class="card pago-card">
+                <div class="pago-info">
+                  <span class="pago-cotizacion">OC {{ oc.folio }}</span>
+                  <span class="pago-detalles">{{ oc.periodo }}</span>
+                </div>
+                <span class="pago-monto">{{
+                  oc.monto | moneda: oc.moneda
+                }}</span>
+              </div>
+            }
+          </div>
+        }
+      } @else if (vista() === 'facturas') {
+        @if (facturas().length === 0) {
+          <pt-empty-state
+            icon="monitoreo"
+            title="Sin facturas"
+            hint="Aún no hay facturas registradas." />
+        } @else {
+          <div class="lista">
+            @for (f of facturas(); track f.id) {
+              <div class="card pago-card">
+                <div class="pago-info">
+                  <span class="pago-cotizacion">{{ f.folio ?? f.uuid }}</span>
+                  <span class="pago-detalles">{{ f.fechaEmision | dia }}</span>
+                </div>
+                <span class="pago-monto">{{ f.total | moneda: f.moneda }}</span>
+              </div>
+            }
+          </div>
+        }
+      } @else if (vista() === 'margen' && crm.puedeVerCostos()) {
+        @if (partidas().length === 0) {
+          <pt-empty-state
+            icon="monitoreo"
+            title="Sin partidas"
+            hint="Aún no hay partidas con costo." />
+        } @else {
+          <div class="lista">
+            @for (p of partidas(); track p.id) {
+              <div class="card pago-card">
+                <div class="pago-info">
+                  <span class="pago-cotizacion">{{ p.descripcion }}</span>
+                  <span class="pago-detalles"
+                    >Costo {{ p.costoTotal | moneda: p.moneda }}</span
+                  >
+                </div>
+                <span class="pago-monto">{{
+                  p.importe | moneda: p.moneda
+                }}</span>
+              </div>
+            }
+          </div>
+        }
+      } @else if (pagosFiltrados().length === 0) {
         <pt-empty-state
           icon="monitoreo"
           title="Sin pagos"
@@ -329,29 +429,66 @@ export class CobranzaComponent {
 
   readonly filtroEstatus = signal('');
   readonly filtroCliente = signal('');
+  readonly vista = signal<'pagos' | 'oc' | 'facturas' | 'margen'>('pagos');
   readonly error = signal<string | null>(null);
 
   private readonly datos$ = combineLatest([
     this.crm.obtenerPagos(),
     this.crm.obtenerCotizaciones(),
     this.crm.obtenerProyectos(),
-    this.crm.obtenerClientes()
+    this.crm.obtenerClientes(),
+    this.crm.obtenerOrdenesCompra().pipe(catchError(() => of([]))),
+    this.crm.obtenerFacturas().pipe(catchError(() => of([]))),
+    this.crm.obtenerPartidas().pipe(catchError(() => of([] as CrmPartida[])))
   ]).pipe(
-    map(([pagos, cotizaciones, proyectos, clientes]) => ({
-      pagos,
-      cotizaciones,
-      proyectos,
-      clientes
-    })),
+    map(
+      ([
+        pagos,
+        cotizaciones,
+        proyectos,
+        clientes,
+        ordenes,
+        facturas,
+        partidas
+      ]) => ({
+        pagos,
+        cotizaciones,
+        proyectos,
+        clientes,
+        ordenes,
+        facturas,
+        partidas
+      })
+    ),
     catchError((err) => {
       this.error.set(err.message || 'Error al cargar cobranza');
-      return of({ pagos: [], cotizaciones: [], proyectos: [], clientes: [] });
+      return of({
+        pagos: [],
+        cotizaciones: [],
+        proyectos: [],
+        clientes: [],
+        ordenes: [] as CrmOrdenCompra[],
+        facturas: [] as CrmFactura[],
+        partidas: [] as CrmPartida[]
+      });
     })
   );
 
   private readonly datos = toSignal(this.datos$, {
-    initialValue: { pagos: [], cotizaciones: [], proyectos: [], clientes: [] }
+    initialValue: {
+      pagos: [],
+      cotizaciones: [],
+      proyectos: [],
+      clientes: [],
+      ordenes: [] as CrmOrdenCompra[],
+      facturas: [] as CrmFactura[],
+      partidas: [] as CrmPartida[]
+    }
   });
+
+  readonly ordenes = computed(() => this.datos().ordenes);
+  readonly facturas = computed(() => this.datos().facturas);
+  readonly partidas = computed(() => this.datos().partidas);
 
   readonly clientes = computed(() => this.datos().clientes);
 

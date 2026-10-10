@@ -29,6 +29,7 @@ import { IconComponent, IconName } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 import { DayPipe, TimePipe } from '../../ui/portal.pipes';
 import { TaskCardComponent } from '../../ui/task-card.component';
+import { CrmService } from '../../core/sources/gateway/crm.service';
 import { IaResumenComponent } from '../ia/ia-resumen.component';
 
 /** Un aviso de arriba de la pagina: que pasa, que tan grave y a donde lleva. */
@@ -92,6 +93,7 @@ export class HoyComponent {
   readonly vpsMal = inject(VpsService).mal;
   /** Portales de Coolify detenidos o sin salud. */
   readonly portalesMal = inject(PortalesService).mal;
+  readonly crm = inject(CrmService);
 
   readonly fecha = capitalizar(
     new Date().toLocaleDateString('es-MX', {
@@ -150,6 +152,21 @@ export class HoyComponent {
           )
           .join(' · '),
         ruta: '/ejecuciones'
+      });
+    }
+    const sinResp = this.crm.sinResponsable().total;
+    if (sinResp > 0) {
+      avisos.push({
+        id: 'sin-responsable',
+        tono: 'warn',
+        icono: 'equipo',
+        titulo:
+          sinResp === 1
+            ? '1 tarea sin responsable'
+            : `${sinResp} tareas sin responsable`,
+        detalle: 'Pendientes, funcionalidades, hitos o riesgos sin asignar.',
+        ruta: '/pendientes',
+        queryParams: { owner: 'nadie' }
       });
     }
     const fuentes = this.fuentesMal();

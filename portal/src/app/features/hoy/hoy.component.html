@@ -9,6 +9,12 @@
           {{ vencidos().length }} vencidos
         </span>
         · {{ paraHoy().length }} para hoy
+        @if (crm.sinResponsable().total > 0) {
+          ·
+          <span class="font-semibold text-amber-800 dark:text-amber-200">
+            {{ crm.sinResponsable().total }} sin responsable
+          </span>
+        }
       </p>
       <!-- En el celular la entrada a Dictar es el boton flotante del armazon. -->
       <a

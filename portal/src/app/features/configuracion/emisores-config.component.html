@@ -140,6 +140,26 @@
               [ngModel]="nuevoNombre()"
               (ngModelChange)="nuevoNombre.set($event)" />
           </label>
+          @if (tipos().length > 1) {
+            <div>
+              <span class="mb-1 block text-xs font-medium text-ink-muted"
+                >Tipos que puede usar</span
+              >
+              <div class="flex flex-wrap gap-2">
+                @for (tipo of tipos(); track tipo) {
+                  <button
+                    type="button"
+                    class="min-h-11 rounded-full px-3 py-1 text-xs font-medium"
+                    [class.bg-accent-500]="tiposNuevos().includes(tipo)"
+                    [class.text-white]="tiposNuevos().includes(tipo)"
+                    [class.bg-surface-muted]="!tiposNuevos().includes(tipo)"
+                    (click)="toggleTipoNuevo(tipo)">
+                    {{ tipo }}
+                  </button>
+                }
+              </div>
+            </div>
+          }
           @if (mensaje(); as m) {
             <p
               class="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200">
