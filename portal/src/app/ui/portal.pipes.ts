@@ -4,7 +4,8 @@ import { formatDay, formatRelative, formatTime } from '../core/util/date.util';
 /** "hace 2 horas", "en 3 días". Vacío si no hay fecha. */
 @Pipe({ name: 'relativo' })
 export class RelativePipe implements PipeTransform {
-  transform(iso: string | undefined): string {
+  transform(iso: string | null | undefined): string {
+    if (iso === null) return 'por confirmar';
     return formatRelative(iso);
   }
 }
@@ -46,7 +47,10 @@ const SYMBOLS: Record<string, string> = {
 
 @Pipe({ name: 'moneda' })
 export class MoneyPipe implements PipeTransform {
-  transform(amount: number | undefined, currency = 'MXN'): string {
+  transform(amount: number | null | undefined, currency = 'MXN'): string {
+    if (amount === null) {
+      return 'sin monto';
+    }
     if (amount === undefined || Number.isNaN(amount)) {
       return '-';
     }

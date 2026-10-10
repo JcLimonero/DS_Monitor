@@ -120,9 +120,15 @@ interface PagoConContexto extends CrmPagoProgramado {
                       </span>
                     }
                   </span>
-                  <span class="chip chip--{{ pago.estatus }}">
-                    {{ estatusLabel[pago.estatus] }}
-                  </span>
+                  @if (pago.estatus) {
+                    <span class="chip chip--{{ pago.estatus }}">
+                      {{ estatusLabel[pago.estatus] }}
+                    </span>
+                  } @else {
+                    <span class="chip chip--por_confirmar">
+                      Por confirmar
+                    </span>
+                  }
                 </div>
                 <div class="pago-detalles">
                   <span class="pago-numero">
@@ -381,6 +387,9 @@ export class CobranzaComponent {
     return resultado.sort((a, b) => {
       if (a.estatus === 'vencido' && b.estatus !== 'vencido') return -1;
       if (a.estatus !== 'vencido' && b.estatus === 'vencido') return 1;
+      if (!a.fechaEsperada && !b.fechaEsperada) return 0;
+      if (!a.fechaEsperada) return 1;
+      if (!b.fechaEsperada) return -1;
       return (
         new Date(a.fechaEsperada).getTime() -
         new Date(b.fechaEsperada).getTime()
@@ -390,20 +399,23 @@ export class CobranzaComponent {
 
   readonly totalPagado = computed(() =>
     this.pagosConContexto()
-      .filter((p) => p.estatus === 'pagado')
-      .reduce((sum, p) => sum + p.monto, 0)
+      .filter((p) => p.estatus === 'pagado' && p.monto != null)
+      .reduce((sum, p) => sum + (p.monto ?? 0), 0)
   );
 
   readonly totalPendiente = computed(() =>
     this.pagosConContexto()
-      .filter((p) => p.estatus !== 'pagado' && p.estatus !== 'vencido')
-      .reduce((sum, p) => sum + p.monto, 0)
+      .filter(
+        (p) =>
+          p.estatus !== 'pagado' && p.estatus !== 'vencido' && p.monto != null
+      )
+      .reduce((sum, p) => sum + (p.monto ?? 0), 0)
   );
 
   readonly totalVencido = computed(() =>
     this.pagosConContexto()
-      .filter((p) => p.estatus === 'vencido')
-      .reduce((sum, p) => sum + p.monto, 0)
+      .filter((p) => p.estatus === 'vencido' && p.monto != null)
+      .reduce((sum, p) => sum + (p.monto ?? 0), 0)
   );
 
   filtrarEstatus(event: Event): void {
@@ -418,6 +430,7 @@ export class CobranzaComponent {
 
   estaVencido(pago: CrmPagoProgramado): boolean {
     if (pago.estatus === 'pagado') return false;
+    if (!pago.fechaEsperada) return false;
     return new Date(pago.fechaEsperada) < new Date();
   }
 }
