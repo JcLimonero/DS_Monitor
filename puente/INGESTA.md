@@ -749,3 +749,155 @@ esto después de enviar el correo.
 
 La cotización debe estar autorizada (`autorizadaPorCarlosEn` no vacío) para
 poder marcarla como enviada.
+
+---
+
+## Ingesta del CRM nativo (rutas directas)
+
+El CRM nativo también acepta carga directa de datos sin el sobre estándar.
+Estas rutas son más simples y están diseñadas para carga masiva desde un bot
+o script externo.
+
+**El emisor necesita el tipo `crm-nativo`.** Todas las rutas requieren
+`Authorization: Bearer <token>`.
+
+### Clientes — `POST /ingesta/crm-nativo/clientes`
+
+```json
+[
+  {
+    "id": "grupo-vanguardia",
+    "nombre": "Grupo Vanguardia",
+    "razonSocial": "Vanguardia Automotriz SA de CV",
+    "rfc": "VAU850101XXX",
+    "tipo": "directo",
+    "driveFolderUrl": "https://drive.google.com/drive/folders/..."
+  }
+]
+```
+
+### Contactos — `POST /ingesta/crm-nativo/contactos`
+
+```json
+[
+  {
+    "id": "marco-lopez",
+    "clienteId": "grupo-vanguardia",
+    "nombre": "Marco Antonio López Avelar",
+    "puesto": "Gerente de Sistemas",
+    "correo": "gerentesistemas@grupovanguardia.com",
+    "esResponsableProyecto": true
+  }
+]
+```
+
+### Proyectos — `POST /ingesta/crm-nativo/proyectos`
+
+```json
+[
+  {
+    "id": "glpi-vanguardia",
+    "clienteId": "grupo-vanguardia",
+    "empresaAtiendeId": "dealer-solutions",
+    "nombre": "Migración GLPI",
+    "estado": "en_desarrollo",
+    "responsableClienteId": "marco-lopez"
+  }
+]
+```
+
+### Cotizaciones — `POST /ingesta/crm-nativo/cotizaciones`
+
+```json
+[
+  {
+    "id": "cot-12345",
+    "proyectoId": "glpi-vanguardia",
+    "folio": "DS-2026-042",
+    "empresaFacturaId": "dealer-solutions",
+    "nombre": "Implementación GLPI fase 1",
+    "subtotal": 150000,
+    "iva": 24000,
+    "total": 174000,
+    "moneda": "MXN",
+    "esquemaCobro": "50-50",
+    "estatus": "enviada",
+    "cotizacionExternaId": "1234567890abcdef/DS-2026-042.pdf"
+  }
+]
+```
+
+**Notas importantes para la carga inicial:**
+
+- **El `id` es la llave única**, no el folio. El folio es opcional y no único
+  (en datos reales ~35% no tiene folio y algunos se repiten).
+- **`cotizacionExternaId`** es la llave externa para idempotencia: si ya existe
+  un registro con ese valor, se actualiza en lugar de crear uno nuevo. Úsalo
+  para identificar el documento original (por ejemplo, la ruta del PDF en
+  Drive: `"folder-id/nombre-archivo.pdf"`).
+- **`estatus: "desconocido"`** es válido para cotizaciones sin resultado
+  conocido (74% en datos reales).
+- La respuesta incluye cuántos se crearon, actualizaron y errores por índice.
+
+### Pagos programados — `POST /ingesta/crm-nativo/pagos`
+
+```json
+[
+  {
+    "id": "pago-1-cot-12345",
+    "cotizacionId": "cot-12345",
+    "numero": 1,
+    "totalPagos": 2,
+    "monto": 87000,
+    "moneda": "MXN",
+    "fechaEsperada": "2026-10-15T00:00:00Z",
+    "estatus": "por_facturar"
+  }
+]
+```
+
+### Actividades — `POST /ingesta/crm-nativo/actividades`
+
+```json
+[
+  {
+    "clienteId": "grupo-vanguardia",
+    "proyectoId": "glpi-vanguardia",
+    "tipo": "junta",
+    "resumen": "Revisión semanal de avances",
+    "fecha": "2026-10-10T10:00:00Z"
+  }
+]
+```
+
+### Funcionalidades — `POST /ingesta/crm-nativo/funcionalidades`
+
+```json
+[
+  {
+    "id": "func-login",
+    "proyectoId": "glpi-vanguardia",
+    "titulo": "Implementar login SSO",
+    "estado": "en_progreso",
+    "responsableId": "giovana",
+    "prioridad": "alta",
+    "fechaCompromiso": "2026-10-15T00:00:00Z"
+  }
+]
+```
+
+### Respuesta de las rutas de ingesta
+
+Todas las rutas devuelven el mismo formato:
+
+```json
+{
+  "recibidos": 10,
+  "creados": 8,
+  "actualizados": 2,
+  "errores": ["[3] El campo 'nombre' es obligatorio"]
+}
+```
+
+Los errores incluyen el índice del registro que falló. Los registros válidos
+se guardan aunque otros fallen.

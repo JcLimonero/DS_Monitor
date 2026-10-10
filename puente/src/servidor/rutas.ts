@@ -128,6 +128,7 @@ import type {
   VpsStatus
 } from '../nucleo/contrato.js';
 import { registrarRutasCrm, type DatosCrm } from './rutas-crm.js';
+import { registrarRutasIngestaCrm } from './rutas-ingesta-crm.js';
 
 const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   pendiente: 'Pendiente',
@@ -5406,6 +5407,35 @@ export function construirRutas(
     };
   });
 
+  // Funcionalidades asignadas a la persona (CRM nativo).
+  router.get('/mio/:token/funcionalidades', async ({ segmentos }) => {
+    const persona = await personaDeLiga(segmentos[1] as string);
+    const funcionalidades = datos.crmFuncionalidades.leer();
+    const proyectos = datos.crmProyectos.leer();
+    const clientes = datos.crmClientes.leer();
+
+    // Filtrar por responsable (por id o correo).
+    const mias = funcionalidades.filter(
+      (f) =>
+        f.responsableId === persona.id ||
+        (persona.email &&
+          f.responsableId?.toLowerCase() === persona.email.toLowerCase())
+    );
+
+    // Agregar contexto de proyecto y cliente.
+    return mias.map((f) => {
+      const proyecto = proyectos.find((p) => p.id === f.proyectoId);
+      const cliente = proyecto
+        ? clientes.find((c) => c.id === proyecto.clienteId)
+        : undefined;
+      return {
+        ...f,
+        proyectoNombre: proyecto?.nombre,
+        clienteNombre: cliente?.nombre
+      };
+    });
+  });
+
   router.post('/mio/:token/anotar', async (contexto) => {
     const persona = await personaDeLiga(contexto.segmentos[1] as string);
     const cuerpo = (contexto.cuerpo ?? {}) as {
@@ -6024,6 +6054,13 @@ export function construirRutas(
     correoDeSesion: (contexto) => acceso.sesionDe(tokenDe(contexto))?.correo,
     correosDelDueno: () => [...correosDelDueno()],
     equipo: equipoCompleto
+  });
+
+  // Ingesta del CRM nativo: carga masiva desde sistemas externos.
+  registrarRutasIngestaCrm({
+    router,
+    datos: datosCrm,
+    emisores: todosLosEmisores
   });
 
   // El propio puente se reporta en Ejecuciones: cada tarea programada deja su
