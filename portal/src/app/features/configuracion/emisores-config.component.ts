@@ -37,10 +37,13 @@ export class EmisoresConfigComponent {
   readonly cuenta = input('ops');
   /** Si el panel es el de ejecuciones, la nota de "cómo se manda" es otra. */
   readonly deEjecuciones = computed(() => this.tipos()[0] === 'ejecuciones');
+  /** Si se permiten todos los tipos (panel de Director). */
+  readonly modoAdmin = input(false);
 
   readonly disponible = this.admin.disponible;
   readonly apiUrl = this.admin.apiUrl;
   readonly emisores = signal<Emisor[] | undefined>(undefined);
+  readonly tiposDisponibles = signal<string[]>([]);
   readonly nuevoNombre = signal('');
   readonly creado = signal<{ nombre: string; token: string } | undefined>(
     undefined
@@ -49,16 +52,22 @@ export class EmisoresConfigComponent {
   readonly ocupado = signal(false);
   readonly dialogo = signal(false);
 
+  readonly editando = signal<Emisor | undefined>(undefined);
+  readonly tiposEditados = signal<string[]>([]);
+  readonly dialogoEdicion = signal(false);
+
   readonly tituloDialogo = computed(() =>
     this.creado() ? 'Token creado' : 'Crear token'
   );
 
   /** Solo los emisores que pueden mandar alguno de los tipos de este panel. */
-  readonly propios = computed(() =>
-    (this.emisores() ?? []).filter((e) =>
-      e.tipos.some((t) => this.tipos().includes(t))
-    )
-  );
+  readonly propios = computed(() => {
+    const lista = this.emisores() ?? [];
+    if (this.modoAdmin()) {
+      return lista;
+    }
+    return lista.filter((e) => e.tipos.some((t) => this.tipos().includes(t)));
+  });
 
   readonly ejemplo = computed(() => {
     const tipo = this.tipos()[0] ?? 'pendientes';
@@ -74,6 +83,7 @@ export class EmisoresConfigComponent {
   constructor() {
     if (this.disponible) {
       this.cargar();
+      this.cargarTiposDisponibles();
     }
   }
 
@@ -81,6 +91,13 @@ export class EmisoresConfigComponent {
     this.admin.emisores().subscribe({
       next: (lista) => this.emisores.set(lista),
       error: (error: unknown) => this.mensaje.set(describe(error))
+    });
+  }
+
+  cargarTiposDisponibles(): void {
+    this.admin.tiposEmisorDisponibles().subscribe({
+      next: (tipos) => this.tiposDisponibles.set(tipos),
+      error: () => this.tiposDisponibles.set([])
     });
   }
 
@@ -129,6 +146,48 @@ export class EmisoresConfigComponent {
       },
       error: (error: unknown) => this.mensaje.set(describe(error))
     });
+  }
+
+  abrirEdicion(emisor: Emisor): void {
+    this.editando.set(emisor);
+    this.tiposEditados.set([...emisor.tipos]);
+    this.mensaje.set(undefined);
+    this.dialogoEdicion.set(true);
+  }
+
+  cerrarEdicion(): void {
+    this.dialogoEdicion.set(false);
+    this.editando.set(undefined);
+  }
+
+  toggleTipo(tipo: string): void {
+    const actuales = this.tiposEditados();
+    if (actuales.includes(tipo)) {
+      this.tiposEditados.set(actuales.filter((t) => t !== tipo));
+    } else {
+      this.tiposEditados.set([...actuales, tipo]);
+    }
+  }
+
+  guardarTipos(): void {
+    const emisor = this.editando();
+    if (!emisor || this.tiposEditados().length === 0) {
+      return;
+    }
+    this.ocupado.set(true);
+    this.admin
+      .actualizarTiposEmisor(emisor.nombre, this.tiposEditados())
+      .subscribe({
+        next: () => {
+          this.ocupado.set(false);
+          this.cerrarEdicion();
+          this.cargar();
+        },
+        error: (error: unknown) => {
+          this.mensaje.set(describe(error));
+          this.ocupado.set(false);
+        }
+      });
   }
 }
 

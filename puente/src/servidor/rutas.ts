@@ -1403,6 +1403,8 @@ export function construirRutas(
     ...datos.emisores.leer()
   ];
 
+  router.get('/emisores/tipos-disponibles', async () => TIPOS_EMISOR);
+
   router.get('/emisores', async () =>
     todosLosEmisores().map((e) => ({
       nombre: e.nombre,
@@ -1470,6 +1472,36 @@ export function construirRutas(
       datos.emisores.leer().filter((e) => e.nombre !== nombre)
     );
     return { ok: true };
+  });
+
+  router.post('/emisores/actualizar-tipos', async (contexto) => {
+    exigirAdmin(contexto, cfg(), acceso);
+    const cuerpo = (contexto.cuerpo ?? {}) as {
+      nombre?: string;
+      tipos?: string[];
+    };
+    const nombre = (cuerpo.nombre ?? '').trim();
+    if (!nombre) {
+      throw new ErrorPuente('El nombre del emisor es obligatorio.', 400);
+    }
+    const emisorExistente = datos.emisores
+      .leer()
+      .find((e) => e.nombre === nombre);
+    if (!emisorExistente) {
+      throw new ErrorPuente(`No existe un emisor llamado "${nombre}".`, 404);
+    }
+    const tipos = (cuerpo.tipos ?? []).filter((t) => TIPOS_EMISOR.includes(t));
+    if (tipos.length === 0) {
+      throw new ErrorPuente(
+        'El emisor necesita al menos un tipo de envío.',
+        400
+      );
+    }
+    const actualizado = { ...emisorExistente, tipos };
+    await datos.emisores.escribir(
+      datos.emisores.leer().map((e) => (e.nombre === nombre ? actualizado : e))
+    );
+    return { nombre, tipos, ok: true };
   });
 
   router.post('/equipo/guardar', async (contexto) => {

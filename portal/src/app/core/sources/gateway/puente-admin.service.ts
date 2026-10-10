@@ -547,6 +547,23 @@ export class PuenteAdminService {
     );
   }
 
+  /** Actualiza los tipos de envío de un emisor sin cambiar su token. */
+  actualizarTiposEmisor(
+    nombre: string,
+    tipos: string[]
+  ): Observable<{ nombre: string; tipos: string[]; ok: boolean }> {
+    return this.http.post<{ nombre: string; tipos: string[]; ok: boolean }>(
+      this.url('/emisores/actualizar-tipos'),
+      { nombre, tipos },
+      { headers: this.headers() }
+    );
+  }
+
+  /** Lista de tipos de envío disponibles para emisores. */
+  tiposEmisorDisponibles(): Observable<string[]> {
+    return this.http.get<string[]>(this.url('/emisores/tipos-disponibles'));
+  }
+
   /** Decide una solicitud de reasignación: aprobar (y a quién) o rechazar. */
   decidirReasignacion(datos: {
     id: string;
