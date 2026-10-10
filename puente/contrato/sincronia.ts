@@ -66,6 +66,20 @@ type _CrmFuncionalidad = Igual<
   Portal.CrmFuncionalidad,
   Puente.CrmFuncionalidad
 >;
+type _CrmCambioEtapa = Igual<Portal.CrmCambioEtapa, Puente.CrmCambioEtapa>;
+type _CrmAvanceProyecto = Igual<
+  Portal.CrmAvanceProyecto,
+  Puente.CrmAvanceProyecto
+>;
+type _CrmHito = Igual<Portal.CrmHito, Puente.CrmHito>;
+type _CrmRiesgo = Igual<Portal.CrmRiesgo, Puente.CrmRiesgo>;
+type _CrmAlertasEstancados = Igual<
+  Portal.CrmAlertasEstancados,
+  Puente.CrmAlertasEstancados
+>;
+type _CrmOrdenCompra = Igual<Portal.CrmOrdenCompra, Puente.CrmOrdenCompra>;
+type _CrmFactura = Igual<Portal.CrmFactura, Puente.CrmFactura>;
+type _CrmPartida = Igual<Portal.CrmPartida, Puente.CrmPartida>;
 type _RolCrm = Igual<Portal.RolCrm, Puente.RolCrm>;
 type _UsuarioCrm = Igual<Portal.UsuarioCrm, Puente.UsuarioCrm>;
 
@@ -107,9 +121,25 @@ const comprobado: [
   _CrmProximoPaso,
   _CrmActividadCliente,
   _CrmFuncionalidad,
+  _CrmCambioEtapa,
+  _CrmAvanceProyecto,
+  _CrmHito,
+  _CrmRiesgo,
+  _CrmAlertasEstancados,
+  _CrmOrdenCompra,
+  _CrmFactura,
+  _CrmPartida,
   _RolCrm,
   _UsuarioCrm
 ] = [
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
   true,
   true,
   true,

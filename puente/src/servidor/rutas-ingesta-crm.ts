@@ -785,10 +785,11 @@ export function registrarRutasIngestaCrm(deps: DependenciasIngesta): void {
     const cuerpo = contexto.cuerpo as {
       funcionalidades?: { id: string; responsableId: string }[];
       hitos?: { id: string; responsableId?: string }[];
+      riesgos?: { id: string; responsableId?: string }[];
     };
 
     const ahora = new Date().toISOString();
-    const resultado = { funcionalidades: 0, hitos: 0 };
+    const resultado = { funcionalidades: 0, hitos: 0, riesgos: 0 };
 
     if (cuerpo.funcionalidades?.length) {
       const lista = datos.funcionalidades.leer();
@@ -806,14 +807,27 @@ export function registrarRutasIngestaCrm(deps: DependenciasIngesta): void {
     if (cuerpo.hitos?.length) {
       const lista = datos.hitos.leer();
       const porId = new Map(lista.map((h) => [h.id, h]));
-      for (const { id } of cuerpo.hitos) {
+      for (const { id, responsableId } of cuerpo.hitos) {
         const hito = porId.get(id);
-        if (hito) {
-          porId.set(id, { ...hito, actualizadoEn: ahora });
+        if (hito && responsableId) {
+          porId.set(id, { ...hito, responsableId, actualizadoEn: ahora });
           resultado.hitos++;
         }
       }
       await datos.hitos.escribir([...porId.values()]);
+    }
+
+    if (cuerpo.riesgos?.length) {
+      const lista = datos.riesgos.leer();
+      const porId = new Map(lista.map((r) => [r.id, r]));
+      for (const { id, responsableId } of cuerpo.riesgos ?? []) {
+        const riesgo = porId.get(id);
+        if (riesgo && responsableId) {
+          porId.set(id, { ...riesgo, responsableId, actualizadoEn: ahora });
+          resultado.riesgos++;
+        }
+      }
+      await datos.riesgos.escribir([...porId.values()]);
     }
 
     return resultado;
@@ -903,23 +917,25 @@ export function registrarRutasLecturaTareas(
         };
       });
 
-    const hitosSinResponsable = hitos.map((h) => {
-      const proy = proyectoPorId.get(h.proyectoId);
-      return {
-        tipo: 'hito' as const,
-        id: h.id,
-        titulo: h.nombre,
-        origen: 'crm-nativo',
-        proyecto: proy ? { id: proy.id, nombre: proy.nombre } : null,
-        fechaCompromiso: h.fechaCompromiso,
-        completado: h.completado,
-        creado: h.actualizadoEn,
-        actualizado: h.actualizadoEn
-      };
-    });
+    const hitosSinResponsable = hitos
+      .filter((h) => !h.completado && !h.responsableId)
+      .map((h) => {
+        const proy = proyectoPorId.get(h.proyectoId);
+        return {
+          tipo: 'hito' as const,
+          id: h.id,
+          titulo: h.nombre,
+          origen: 'crm-nativo',
+          proyecto: proy ? { id: proy.id, nombre: proy.nombre } : null,
+          fechaCompromiso: h.fechaCompromiso,
+          completado: h.completado,
+          creado: h.actualizadoEn,
+          actualizado: h.actualizadoEn
+        };
+      });
 
     const riesgosSinResponsable = riesgos
-      .filter((r) => r.abierto && !r.reportadoPor)
+      .filter((r) => r.abierto && !r.responsableId)
       .map((r) => {
         const proy = proyectoPorId.get(r.proyectoId);
         return {
