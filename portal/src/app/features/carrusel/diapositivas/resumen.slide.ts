@@ -27,6 +27,7 @@ import {
 import { PortalStore } from '../../../core/state/portal.store';
 import { accountsOf } from '../../../core/util/meetings.util';
 import { plural } from '../../../core/util/text.util';
+import { CrmService } from '../../../core/sources/gateway/crm.service';
 import { IaService } from '../../../core/ia/ia.service';
 import { IconComponent } from '../../../ui/icon.component';
 import { IaResumenComponent } from '../../ia/ia-resumen.component';
@@ -73,6 +74,9 @@ const AVISOS = 8;
             {{ vencidos() }} vencidos
           </span>
           · {{ paraHoy() }} para hoy
+          @if (sinResponsable() > 0) {
+            · {{ sinResponsable() }} sin responsable
+          }
         </p>
       </div>
 
@@ -198,6 +202,8 @@ const AVISOS = 8;
 export class ResumenSlideComponent {
   private readonly store = inject(PortalStore);
   readonly ia = inject(IaService);
+  private readonly crm = inject(CrmService);
+  readonly sinResponsable = computed(() => this.crm.sinResponsable().total);
 
   constructor() {
     this.ia.estado().subscribe({ error: () => undefined });
@@ -271,6 +277,15 @@ export class ResumenSlideComponent {
         texto: `${plural(this.vencidos(), 'pendiente vencido', 'pendientes vencidos')}`,
         detalle: 'Ver la pantalla de pendientes críticos',
         grave: true
+      });
+    }
+
+    if (this.sinResponsable() > 0) {
+      avisos.push({
+        id: 'sin-responsable',
+        texto: `${plural(this.sinResponsable(), 'tarea sin responsable', 'tareas sin responsable')}`,
+        detalle: 'Pendientes, funcionalidades, hitos o riesgos',
+        grave: false
       });
     }
 

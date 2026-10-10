@@ -509,7 +509,8 @@ export class PendientesComponent {
   readonly canAdd = computed(
     () =>
       this.newTitle().trim().length > 0 &&
-      (this.vista() === 'personales' || this.newCompany() !== '')
+      (this.vista() === 'personales' ||
+        (this.newCompany() !== '' && this.newPrincipal() !== ''))
   );
 
   addTask(): void {

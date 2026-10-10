@@ -6,8 +6,17 @@ import {
   signal
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { catchError, combineLatest, map, of } from 'rxjs';
+import {
+  catchError,
+  combineLatest,
+  map,
+  of,
+  startWith,
+  Subject,
+  switchMap
+} from 'rxjs';
 import {
   CRM_FUNCIONALIDAD_ESTADO_LABEL,
   CRM_FUNCIONALIDAD_PRIORIDAD_LABEL,
@@ -18,6 +27,7 @@ import {
 import type { Person } from '../../core/models';
 import { CrmService } from '../../core/sources/gateway/crm.service';
 import { PuenteAdminService } from '../../core/sources/gateway/puente-admin.service';
+import { DialogoComponent } from '../../ui/dialogo.component';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
@@ -40,6 +50,8 @@ interface ColumnaKanban {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     RouterLink,
+    FormsModule,
+    DialogoComponent,
     EmptyStateComponent,
     IconComponent,
     PageHeaderComponent,
@@ -74,10 +86,24 @@ interface ColumnaKanban {
           [value]="filtroResponsable()"
           (change)="filtrarResponsable($event)">
           <option value="">Todos los responsables</option>
+          <option value="__nadie__">Sin responsable</option>
           @for (p of equipo(); track p.id) {
             <option [value]="p.id">{{ p.name }}</option>
           }
         </select>
+        @if (crm.puedeEditarDesarrollo()) {
+          <button type="button" class="btn" (click)="abrirAlta()">
+            <pt-icon name="mas" class="h-4 w-4" />
+            Funcionalidad
+          </button>
+          <button
+            type="button"
+            class="btn"
+            [disabled]="sinResponsable().length === 0"
+            (click)="abrirLote()">
+            Asignar en lote
+          </button>
+        }
       </div>
 
       <!-- Resumen de avance -->
@@ -170,6 +196,87 @@ interface ColumnaKanban {
             </div>
           }
         </div>
+      }
+
+      @if (dialogo() === 'alta') {
+        <pt-dialogo titulo="Nueva funcionalidad" (cerrar)="dialogo.set(null)">
+          <form class="grid gap-3" (ngSubmit)="guardarAlta()">
+            <label>
+              <span class="mb-1 block text-xs font-medium text-ink-muted"
+                >Proyecto</span
+              >
+              <select class="field" [(ngModel)]="altaProyecto" name="proy">
+                <option value="">Elige un proyecto</option>
+                @for (p of proyectos(); track p.id) {
+                  <option [value]="p.id">{{ p.nombre }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              <span class="mb-1 block text-xs font-medium text-ink-muted"
+                >Título</span
+              >
+              <input class="field" [(ngModel)]="altaTitulo" name="titulo" />
+            </label>
+            <label>
+              <span class="mb-1 block text-xs font-medium text-ink-muted"
+                >Responsable</span
+              >
+              <select class="field" [(ngModel)]="altaResponsable" name="resp">
+                <option value="">Elige a alguien</option>
+                @for (p of equipo(); track p.id) {
+                  <option [value]="p.id">{{ p.name }}</option>
+                }
+              </select>
+            </label>
+          </form>
+          <div class="dialogo-pie flex gap-2">
+            <button
+              type="button"
+              class="btn btn-primary"
+              [disabled]="
+                !altaTitulo.trim() || !altaProyecto || !altaResponsable
+              "
+              (click)="guardarAlta()">
+              Guardar
+            </button>
+            <button type="button" class="btn" (click)="dialogo.set(null)">
+              Cancelar
+            </button>
+          </div>
+        </pt-dialogo>
+      }
+
+      @if (dialogo() === 'lote') {
+        <pt-dialogo titulo="Asignar en lote" (cerrar)="dialogo.set(null)">
+          <p class="mb-3 text-sm text-ink-muted">
+            {{ sinResponsable().length }} sin responsable. Elige a quién se las
+            asignas.
+          </p>
+          <label>
+            <span class="mb-1 block text-xs font-medium text-ink-muted"
+              >Responsable</span
+            >
+            <select class="field" [(ngModel)]="loteResponsable" name="lote">
+              <option value="">Elige a alguien</option>
+              @for (p of equipo(); track p.id) {
+                <option [value]="p.id">{{ p.name }}</option>
+              }
+            </select>
+          </label>
+          <div class="dialogo-pie flex gap-2">
+            <button
+              type="button"
+              class="btn btn-primary"
+              [disabled]="!loteResponsable"
+              (click)="guardarLote()">
+              Asignar
+            </button>
+            <button type="button" class="btn" (click)="dialogo.set(null)">
+              Cancelar
+            </button>
+          </div>
+        </pt-dialogo>
       }
     }
   `,
@@ -373,6 +480,12 @@ export class DesarrolloComponent {
   readonly filtroProyecto = signal('');
   readonly filtroResponsable = signal('');
   readonly error = signal<string | null>(null);
+  readonly dialogo = signal<'alta' | 'lote' | null>(null);
+  altaTitulo = '';
+  altaProyecto = '';
+  altaResponsable = '';
+  loteResponsable = '';
+  private readonly recarga = new Subject<void>();
 
   readonly equipo = toSignal(
     this.admin.disponible
@@ -381,20 +494,27 @@ export class DesarrolloComponent {
     { initialValue: [] as Person[] }
   );
 
-  private readonly datos$ = combineLatest([
-    this.crm.obtenerFuncionalidades(),
-    this.crm.obtenerProyectos()
-  ]).pipe(
-    map(([funcionalidades, proyectos]) => ({ funcionalidades, proyectos })),
-    catchError((err) => {
-      this.error.set(err.message || 'Error al cargar funcionalidades');
-      return of({ funcionalidades: [], proyectos: [] });
-    })
+  private readonly datos = toSignal(
+    this.recarga.pipe(
+      startWith(undefined),
+      switchMap(() =>
+        combineLatest([
+          this.crm.obtenerFuncionalidades(),
+          this.crm.obtenerProyectos()
+        ]).pipe(
+          map(([funcionalidades, proyectos]) => ({
+            funcionalidades,
+            proyectos
+          })),
+          catchError((err) => {
+            this.error.set(err.message || 'Error al cargar funcionalidades');
+            return of({ funcionalidades: [], proyectos: [] });
+          })
+        )
+      )
+    ),
+    { initialValue: { funcionalidades: [], proyectos: [] } }
   );
-
-  private readonly datos = toSignal(this.datos$, {
-    initialValue: { funcionalidades: [], proyectos: [] }
-  });
 
   readonly proyectos = computed(() => this.datos().proyectos);
 
@@ -420,7 +540,9 @@ export class DesarrolloComponent {
       resultado = resultado.filter((f) => f.proyectoId === proyectoId);
     }
 
-    if (responsableId) {
+    if (responsableId === '__nadie__') {
+      resultado = resultado.filter((f) => !f.responsableId);
+    } else if (responsableId) {
       resultado = resultado.filter((f) => f.responsableId === responsableId);
     }
 
@@ -474,5 +596,68 @@ export class DesarrolloComponent {
 
   estaVencida(fecha: string): boolean {
     return new Date(fecha) < new Date();
+  }
+
+  readonly sinResponsable = computed(() =>
+    this.funcionalidadesFiltradas().filter((f) => !f.responsableId)
+  );
+
+  abrirAlta(): void {
+    this.altaTitulo = '';
+    this.altaProyecto = this.filtroProyecto();
+    this.altaResponsable = '';
+    this.dialogo.set('alta');
+  }
+
+  abrirLote(): void {
+    this.loteResponsable = '';
+    this.dialogo.set('lote');
+  }
+
+  guardarAlta(): void {
+    if (
+      !this.altaTitulo.trim() ||
+      !this.altaProyecto ||
+      !this.altaResponsable
+    ) {
+      return;
+    }
+    this.crm
+      .guardarFuncionalidad({
+        proyectoId: this.altaProyecto,
+        titulo: this.altaTitulo.trim(),
+        estado: 'por_hacer',
+        prioridad: 'media',
+        responsableId: this.altaResponsable
+      })
+      .subscribe({
+        next: () => {
+          this.dialogo.set(null);
+          this.recarga.next();
+        },
+        error: (err) =>
+          this.error.set(
+            err.error?.error ?? err.message ?? 'No se pudo guardar.'
+          )
+      });
+  }
+
+  guardarLote(): void {
+    if (!this.loteResponsable) return;
+    this.crm
+      .asignarResponsableLote({
+        responsableId: this.loteResponsable,
+        funcionalidades: this.sinResponsable().map((f) => f.id)
+      })
+      .subscribe({
+        next: () => {
+          this.dialogo.set(null);
+          this.recarga.next();
+        },
+        error: (err) =>
+          this.error.set(
+            err.error?.error ?? err.message ?? 'No se pudo asignar.'
+          )
+      });
   }
 }

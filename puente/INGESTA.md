@@ -1100,6 +1100,250 @@ pertenecen), `activa` (por omisión `true`).
 - El `color` se usa para la etiqueta en la UI.
 - Los nombres de empresa y datos en los ejemplos son ficticios.
 
+### Cambios de etapa comercial — `POST /ingesta/crm-nativo/cambios-etapa`
+
+Historial de cambios de etapa en el kanban comercial. Se registra automáticamente
+al mover un proyecto entre columnas, o puede alimentarse desde un bot.
+
+```json
+[
+  {
+    "id": "ce-sistema-tickets-2026-10-10",
+    "proyectoId": "sistema-tickets",
+    "etapaAnterior": "prospecto",
+    "etapaNueva": "en_cotizacion",
+    "autor": { "name": "Ana García", "email": "ana@ficticio.com" },
+    "fecha": "2026-10-10T14:30:00Z",
+    "nota": "Se agendó junta de levantamiento"
+  }
+]
+```
+
+**Campos:** `id`, `proyectoId` (obligatorio), `etapaAnterior`, `etapaNueva`
+(obligatorio, valores: `prospecto`, `en_cotizacion`, `cotizacion_enviada`,
+`negociacion`, `ganado`, `perdido`, `por_confirmar`), `autor` (Person),
+`fecha`, `nota`.
+
+### Avances de proyecto — `POST /ingesta/crm-nativo/avances`
+
+Línea de tiempo de avances y actualizaciones de estatus. Útil para alimentar
+el seguimiento desde dailies, correos o Teams automáticamente.
+
+```json
+[
+  {
+    "id": "av-sistema-tickets-2026-10-10",
+    "proyectoId": "sistema-tickets",
+    "fecha": "2026-10-10T10:00:00Z",
+    "nota": "Se completó el módulo de autenticación. Siguiente: reportes.",
+    "avancePct": 45,
+    "fuente": "daily",
+    "autor": { "name": "Carlos Méndez", "email": "carlos@ficticio.com" },
+    "estadoAnterior": "en_desarrollo",
+    "estadoNuevo": "en_desarrollo"
+  }
+]
+```
+
+**Campos:** `id`, `proyectoId` (obligatorio), `fecha`, `nota` (obligatorio),
+`avancePct` (0–100), `fuente` (obligatorio: `daily`, `correo`, `teams`,
+`manual`, `bot`), `autor` (Person), `estadoAnterior`, `estadoNuevo`.
+
+### Hitos — `POST /ingesta/crm-nativo/hitos`
+
+Hitos o entregables del proyecto con fecha compromiso y fecha real.
+
+```json
+[
+  {
+    "id": "hito-sistema-tickets-login",
+    "proyectoId": "sistema-tickets",
+    "nombre": "Entrega módulo de login",
+    "descripcion": "Login SSO con Microsoft Entra ID",
+    "fechaCompromiso": "2026-10-15T00:00:00Z",
+    "fechaReal": null,
+    "completado": false,
+    "orden": 1
+  },
+  {
+    "id": "hito-sistema-tickets-reportes",
+    "proyectoId": "sistema-tickets",
+    "nombre": "Entrega reportes básicos",
+    "fechaCompromiso": "2026-10-30T00:00:00Z",
+    "completado": false,
+    "orden": 2
+  }
+]
+```
+
+**Campos:** `id`, `proyectoId` (obligatorio), `nombre` (obligatorio),
+`descripcion`, `fechaCompromiso`, `fechaReal`, `completado` (boolean),
+`orden` (para ordenar en la UI).
+
+### Riesgos — `POST /ingesta/crm-nativo/riesgos`
+
+Riesgos potenciales o bloqueos activos del proyecto.
+
+```json
+[
+  {
+    "id": "riesgo-sistema-tickets-1",
+    "proyectoId": "sistema-tickets",
+    "tipo": "riesgo",
+    "descripcion": "El cliente puede tardar en entregar los datos de prueba",
+    "impacto": "Retraso de 1 semana en las pruebas",
+    "mitigacion": "Solicitar datos de prueba con anticipación",
+    "reportadoPor": { "name": "Ana García", "email": "ana@ficticio.com" },
+    "fechaReporte": "2026-10-05T00:00:00Z",
+    "abierto": true
+  },
+  {
+    "id": "bloqueo-sistema-tickets-1",
+    "proyectoId": "sistema-tickets",
+    "tipo": "bloqueo",
+    "descripcion": "Falta acceso al servidor de staging",
+    "impacto": "No se puede desplegar para pruebas",
+    "mitigacion": "Escalar con TI del cliente",
+    "fechaReporte": "2026-10-08T00:00:00Z",
+    "abierto": true
+  }
+]
+```
+
+**Campos:** `id`, `proyectoId` (obligatorio), `tipo` (obligatorio: `riesgo`
+o `bloqueo`), `descripcion` (obligatorio), `impacto`, `mitigacion`,
+`reportadoPor` (Person), `fechaReporte`, `abierto` (boolean),
+`fechaCierre`.
+
+### Asignar responsable en lote — `POST /ingesta/crm-nativo/asignar-responsable`
+
+Asigna responsable a funcionalidades y hitos existentes por ID. Útil para
+que un bot proponga asignaciones después de consultar las tareas sin responsable.
+
+```json
+{
+  "funcionalidades": [
+    { "id": "func-login", "responsableId": "giovana" },
+    { "id": "func-reportes", "responsableId": "carlos" }
+  ],
+  "hitos": [
+    { "id": "hito-sistema-tickets-login" }
+  ]
+}
+```
+
+**Respuesta:**
+
+```json
+{
+  "funcionalidades": 2,
+  "hitos": 1
+}
+```
+
+---
+
+## Rutas de lectura para bots (tipo `lectura-tareas`)
+
+Para que un bot pueda leer tareas sin responsable y el catálogo del equipo,
+el emisor debe tener el tipo `lectura-tareas` en su lista de permisos. Este
+tipo se agrega desde el panel de emisores en Integraciones.
+
+### Tareas sin responsable — `GET /lectura/tareas-sin-responsable`
+
+Devuelve todas las tareas (pendientes de cualquier origen, funcionalidades,
+hitos y riesgos) que no tienen responsable asignado.
+
+**Encabezado:** `Authorization: Bearer <token>`
+
+**Respuesta:**
+
+```json
+{
+  "total": 5,
+  "pendientes": [
+    {
+      "tipo": "pendiente",
+      "id": "task-12345",
+      "titulo": "Revisar propuesta de diseño",
+      "origen": "correo",
+      "proyecto": null,
+      "actualizado": "2026-10-10T08:00:00Z"
+    }
+  ],
+  "funcionalidades": [
+    {
+      "tipo": "funcionalidad",
+      "id": "func-login",
+      "titulo": "Implementar login SSO",
+      "origen": "crm-nativo",
+      "proyecto": { "id": "sistema-tickets", "nombre": "Sistema de tickets" },
+      "creado": "2026-10-01T00:00:00Z",
+      "actualizado": "2026-10-05T00:00:00Z"
+    }
+  ],
+  "hitos": [
+    {
+      "tipo": "hito",
+      "id": "hito-sistema-tickets-login",
+      "titulo": "Entrega módulo de login",
+      "origen": "crm-nativo",
+      "proyecto": { "id": "sistema-tickets", "nombre": "Sistema de tickets" },
+      "fechaCompromiso": "2026-10-15T00:00:00Z",
+      "completado": false,
+      "creado": "2026-10-01T00:00:00Z",
+      "actualizado": "2026-10-01T00:00:00Z"
+    }
+  ],
+  "riesgos": [
+    {
+      "tipo": "riesgo",
+      "id": "riesgo-sistema-tickets-1",
+      "titulo": "El cliente puede tardar en entregar los datos...",
+      "origen": "crm-nativo",
+      "proyecto": { "id": "sistema-tickets", "nombre": "Sistema de tickets" },
+      "tipoRiesgo": "riesgo",
+      "creado": "2026-10-05T00:00:00Z",
+      "actualizado": "2026-10-05T00:00:00Z"
+    }
+  ]
+}
+```
+
+### Catálogo del equipo — `GET /lectura/equipo`
+
+Devuelve la lista del equipo con nombre, correo y roles CRM asignados.
+
+**Encabezado:** `Authorization: Bearer <token>`
+
+**Respuesta:**
+
+```json
+[
+  {
+    "nombre": "Ana García",
+    "correo": "ana@ficticio.com",
+    "roles": [
+      { "id": "comercial", "nombre": "Comercial" },
+      { "id": "desarrollo", "nombre": "Desarrollo" }
+    ]
+  },
+  {
+    "nombre": "Carlos Méndez",
+    "correo": "carlos@ficticio.com",
+    "roles": [
+      { "id": "desarrollo", "nombre": "Desarrollo" }
+    ]
+  }
+]
+```
+
+**Notas:**
+
+- El bot puede usar esta información para proponer asignaciones inteligentes.
+- Después de consultar tareas sin responsable y el equipo, el bot puede llamar
+  a `POST /ingesta/crm-nativo/asignar-responsable` para asignarlas.
+
 ### Respuesta de las rutas de ingesta
 
 Todas las rutas devuelven el mismo formato:

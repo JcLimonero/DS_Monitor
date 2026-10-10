@@ -14,12 +14,22 @@ import { PORTAL_CONFIG } from '../../config/portal-config.token';
 import type {
   AreaPermiso,
   CrmActividadCliente,
+  CrmAlertasEstancados,
+  CrmAvanceProyecto,
+  CrmCambioEtapa,
   CrmCliente,
   CrmContacto,
   CrmCotizacion,
+  CrmEtapaComercial,
+  CrmFactura,
   CrmFuncionalidad,
+  CrmHito,
+  CrmOrdenCompra,
   CrmPagoProgramado,
+  CrmPartida,
   CrmProyecto,
+  CrmProyectoEstado,
+  CrmRiesgo,
   NivelAcceso,
   RolCrm,
   UsuarioCrm
@@ -115,6 +125,42 @@ export class CrmService {
   /** Si puede editar desarrollo. */
   readonly puedeEditarDesarrollo = computed(() =>
     this.tienePermiso('desarrollo', 'escritura')
+  );
+
+  /** Si puede ver costos y márgenes. */
+  readonly puedeVerCostos = computed(() =>
+    this.tienePermiso('costos', 'lectura')
+  );
+
+  /** Si puede editar proyectos (mover etapa, hitos, avances). */
+  readonly puedeEditarProyectos = computed(
+    () =>
+      this.tienePermiso('proyectos', 'escritura') ||
+      this.tienePermiso('actividades', 'escritura')
+  );
+
+  /** Tareas (pendientes, funcionalidades, hitos, riesgos) sin responsable. */
+  readonly sinResponsable = toSignal(
+    this.obtenerTareasSinResponsable().pipe(
+      catchError(() =>
+        of({
+          total: 0,
+          pendientes: [],
+          funcionalidades: [],
+          hitos: [],
+          riesgos: []
+        })
+      )
+    ),
+    {
+      initialValue: {
+        total: 0,
+        pendientes: [],
+        funcionalidades: [],
+        hitos: [],
+        riesgos: []
+      }
+    }
   );
 
   constructor() {
@@ -296,14 +342,17 @@ export class CrmService {
 
   // --- Pagos ---
 
-  obtenerPagos(cotizacionId?: string): Observable<CrmPagoProgramado[]> {
-    const params = cotizacionId
-      ? `?cotizacionId=${encodeURIComponent(cotizacionId)}`
-      : '';
-    return this.http.get<CrmPagoProgramado[]>(
-      `${this.baseUrl}/crm/pagos${params}`,
-      { headers: this.headers }
-    );
+  obtenerPagos(
+    cotizacionId?: string,
+    proyectoId?: string
+  ): Observable<CrmPagoProgramado[]> {
+    const params = new URLSearchParams();
+    if (cotizacionId) params.set('cotizacionId', cotizacionId);
+    if (proyectoId) params.set('proyectoId', proyectoId);
+    const q = params.toString() ? `?${params.toString()}` : '';
+    return this.http.get<CrmPagoProgramado[]>(`${this.baseUrl}/crm/pagos${q}`, {
+      headers: this.headers
+    });
   }
 
   guardarPago(pago: Partial<CrmPagoProgramado>): Observable<CrmPagoProgramado> {
@@ -394,5 +443,177 @@ export class CrmService {
       usuario,
       { headers: this.headers }
     );
+  }
+
+  // --- Kanban y seguimiento ---
+
+  moverEtapa(
+    id: string,
+    etapa: CrmEtapaComercial,
+    nota?: string
+  ): Observable<{ proyecto: CrmProyecto; cambio: CrmCambioEtapa }> {
+    return this.http.post<{ proyecto: CrmProyecto; cambio: CrmCambioEtapa }>(
+      `${this.baseUrl}/crm/proyectos/${encodeURIComponent(id)}/etapa`,
+      { etapa, nota },
+      { headers: this.headers }
+    );
+  }
+
+  moverEstadoEjecucion(
+    id: string,
+    estado: CrmProyectoEstado,
+    nota?: string
+  ): Observable<{ proyecto: CrmProyecto; avance: CrmAvanceProyecto }> {
+    return this.http.post<{
+      proyecto: CrmProyecto;
+      avance: CrmAvanceProyecto;
+    }>(
+      `${this.baseUrl}/crm/proyectos/${encodeURIComponent(id)}/estado`,
+      { estado, nota },
+      { headers: this.headers }
+    );
+  }
+
+  obtenerCambiosEtapa(proyectoId?: string): Observable<CrmCambioEtapa[]> {
+    const q = proyectoId ? `?proyectoId=${encodeURIComponent(proyectoId)}` : '';
+    return this.http.get<CrmCambioEtapa[]>(
+      `${this.baseUrl}/crm/cambios-etapa${q}`,
+      { headers: this.headers }
+    );
+  }
+
+  obtenerAvances(proyectoId?: string): Observable<CrmAvanceProyecto[]> {
+    const q = proyectoId ? `?proyectoId=${encodeURIComponent(proyectoId)}` : '';
+    return this.http.get<CrmAvanceProyecto[]>(
+      `${this.baseUrl}/crm/avances${q}`,
+      {
+        headers: this.headers
+      }
+    );
+  }
+
+  guardarAvance(
+    avance: Partial<CrmAvanceProyecto>
+  ): Observable<CrmAvanceProyecto> {
+    return this.http.post<CrmAvanceProyecto>(
+      `${this.baseUrl}/crm/avances/guardar`,
+      avance,
+      { headers: this.headers }
+    );
+  }
+
+  obtenerHitos(proyectoId?: string): Observable<CrmHito[]> {
+    const q = proyectoId ? `?proyectoId=${encodeURIComponent(proyectoId)}` : '';
+    return this.http.get<CrmHito[]>(`${this.baseUrl}/crm/hitos${q}`, {
+      headers: this.headers
+    });
+  }
+
+  guardarHito(hito: Partial<CrmHito>): Observable<CrmHito> {
+    return this.http.post<CrmHito>(`${this.baseUrl}/crm/hitos/guardar`, hito, {
+      headers: this.headers
+    });
+  }
+
+  obtenerRiesgos(proyectoId?: string): Observable<CrmRiesgo[]> {
+    const q = proyectoId ? `?proyectoId=${encodeURIComponent(proyectoId)}` : '';
+    return this.http.get<CrmRiesgo[]>(`${this.baseUrl}/crm/riesgos${q}`, {
+      headers: this.headers
+    });
+  }
+
+  guardarRiesgo(riesgo: Partial<CrmRiesgo>): Observable<CrmRiesgo> {
+    return this.http.post<CrmRiesgo>(
+      `${this.baseUrl}/crm/riesgos/guardar`,
+      riesgo,
+      { headers: this.headers }
+    );
+  }
+
+  obtenerAlertasEstancados(): Observable<CrmAlertasEstancados> {
+    return this.http.get<CrmAlertasEstancados>(
+      `${this.baseUrl}/crm/alertas-estancados`,
+      { headers: this.headers }
+    );
+  }
+
+  obtenerOrdenesCompra(filtro?: {
+    clienteId?: string;
+    proyectoId?: string;
+  }): Observable<CrmOrdenCompra[]> {
+    const params = new URLSearchParams();
+    if (filtro?.clienteId) params.set('clienteId', filtro.clienteId);
+    if (filtro?.proyectoId) params.set('proyectoId', filtro.proyectoId);
+    const q = params.toString() ? `?${params.toString()}` : '';
+    return this.http.get<CrmOrdenCompra[]>(
+      `${this.baseUrl}/crm/ordenes-compra${q}`,
+      { headers: this.headers }
+    );
+  }
+
+  obtenerFacturas(filtro?: {
+    clienteId?: string;
+    proyectoId?: string;
+  }): Observable<CrmFactura[]> {
+    const params = new URLSearchParams();
+    if (filtro?.clienteId) params.set('clienteId', filtro.clienteId);
+    if (filtro?.proyectoId) params.set('proyectoId', filtro.proyectoId);
+    const q = params.toString() ? `?${params.toString()}` : '';
+    return this.http.get<CrmFactura[]>(`${this.baseUrl}/crm/facturas${q}`, {
+      headers: this.headers
+    });
+  }
+
+  obtenerPartidas(filtro?: {
+    cotizacionId?: string;
+    proyectoId?: string;
+  }): Observable<CrmPartida[]> {
+    const params = new URLSearchParams();
+    if (filtro?.cotizacionId) params.set('cotizacionId', filtro.cotizacionId);
+    if (filtro?.proyectoId) params.set('proyectoId', filtro.proyectoId);
+    const q = params.toString() ? `?${params.toString()}` : '';
+    return this.http.get<CrmPartida[]>(`${this.baseUrl}/crm/partidas${q}`, {
+      headers: this.headers
+    });
+  }
+
+  asignarResponsableLote(cuerpo: {
+    responsableId: string;
+    funcionalidades?: string[];
+    hitos?: string[];
+    riesgos?: string[];
+    pendientes?: string[];
+  }): Observable<{
+    funcionalidades: number;
+    hitos: number;
+    riesgos: number;
+    pendientes: number;
+  }> {
+    return this.http.post<{
+      funcionalidades: number;
+      hitos: number;
+      riesgos: number;
+      pendientes: number;
+    }>(`${this.baseUrl}/crm/asignar-responsable`, cuerpo, {
+      headers: this.headers
+    });
+  }
+
+  obtenerTareasSinResponsable(): Observable<{
+    total: number;
+    pendientes: { id: string; titulo: string; desde: string }[];
+    funcionalidades: { id: string; titulo: string; desde: string }[];
+    hitos: { id: string; titulo: string; desde: string }[];
+    riesgos: { id: string; titulo: string; desde: string }[];
+  }> {
+    return this.http.get<{
+      total: number;
+      pendientes: { id: string; titulo: string; desde: string }[];
+      funcionalidades: { id: string; titulo: string; desde: string }[];
+      hitos: { id: string; titulo: string; desde: string }[];
+      riesgos: { id: string; titulo: string; desde: string }[];
+    }>(`${this.baseUrl}/crm/tareas-sin-responsable`, {
+      headers: this.headers
+    });
   }
 }

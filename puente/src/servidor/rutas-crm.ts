@@ -446,9 +446,23 @@ export function registrarRutasCrm(deps: DependenciasCrm): void {
   router.get('/crm/pagos', async (contexto) => {
     const { ocultos } = exigirLectura(contexto, 'cobranza');
     const cotizacionId = contexto.parametros.get('cotizacionId') ?? undefined;
+    const proyectoId = contexto.parametros.get('proyectoId') ?? undefined;
     let todos = datos.pagos.leer();
     if (cotizacionId) {
       todos = todos.filter((p) => p.cotizacionId === cotizacionId);
+    }
+    if (proyectoId) {
+      const ids = new Set(
+        datos.cotizaciones
+          .leer()
+          .filter((c) => c.proyectoId === proyectoId)
+          .map((c) => c.id)
+      );
+      todos = todos.filter(
+        (p) =>
+          p.proyectoId === proyectoId ||
+          (p.cotizacionId && ids.has(p.cotizacionId))
+      );
     }
     return todos.map((p) => ocultarCostosPago(p, ocultos));
   });
@@ -563,6 +577,12 @@ export function registrarRutasCrm(deps: DependenciasCrm): void {
       funcionalidad = validarFuncionalidad(crudo, previa, ahora);
     } catch (error) {
       throw new ErrorPuente((error as Error).message, 400);
+    }
+    if (!funcionalidad.responsableId) {
+      throw new ErrorPuente(
+        'El responsable de la funcionalidad es obligatorio.',
+        400
+      );
     }
     const lista = datos.funcionalidades.leer();
     const existe = lista.findIndex((f) => f.id === funcionalidad.id);

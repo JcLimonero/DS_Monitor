@@ -1,6 +1,9 @@
 import type {
   CrmActividadCliente,
   CrmActividadClienteTipo,
+  CrmAlertasEstancados,
+  CrmAvanceProyecto,
+  CrmCambioEtapa,
   CrmCliente,
   CrmClienteTipo,
   CrmContacto,
@@ -8,10 +11,13 @@ import type {
   CrmCotizacionEstatus,
   CrmCotizacionTipo,
   CrmEsquemaCobro,
+  CrmEtapaComercial,
   CrmFactura,
+  CrmFuenteAvance,
   CrmFuncionalidad,
   CrmFuncionalidadEstado,
   CrmFuncionalidadPrioridad,
+  CrmHito,
   CrmOrdenCompra,
   CrmPagoEstatus,
   CrmPagoProgramado,
@@ -19,20 +25,27 @@ import type {
   CrmProximoPaso,
   CrmProyecto,
   CrmProyectoEstado,
+  CrmRiesgo,
+  CrmSemaforoProyecto,
+  CrmTipoRiesgo,
   Person
 } from '../nucleo/contrato.js';
 
 export type {
   CrmActividadCliente,
+  CrmAvanceProyecto,
+  CrmCambioEtapa,
   CrmCliente,
   CrmContacto,
   CrmCotizacion,
   CrmFactura,
   CrmFuncionalidad,
+  CrmHito,
   CrmOrdenCompra,
   CrmPagoProgramado,
   CrmPartida,
-  CrmProyecto
+  CrmProyecto,
+  CrmRiesgo
 };
 
 /**
@@ -106,6 +119,53 @@ export const TIPOS_ACTIVIDAD: CrmActividadClienteTipo[] = [
   'correo',
   'nota'
 ];
+
+export const ETAPAS_COMERCIALES: CrmEtapaComercial[] = [
+  'prospecto',
+  'en_cotizacion',
+  'cotizacion_enviada',
+  'negociacion',
+  'ganado',
+  'perdido',
+  'por_confirmar'
+];
+
+export const FUENTES_AVANCE: CrmFuenteAvance[] = [
+  'daily',
+  'correo',
+  'teams',
+  'manual',
+  'bot'
+];
+
+export const TIPOS_RIESGO: CrmTipoRiesgo[] = ['riesgo', 'bloqueo'];
+
+export const SEMAFOROS_PROYECTO: CrmSemaforoProyecto[] = [
+  'en_tiempo',
+  'en_riesgo',
+  'atrasado'
+];
+
+/** Estados de un proyecto ya ganado, para el tablero de ejecucion. */
+export const ESTADOS_EJECUCION: CrmProyectoEstado[] = [
+  'en_desarrollo',
+  'en_pruebas',
+  'entregado',
+  'en_soporte',
+  'pausado'
+];
+
+/** Alertas de estancados si nadie las configura. */
+export const ALERTAS_ESTANCADOS_OMISION: CrmAlertasEstancados = {
+  diasDefault: 14,
+  diasPorEtapa: {
+    prospecto: 21,
+    en_cotizacion: 10,
+    cotizacion_enviada: 7,
+    negociacion: 14,
+    por_confirmar: 5
+  }
+};
 
 export const ESTADOS_FUNCIONALIDAD: CrmFuncionalidadEstado[] = [
   'por_hacer',
@@ -303,6 +363,19 @@ export function validarProyecto(
       `El estado "${estado}" no es válido. Usa: ${ESTADOS_PROYECTO.join(', ')}.`
     );
   }
+  const etapaComercial = texto(p['etapaComercial']) as
+    CrmEtapaComercial | undefined;
+  if (etapaComercial && !ETAPAS_COMERCIALES.includes(etapaComercial)) {
+    throw new Error(
+      `La etapa "${etapaComercial}" no es válida. Usa: ${ETAPAS_COMERCIALES.join(', ')}.`
+    );
+  }
+  const semaforo = texto(p['semaforo']) as CrmSemaforoProyecto | undefined;
+  if (semaforo && !SEMAFOROS_PROYECTO.includes(semaforo)) {
+    throw new Error(
+      `El semáforo "${semaforo}" no es válido. Usa: ${SEMAFOROS_PROYECTO.join(', ')}.`
+    );
+  }
   const repos = Array.isArray(p['repos'])
     ? (p['repos'] as unknown[]).map(String).filter(Boolean).slice(0, 20)
     : previo?.repos;
@@ -319,7 +392,13 @@ export function validarProyecto(
     fechaInicio: fechaValida(p['fechaInicio']),
     fechaFinEstimada: fechaValida(p['fechaFinEstimada']),
     estado: estado ?? previo?.estado,
+    etapaComercial: etapaComercial ?? previo?.etapaComercial,
+    enEtapaComericalDesde:
+      fechaValida(p['enEtapaComericalDesde']) ?? previo?.enEtapaComericalDesde,
+    responsableComercialId:
+      texto(p['responsableComercialId']) ?? previo?.responsableComercialId,
     avancePct: Math.max(0, Math.min(100, avancePct)),
+    semaforo: semaforo ?? previo?.semaforo,
     driveUrl: texto(p['driveUrl'])?.slice(0, 500),
     repos,
     notas: texto(p['notas'])?.slice(0, 4000),
@@ -860,4 +939,325 @@ export function margenDeCotizacion(
   const margen = venta - costo;
   const margenPct = venta > 0 ? (margen / venta) * 100 : 0;
   return { venta, costo, margen, margenPct };
+}
+
+// --- Kanban y seguimiento: validaciones ---
+
+export function validarCambioEtapa(
+  crudo: unknown,
+  previo: CrmCambioEtapa | undefined,
+  ahora: string
+): CrmCambioEtapa {
+  const c = (crudo ?? {}) as Record<string, unknown>;
+  const proyectoId = texto(c['proyectoId']);
+  const etapaNueva = texto(c['etapaNueva']) as CrmEtapaComercial | undefined;
+  if (!proyectoId) {
+    throw new Error('Cada cambio de etapa necesita un proyectoId.');
+  }
+  if (!etapaNueva || !ETAPAS_COMERCIALES.includes(etapaNueva)) {
+    throw new Error(
+      `La etapa "${etapaNueva}" no es válida. Usa: ${ETAPAS_COMERCIALES.join(', ')}.`
+    );
+  }
+  const etapaAnterior = texto(c['etapaAnterior']) as
+    CrmEtapaComercial | undefined;
+  if (etapaAnterior && !ETAPAS_COMERCIALES.includes(etapaAnterior)) {
+    throw new Error(
+      `La etapa anterior "${etapaAnterior}" no es válida. Usa: ${ETAPAS_COMERCIALES.join(', ')}.`
+    );
+  }
+  const fecha = fechaValida(c['fecha']) ?? ahora;
+  return {
+    id: texto(c['id']) ?? previo?.id ?? idDeTexto(`ce-${proyectoId}-${fecha}`),
+    proyectoId,
+    etapaAnterior,
+    etapaNueva,
+    autor: validarPersona(c['autor']),
+    fecha,
+    nota: texto(c['nota'])?.slice(0, 500),
+    actualizadoEn: ahora
+  };
+}
+
+export function validarAvanceProyecto(
+  crudo: unknown,
+  previo: CrmAvanceProyecto | undefined,
+  ahora: string
+): CrmAvanceProyecto {
+  const a = (crudo ?? {}) as Record<string, unknown>;
+  const proyectoId = texto(a['proyectoId']);
+  const nota = texto(a['nota']);
+  if (!proyectoId) {
+    throw new Error('Cada avance necesita un proyectoId.');
+  }
+  if (!nota) {
+    throw new Error('Cada avance necesita una nota.');
+  }
+  const fuente = texto(a['fuente']) as CrmFuenteAvance | undefined;
+  if (!fuente || !FUENTES_AVANCE.includes(fuente)) {
+    throw new Error(
+      `La fuente "${fuente}" no es válida. Usa: ${FUENTES_AVANCE.join(', ')}.`
+    );
+  }
+  const estadoAnterior = texto(a['estadoAnterior']) as
+    CrmProyectoEstado | undefined;
+  const estadoNuevo = texto(a['estadoNuevo']) as CrmProyectoEstado | undefined;
+  if (estadoAnterior && !ESTADOS_PROYECTO.includes(estadoAnterior)) {
+    throw new Error(`El estado anterior "${estadoAnterior}" no es válido.`);
+  }
+  if (estadoNuevo && !ESTADOS_PROYECTO.includes(estadoNuevo)) {
+    throw new Error(`El estado nuevo "${estadoNuevo}" no es válido.`);
+  }
+  const fecha = fechaValida(a['fecha']) ?? ahora;
+  const avancePct = enteroOpcional(a['avancePct'], previo?.avancePct);
+  return {
+    id: texto(a['id']) ?? previo?.id ?? idDeTexto(`av-${proyectoId}-${fecha}`),
+    proyectoId,
+    fecha,
+    nota: nota.slice(0, 2000),
+    avancePct:
+      avancePct !== undefined
+        ? Math.max(0, Math.min(100, avancePct))
+        : undefined,
+    fuente,
+    autor: validarPersona(a['autor']),
+    estadoAnterior,
+    estadoNuevo,
+    actualizadoEn: ahora
+  };
+}
+
+export function validarHito(
+  crudo: unknown,
+  previo: CrmHito | undefined,
+  ahora: string
+): CrmHito {
+  const h = (crudo ?? {}) as Record<string, unknown>;
+  const proyectoId = texto(h['proyectoId']);
+  const nombre = texto(h['nombre']);
+  if (!proyectoId) {
+    throw new Error('Cada hito necesita un proyectoId.');
+  }
+  if (!nombre) {
+    throw new Error('Cada hito necesita un nombre.');
+  }
+  return {
+    id:
+      texto(h['id']) ?? previo?.id ?? idDeTexto(`hito-${proyectoId}-${nombre}`),
+    proyectoId,
+    nombre: nombre.slice(0, 200),
+    descripcion: texto(h['descripcion'])?.slice(0, 1000),
+    fechaCompromiso: fechaValida(h['fechaCompromiso']),
+    fechaReal: fechaValida(h['fechaReal']),
+    completado: h['completado'] === true,
+    responsableId: texto(h['responsableId']) ?? previo?.responsableId,
+    orden: enteroOpcional(h['orden'], previo?.orden),
+    actualizadoEn: ahora
+  };
+}
+
+export function validarRiesgo(
+  crudo: unknown,
+  previo: CrmRiesgo | undefined,
+  ahora: string
+): CrmRiesgo {
+  const r = (crudo ?? {}) as Record<string, unknown>;
+  const proyectoId = texto(r['proyectoId']);
+  const descripcion = texto(r['descripcion']);
+  if (!proyectoId) {
+    throw new Error('Cada riesgo necesita un proyectoId.');
+  }
+  if (!descripcion) {
+    throw new Error('Cada riesgo necesita una descripción.');
+  }
+  const tipo = texto(r['tipo']) as CrmTipoRiesgo | undefined;
+  if (!tipo || !TIPOS_RIESGO.includes(tipo)) {
+    throw new Error(
+      `El tipo "${tipo}" no es válido. Usa: ${TIPOS_RIESGO.join(', ')}.`
+    );
+  }
+  const fechaReporte = fechaValida(r['fechaReporte']) ?? ahora;
+  return {
+    id:
+      texto(r['id']) ??
+      previo?.id ??
+      idDeTexto(`riesgo-${proyectoId}-${Date.now()}`),
+    proyectoId,
+    tipo,
+    descripcion: descripcion.slice(0, 1000),
+    impacto: texto(r['impacto'])?.slice(0, 500),
+    mitigacion: texto(r['mitigacion'])?.slice(0, 1000),
+    reportadoPor: validarPersona(r['reportadoPor']),
+    responsableId: texto(r['responsableId']) ?? previo?.responsableId,
+    fechaReporte,
+    abierto: r['abierto'] !== false,
+    fechaCierre: fechaValida(r['fechaCierre']),
+    actualizadoEn: ahora
+  };
+}
+
+// --- Kanban: dias en etapa y leads estancados ---
+
+/** Calcula los dias que un proyecto lleva en su etapa comercial actual. */
+export function diasEnEtapa(proyecto: CrmProyecto, ahora = new Date()): number {
+  if (!proyecto.enEtapaComericalDesde) return 0;
+  const desde = Date.parse(proyecto.enEtapaComericalDesde);
+  if (Number.isNaN(desde)) return 0;
+  return Math.floor((ahora.getTime() - desde) / 86_400_000);
+}
+
+/** Determina si un proyecto esta estancado segun los dias configurados por etapa. */
+export function proyectoEstancado(
+  proyecto: CrmProyecto,
+  diasPorEtapa: Partial<Record<CrmEtapaComercial, number>>,
+  diasDefault: number,
+  ahora = new Date()
+): boolean {
+  if (!proyecto.etapaComercial) return false;
+  if (
+    proyecto.etapaComercial === 'ganado' ||
+    proyecto.etapaComercial === 'perdido'
+  ) {
+    return false;
+  }
+  const limite = diasPorEtapa[proyecto.etapaComercial] ?? diasDefault;
+  return diasEnEtapa(proyecto, ahora) > limite;
+}
+
+/** Etapa comercial efectiva: la guardada o la que se infiere del estado. */
+export function etapaEfectiva(
+  proyecto: CrmProyecto
+): CrmEtapaComercial | undefined {
+  if (proyecto.etapaComercial) return proyecto.etapaComercial;
+  switch (proyecto.estado) {
+    case 'prospecto':
+      return 'prospecto';
+    case 'en_cotizacion':
+      return 'en_cotizacion';
+    case 'por_confirmar':
+      return 'por_confirmar';
+    case 'aprobado':
+    case 'en_desarrollo':
+    case 'en_pruebas':
+    case 'entregado':
+    case 'en_soporte':
+    case 'pausado':
+      return 'ganado';
+    case 'cancelado':
+      return 'perdido';
+    default:
+      return undefined;
+  }
+}
+
+/** Estado de ejecucion efectivo para el tablero de proyectos ganados. */
+export function estadoEjecucion(
+  proyecto: CrmProyecto
+): CrmProyectoEstado | undefined {
+  if (proyecto.estado && ESTADOS_EJECUCION.includes(proyecto.estado)) {
+    return proyecto.estado;
+  }
+  if (etapaEfectiva(proyecto) === 'ganado') {
+    return proyecto.estado === 'aprobado' ? 'en_desarrollo' : 'en_desarrollo';
+  }
+  return undefined;
+}
+
+/**
+ * Semaforo contra fecha de fin e hitos atrasados.
+ * en_tiempo / en_riesgo (7 dias o menos) / atrasado.
+ */
+export function calcularSemaforo(
+  proyecto: CrmProyecto,
+  hitos: CrmHito[],
+  ahora = new Date()
+): CrmSemaforoProyecto {
+  if (proyecto.estado === 'entregado' || proyecto.estado === 'en_soporte') {
+    return 'en_tiempo';
+  }
+  const fin = proyecto.fechaFinEstimada
+    ? Date.parse(proyecto.fechaFinEstimada)
+    : NaN;
+  const deEste = hitos.filter((h) => h.proyectoId === proyecto.id);
+  const atrasados = deEste.filter(
+    (h) =>
+      !h.completado &&
+      h.fechaCompromiso &&
+      Date.parse(h.fechaCompromiso) < ahora.getTime()
+  );
+  if ((Number.isFinite(fin) && fin < ahora.getTime()) || atrasados.length > 0) {
+    return 'atrasado';
+  }
+  const en7d = ahora.getTime() + 7 * 86_400_000;
+  const cerca = deEste.filter(
+    (h) =>
+      !h.completado &&
+      h.fechaCompromiso &&
+      Date.parse(h.fechaCompromiso) <= en7d
+  );
+  if ((Number.isFinite(fin) && fin <= en7d) || cerca.length > 0) {
+    return 'en_riesgo';
+  }
+  return 'en_tiempo';
+}
+
+/** La cotizacion vigente: aprobada, si no la enviada mas reciente. */
+export function montoVigenteDe(cotizaciones: CrmCotizacion[]): {
+  total: number | null;
+  moneda?: string;
+  folio?: string;
+} {
+  const conMonto = cotizaciones.filter(
+    (c) =>
+      c.estatus !== 'rechazada' &&
+      c.estatus !== 'obsoleta' &&
+      c.estatus !== 'vencida'
+  );
+  const aprobadas = conMonto.filter((c) => c.estatus === 'aprobada');
+  const enviadas = conMonto.filter((c) => c.estatus === 'enviada');
+  const lista =
+    aprobadas.length > 0
+      ? aprobadas
+      : enviadas.length > 0
+        ? enviadas
+        : conMonto;
+  const mejor = [...lista].sort((a, b) => {
+    const va = b.version ?? 0;
+    const vb = a.version ?? 0;
+    if (va !== vb) return va - vb;
+    return (b.fechaEmision ?? '').localeCompare(a.fechaEmision ?? '');
+  })[0];
+  return {
+    total: mejor?.total ?? null,
+    moneda: mejor?.moneda,
+    folio: mejor?.folio
+  };
+}
+
+export function validarAlertasEstancados(
+  crudo: unknown,
+  previa: CrmAlertasEstancados | undefined
+): CrmAlertasEstancados {
+  const a = (crudo ?? {}) as Record<string, unknown>;
+  const diasDefault = entero(
+    a['diasDefault'],
+    previa?.diasDefault ?? ALERTAS_ESTANCADOS_OMISION.diasDefault
+  );
+  const crudoPorEtapa =
+    a['diasPorEtapa'] && typeof a['diasPorEtapa'] === 'object'
+      ? (a['diasPorEtapa'] as Record<string, unknown>)
+      : {};
+  const diasPorEtapa: Partial<Record<CrmEtapaComercial, number>> = {
+    ...(previa?.diasPorEtapa ?? ALERTAS_ESTANCADOS_OMISION.diasPorEtapa)
+  };
+  for (const etapa of ETAPAS_COMERCIALES) {
+    const n = crudoPorEtapa[etapa];
+    if (typeof n === 'number' && Number.isInteger(n) && n > 0) {
+      diasPorEtapa[etapa] = n;
+    }
+  }
+  return {
+    diasDefault: Math.max(1, diasDefault),
+    diasPorEtapa
+  };
 }

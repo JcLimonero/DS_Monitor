@@ -92,8 +92,16 @@ export interface CrmProyecto {
   fechaFinEstimada?: string;
   /** Si no se conoce el estado, se omite o se pone 'por_confirmar'. */
   estado?: CrmProyectoEstado;
+  /** Etapa comercial para el kanban (antes de ganarse). */
+  etapaComercial?: CrmEtapaComercial;
+  /** Cuándo entró a la etapa comercial actual. */
+  enEtapaComericalDesde?: string;
+  /** Responsable comercial (vendedor/consultor que lleva la cuenta). */
+  responsableComercialId?: string;
   /** Porcentaje de avance (0–100). */
   avancePct?: number;
+  /** Semáforo calculado contra fechas: en_tiempo, en_riesgo, atrasado. */
+  semaforo?: CrmSemaforoProyecto;
   /** Carpeta en Drive del proyecto. */
   driveUrl?: string;
   /** URLs de repositorios. */
@@ -101,6 +109,172 @@ export interface CrmProyecto {
   notas?: string;
   actualizadoEn: string;
 }
+
+/**
+ * Etapa comercial para el kanban de leads/proyectos.
+ * El proyecto se mueve entre estas etapas antes de ganarse.
+ */
+export type CrmEtapaComercial =
+  | 'prospecto'
+  | 'en_cotizacion'
+  | 'cotizacion_enviada'
+  | 'negociacion'
+  | 'ganado'
+  | 'perdido'
+  | 'por_confirmar';
+
+export const CRM_ETAPA_COMERCIAL_LABEL: Record<CrmEtapaComercial, string> = {
+  prospecto: 'Prospecto',
+  en_cotizacion: 'En cotización',
+  cotizacion_enviada: 'Cotización enviada',
+  negociacion: 'Negociación',
+  ganado: 'Ganado',
+  perdido: 'Perdido',
+  por_confirmar: 'Por confirmar'
+};
+
+/** Semáforo de salud del proyecto: calculado contra fechas. */
+export type CrmSemaforoProyecto = 'en_tiempo' | 'en_riesgo' | 'atrasado';
+
+export const CRM_SEMAFORO_LABEL: Record<CrmSemaforoProyecto, string> = {
+  en_tiempo: 'En tiempo',
+  en_riesgo: 'En riesgo',
+  atrasado: 'Atrasado'
+};
+
+// --- Kanban y seguimiento de proyectos ---
+
+/** Fuente de un avance o cambio de estatus. */
+export type CrmFuenteAvance = 'daily' | 'correo' | 'teams' | 'manual' | 'bot';
+
+export const CRM_FUENTE_AVANCE_LABEL: Record<CrmFuenteAvance, string> = {
+  daily: 'Daily',
+  correo: 'Correo',
+  teams: 'Teams',
+  manual: 'Manual',
+  bot: 'Bot'
+};
+
+/**
+ * Un cambio de etapa comercial en el historial del proyecto.
+ * Se registra cada vez que el proyecto se mueve en el kanban.
+ */
+export interface CrmCambioEtapa {
+  id: string;
+  proyectoId: string;
+  /** Etapa anterior (undefined si es la primera). */
+  etapaAnterior?: CrmEtapaComercial;
+  /** Etapa nueva. */
+  etapaNueva: CrmEtapaComercial;
+  /** Quién hizo el cambio. */
+  autor?: Person;
+  /** Cuándo se hizo el cambio. */
+  fecha: string;
+  /** Nota opcional del cambio. */
+  nota?: string;
+  actualizadoEn: string;
+}
+
+/**
+ * Un avance o actualización de estatus del proyecto.
+ * Se registra desde dailies, correos, teams o manualmente.
+ */
+export interface CrmAvanceProyecto {
+  id: string;
+  proyectoId: string;
+  /** Fecha del avance. */
+  fecha: string;
+  /** Nota o descripción del avance. */
+  nota: string;
+  /** Porcentaje de avance reportado (0–100). */
+  avancePct?: number;
+  /** Fuente del avance: daily, correo, teams, manual, bot. */
+  fuente: CrmFuenteAvance;
+  /** Quién reportó el avance. */
+  autor?: Person;
+  /** Cambio de estado si aplica. */
+  estadoAnterior?: CrmProyectoEstado;
+  estadoNuevo?: CrmProyectoEstado;
+  actualizadoEn: string;
+}
+
+/**
+ * Un hito o entregable del proyecto con fecha compromiso y real.
+ */
+export interface CrmHito {
+  id: string;
+  proyectoId: string;
+  /** Nombre del hito/entregable. */
+  nombre: string;
+  /** Descripción opcional. */
+  descripcion?: string;
+  /** Fecha compromiso de entrega. */
+  fechaCompromiso?: string;
+  /** Fecha real de entrega (cuando se completó). */
+  fechaReal?: string;
+  /** Completado o no. */
+  completado: boolean;
+  /** Id del responsable interno (del catálogo de Equipo). */
+  responsableId?: string;
+  /** Orden para mostrar. */
+  orden?: number;
+  actualizadoEn: string;
+}
+
+/** Tipo de riesgo o bloqueo. */
+export type CrmTipoRiesgo = 'riesgo' | 'bloqueo';
+
+export const CRM_TIPO_RIESGO_LABEL: Record<CrmTipoRiesgo, string> = {
+  riesgo: 'Riesgo',
+  bloqueo: 'Bloqueo'
+};
+
+/**
+ * Un riesgo o bloqueo abierto en el proyecto.
+ */
+export interface CrmRiesgo {
+  id: string;
+  proyectoId: string;
+  /** Tipo: riesgo (potencial) o bloqueo (activo). */
+  tipo: CrmTipoRiesgo;
+  /** Descripción del riesgo/bloqueo. */
+  descripcion: string;
+  /** Impacto esperado. */
+  impacto?: string;
+  /** Plan de mitigación o acción. */
+  mitigacion?: string;
+  /** Quién reportó. */
+  reportadoPor?: Person;
+  /** Id del responsable interno de atenderlo (del catálogo de Equipo). */
+  responsableId?: string;
+  /** Cuándo se reportó. */
+  fechaReporte: string;
+  /** Abierto o cerrado. */
+  abierto: boolean;
+  /** Cuándo se cerró (si aplica). */
+  fechaCierre?: string;
+  actualizadoEn: string;
+}
+
+/** Configuración de alertas de leads estancados por etapa. */
+export interface CrmAlertasEstancados {
+  /** Días sin movimiento por etapa antes de alertar. */
+  diasPorEtapa: Partial<Record<CrmEtapaComercial, number>>;
+  /** Días por defecto si no se especifica por etapa. */
+  diasDefault: number;
+}
+
+/** Alertas de estancados si nadie las configura. */
+export const ALERTAS_ESTANCADOS_OMISION: CrmAlertasEstancados = {
+  diasDefault: 14,
+  diasPorEtapa: {
+    prospecto: 21,
+    en_cotizacion: 10,
+    cotizacion_enviada: 7,
+    negociacion: 14,
+    por_confirmar: 5
+  }
+};
 
 /** Esquema de cobro de una cotización. */
 export type CrmEsquemaCobro =

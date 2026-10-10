@@ -7,7 +7,7 @@
     "start": "ng serve",
     "build": "ng build --configuration production",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "test": "npx --yes tsx --test src/app/core/state/portal.selectors.prueba.ts src/app/core/util/llamadas.util.prueba.ts src/app/core/config/ajustes-portal.prueba.ts src/app/core/acceso/ruta-segura.prueba.ts src/app/core/licencias/licencias.util.prueba.ts src/app/core/config/local-settings.prueba.ts src/app/core/dominios/dominios.util.prueba.ts src/app/core/util/credenciales-buzon.util.prueba.ts",
+    "test": "npx --yes tsx --test src/app/core/state/portal.selectors.prueba.ts src/app/core/util/llamadas.util.prueba.ts src/app/core/config/ajustes-portal.prueba.ts src/app/core/acceso/ruta-segura.prueba.ts src/app/core/licencias/licencias.util.prueba.ts src/app/core/config/local-settings.prueba.ts src/app/core/dominios/dominios.util.prueba.ts src/app/core/util/credenciales-buzon.util.prueba.ts src/app/core/crm/crm-tablero.prueba.ts",
     "format": "prettier --write \"src/**/*.{ts,html,scss,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,html,scss,json}\""
   },

@@ -111,6 +111,22 @@ export const routes: Routes = [
           import('./features/crm/crm.component').then((m) => m.CrmComponent)
       },
       {
+        path: 'comercial',
+        title: 'Comercial | DS Monitor',
+        loadComponent: () =>
+          import('./features/comercial/comercial.component').then(
+            (m) => m.ComercialComponent
+          )
+      },
+      {
+        path: 'ejecucion',
+        title: 'Ejecución | DS Monitor',
+        loadComponent: () =>
+          import('./features/ejecucion/ejecucion.component').then(
+            (m) => m.EjecucionComponent
+          )
+      },
+      {
         path: 'clientes',
         title: 'Clientes | DS Monitor',
         loadComponent: () =>
