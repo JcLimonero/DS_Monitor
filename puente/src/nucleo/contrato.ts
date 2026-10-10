@@ -416,7 +416,13 @@ export type CrmEsquemaCobro = 'unico' | 'parcialidades' | 'mensual';
 
 /** Estado de una cotizacion. */
 export type CrmCotizacionEstatus =
-  'borrador' | 'enviada' | 'aprobada' | 'rechazada' | 'vencida' | 'obsoleta';
+  | 'borrador'
+  | 'enviada'
+  | 'aprobada'
+  | 'rechazada'
+  | 'vencida'
+  | 'obsoleta'
+  | 'desconocido';
 
 /** Una cotizacion del CRM nativo. */
 export interface CrmCotizacion {

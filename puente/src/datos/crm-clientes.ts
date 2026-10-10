@@ -69,7 +69,8 @@ export const ESTATUS_COTIZACION: CrmCotizacionEstatus[] = [
   'aprobada',
   'rechazada',
   'vencida',
-  'obsoleta'
+  'obsoleta',
+  'desconocido'
 ];
 
 export const ESTATUS_PAGO: CrmPagoEstatus[] = [

@@ -110,7 +110,13 @@ export const CRM_ESQUEMA_COBRO_LABEL: Record<CrmEsquemaCobro, string> = {
 
 /** Estado de una cotización. */
 export type CrmCotizacionEstatus =
-  'borrador' | 'enviada' | 'aprobada' | 'rechazada' | 'vencida' | 'obsoleta';
+  | 'borrador'
+  | 'enviada'
+  | 'aprobada'
+  | 'rechazada'
+  | 'vencida'
+  | 'obsoleta'
+  | 'desconocido';
 
 export const CRM_COTIZACION_ESTATUS_LABEL: Record<
   CrmCotizacionEstatus,
@@ -121,7 +127,8 @@ export const CRM_COTIZACION_ESTATUS_LABEL: Record<
   aprobada: 'Aprobada',
   rechazada: 'Rechazada',
   vencida: 'Vencida',
-  obsoleta: 'Obsoleta'
+  obsoleta: 'Obsoleta',
+  desconocido: 'Sin resultado'
 };
 
 /** Una cotización del CRM nativo. */
