@@ -59,6 +59,10 @@ import {
   TABLA_CRM_ORDENES_COMPRA,
   TABLA_CRM_FACTURAS,
   TABLA_CRM_PARTIDAS,
+  TABLA_CRM_CAMBIOS_ETAPA,
+  TABLA_CRM_AVANCES,
+  TABLA_CRM_HITOS,
+  TABLA_CRM_RIESGOS,
   TABLA_ROLES_CRM,
   TABLA_USUARIOS_CRM,
   type Aviso
@@ -110,15 +114,19 @@ import {
 } from '../datos/proveedores.js';
 import type {
   CrmActividadCliente,
+  CrmAvanceProyecto,
+  CrmCambioEtapa,
   CrmCliente,
   CrmContacto,
   CrmCotizacion,
   CrmFactura,
   CrmFuncionalidad,
+  CrmHito,
   CrmOrdenCompra,
   CrmPagoProgramado,
   CrmPartida,
   CrmProyecto,
+  CrmRiesgo,
   HostedApp,
   LicenseUsage,
   LlamadaArchivada,
@@ -134,7 +142,10 @@ import type {
   VpsStatus
 } from '../nucleo/contrato.js';
 import { registrarRutasCrm, type DatosCrm } from './rutas-crm.js';
-import { registrarRutasIngestaCrm } from './rutas-ingesta-crm.js';
+import {
+  registrarRutasIngestaCrm,
+  registrarRutasLecturaTareas
+} from './rutas-ingesta-crm.js';
 
 const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   pendiente: 'Pendiente',
@@ -624,6 +635,14 @@ export interface Datos {
   crmFacturas: AlmacenTabla<CrmFactura[]>;
   /** Partidas de cotización con costo para margen. */
   crmPartidas: AlmacenTabla<CrmPartida[]>;
+  /** Cambios de etapa comercial en el kanban. */
+  crmCambiosEtapa: AlmacenTabla<CrmCambioEtapa[]>;
+  /** Avances y actualizaciones de estatus de proyectos. */
+  crmAvances: AlmacenTabla<CrmAvanceProyecto[]>;
+  /** Hitos y entregables de proyectos. */
+  crmHitos: AlmacenTabla<CrmHito[]>;
+  /** Riesgos y bloqueos de proyectos. */
+  crmRiesgos: AlmacenTabla<CrmRiesgo[]>;
   /** Roles del CRM (Director, Finanzas, Comercial, Desarrollo). */
   rolesCrm: AlmacenTabla<RolCrm[]>;
   /** Usuarios del CRM con sus roles asignados. */
@@ -867,6 +886,22 @@ export function abrirDatos(persistencia: Persistencia): Datos {
     crmPartidas: new AlmacenTabla<CrmPartida[]>(
       persistencia,
       TABLA_CRM_PARTIDAS,
+      []
+    ),
+    crmCambiosEtapa: new AlmacenTabla<CrmCambioEtapa[]>(
+      persistencia,
+      TABLA_CRM_CAMBIOS_ETAPA,
+      []
+    ),
+    crmAvances: new AlmacenTabla<CrmAvanceProyecto[]>(
+      persistencia,
+      TABLA_CRM_AVANCES,
+      []
+    ),
+    crmHitos: new AlmacenTabla<CrmHito[]>(persistencia, TABLA_CRM_HITOS, []),
+    crmRiesgos: new AlmacenTabla<CrmRiesgo[]>(
+      persistencia,
+      TABLA_CRM_RIESGOS,
       []
     ),
     rolesCrm: new AlmacenTabla<RolCrm[]>(persistencia, TABLA_ROLES_CRM, []),
@@ -6116,14 +6151,36 @@ export function construirRutas(
   });
 
   // Ingesta del CRM nativo: carga masiva desde sistemas externos.
+  const datosIngestaCrm = {
+    ...datosCrm,
+    ordenesCompra: datos.crmOrdenesCompra,
+    facturas: datos.crmFacturas,
+    partidas: datos.crmPartidas,
+    empresas: datos.empresas,
+    cambiosEtapa: datos.crmCambiosEtapa,
+    avances: datos.crmAvances,
+    hitos: datos.crmHitos,
+    riesgos: datos.crmRiesgos
+  };
   registrarRutasIngestaCrm({
     router,
-    datos: {
-      ...datosCrm,
-      ordenesCompra: datos.crmOrdenesCompra,
-      facturas: datos.crmFacturas,
-      partidas: datos.crmPartidas,
-      empresas: datos.empresas
+    datos: datosIngestaCrm,
+    emisores: todosLosEmisores
+  });
+
+  // Rutas de solo lectura para bots con token de emisor tipo 'lectura-tareas'.
+  registrarRutasLecturaTareas({
+    router,
+    datosIngesta: datosIngestaCrm,
+    datosLectura: {
+      equipo: datos.equipo,
+      rolesCrm: datos.rolesCrm,
+      usuariosCrm: datos.usuariosCrm,
+      pendientes: () => {
+        const deOps = pendientesOps();
+        const personales = datos.personales.leer();
+        return [...deOps, ...personales];
+      }
     },
     emisores: todosLosEmisores
   });

@@ -54,11 +54,12 @@ const RECURSOS_POR_TIPO: Record<TipoIngesta, string[]> = {
   repos: ['repos']
 };
 
-/** Los tipos que puede tener un emisor: los de datos, ejecuciones y CRM nativo. */
+/** Los tipos que puede tener un emisor: los de datos, ejecuciones, CRM nativo y lectura. */
 export const TIPOS_EMISOR: string[] = [
   ...TIPOS_INGESTA,
   'ejecuciones',
-  'crm-nativo'
+  'crm-nativo',
+  'lectura-tareas'
 ];
 
 function autenticar(

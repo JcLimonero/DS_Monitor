@@ -768,15 +768,19 @@ export const TABLA_LICENCIAS_AJUSTES: DefinicionTabla<
 
 import type {
   CrmActividadCliente,
+  CrmAvanceProyecto,
+  CrmCambioEtapa,
   CrmCliente,
   CrmContacto,
   CrmCotizacion,
   CrmFactura,
   CrmFuncionalidad,
+  CrmHito,
   CrmOrdenCompra,
   CrmPagoProgramado,
   CrmPartida,
   CrmProyecto,
+  CrmRiesgo,
   RolCrm,
   UsuarioCrm
 } from '../nucleo/contrato.js';
@@ -1250,4 +1254,168 @@ export const TABLA_CRM_PARTIDAS: DefinicionTabla<CrmPartida[]> = {
     sub: {}
   }),
   deFilas: (filas) => filas.map((f) => objeto<CrmPartida>(f['datos']))
+};
+
+// --- Kanban y seguimiento de proyectos ---
+
+export const TABLA_CRM_CAMBIOS_ETAPA: DefinicionTabla<CrmCambioEtapa[]> = {
+  clave: 'crm-cambios-etapa',
+  tabla: 'crm_cambios_etapa',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_cambios_etapa (
+      id text PRIMARY KEY,
+      proyecto_id text NOT NULL,
+      etapa_anterior text,
+      etapa_nueva text NOT NULL,
+      autor_nombre text,
+      autor_correo text,
+      fecha timestamptz NOT NULL,
+      nota text,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_cambios_etapa_proyecto ON crm_cambios_etapa (proyecto_id);
+    CREATE INDEX IF NOT EXISTS crm_cambios_etapa_fecha ON crm_cambios_etapa (fecha DESC);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((c) => ({
+      id: c.id,
+      proyecto_id: c.proyectoId,
+      etapa_anterior: c.etapaAnterior ?? null,
+      etapa_nueva: c.etapaNueva,
+      autor_nombre: c.autor?.name ?? null,
+      autor_correo: c.autor?.email ?? null,
+      fecha: c.fecha,
+      nota: c.nota ?? null,
+      actualizado_en: c.actualizadoEn,
+      datos: c
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmCambioEtapa>(f['datos']))
+};
+
+export const TABLA_CRM_AVANCES: DefinicionTabla<CrmAvanceProyecto[]> = {
+  clave: 'crm-avances',
+  tabla: 'crm_avances',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_avances (
+      id text PRIMARY KEY,
+      proyecto_id text NOT NULL,
+      fecha timestamptz NOT NULL,
+      nota text NOT NULL,
+      avance_pct integer,
+      fuente text NOT NULL,
+      autor_nombre text,
+      autor_correo text,
+      estado_anterior text,
+      estado_nuevo text,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_avances_proyecto ON crm_avances (proyecto_id);
+    CREATE INDEX IF NOT EXISTS crm_avances_fecha ON crm_avances (fecha DESC);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((a) => ({
+      id: a.id,
+      proyecto_id: a.proyectoId,
+      fecha: a.fecha,
+      nota: a.nota,
+      avance_pct: a.avancePct ?? null,
+      fuente: a.fuente,
+      autor_nombre: a.autor?.name ?? null,
+      autor_correo: a.autor?.email ?? null,
+      estado_anterior: a.estadoAnterior ?? null,
+      estado_nuevo: a.estadoNuevo ?? null,
+      actualizado_en: a.actualizadoEn,
+      datos: a
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmAvanceProyecto>(f['datos']))
+};
+
+export const TABLA_CRM_HITOS: DefinicionTabla<CrmHito[]> = {
+  clave: 'crm-hitos',
+  tabla: 'crm_hitos',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_hitos (
+      id text PRIMARY KEY,
+      proyecto_id text NOT NULL,
+      nombre text NOT NULL,
+      descripcion text,
+      fecha_compromiso timestamptz,
+      fecha_real timestamptz,
+      completado boolean NOT NULL DEFAULT false,
+      orden integer,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_hitos_proyecto ON crm_hitos (proyecto_id);
+    CREATE INDEX IF NOT EXISTS crm_hitos_fecha ON crm_hitos (fecha_compromiso);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((h) => ({
+      id: h.id,
+      proyecto_id: h.proyectoId,
+      nombre: h.nombre,
+      descripcion: h.descripcion ?? null,
+      fecha_compromiso: fecha(h.fechaCompromiso),
+      fecha_real: fecha(h.fechaReal),
+      completado: h.completado,
+      orden: h.orden ?? null,
+      actualizado_en: h.actualizadoEn,
+      datos: h
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmHito>(f['datos']))
+};
+
+export const TABLA_CRM_RIESGOS: DefinicionTabla<CrmRiesgo[]> = {
+  clave: 'crm-riesgos',
+  tabla: 'crm_riesgos',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_riesgos (
+      id text PRIMARY KEY,
+      proyecto_id text NOT NULL,
+      tipo text NOT NULL,
+      descripcion text NOT NULL,
+      impacto text,
+      mitigacion text,
+      reportado_por_nombre text,
+      reportado_por_correo text,
+      fecha_reporte timestamptz NOT NULL,
+      abierto boolean NOT NULL DEFAULT true,
+      fecha_cierre timestamptz,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_riesgos_proyecto ON crm_riesgos (proyecto_id);
+    CREATE INDEX IF NOT EXISTS crm_riesgos_abierto ON crm_riesgos (abierto);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((r) => ({
+      id: r.id,
+      proyecto_id: r.proyectoId,
+      tipo: r.tipo,
+      descripcion: r.descripcion,
+      impacto: r.impacto ?? null,
+      mitigacion: r.mitigacion ?? null,
+      reportado_por_nombre: r.reportadoPor?.name ?? null,
+      reportado_por_correo: r.reportadoPor?.email ?? null,
+      fecha_reporte: r.fechaReporte,
+      abierto: r.abierto,
+      fecha_cierre: fecha(r.fechaCierre),
+      actualizado_en: r.actualizadoEn,
+      datos: r
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmRiesgo>(f['datos']))
 };
