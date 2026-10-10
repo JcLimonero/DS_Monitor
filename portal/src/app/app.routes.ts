@@ -111,6 +111,54 @@ export const routes: Routes = [
           import('./features/crm/crm.component').then((m) => m.CrmComponent)
       },
       {
+        path: 'clientes',
+        title: 'Clientes | DS Monitor',
+        loadComponent: () =>
+          import('./features/clientes/clientes.component').then(
+            (m) => m.ClientesComponent
+          )
+      },
+      {
+        path: 'clientes/:id',
+        title: 'Cliente | DS Monitor',
+        loadComponent: () =>
+          import('./features/clientes/cliente-detalle.component').then(
+            (m) => m.ClienteDetalleComponent
+          )
+      },
+      {
+        path: 'proyectos/:id',
+        title: 'Proyecto | DS Monitor',
+        loadComponent: () =>
+          import('./features/clientes/proyecto-detalle.component').then(
+            (m) => m.ProyectoDetalleComponent
+          )
+      },
+      {
+        path: 'desarrollo',
+        title: 'Desarrollo | DS Monitor',
+        loadComponent: () =>
+          import('./features/desarrollo/desarrollo.component').then(
+            (m) => m.DesarrolloComponent
+          )
+      },
+      {
+        path: 'cobranza',
+        title: 'Cobranza | DS Monitor',
+        loadComponent: () =>
+          import('./features/cobranza/cobranza.component').then(
+            (m) => m.CobranzaComponent
+          )
+      },
+      {
+        path: 'roles',
+        title: 'Usuarios y Roles | DS Monitor',
+        loadComponent: () =>
+          import('./features/roles/roles.component').then(
+            (m) => m.RolesComponent
+          )
+      },
+      {
         path: 'repos',
         title: 'Repositorios | DS Monitor',
         loadComponent: () =>

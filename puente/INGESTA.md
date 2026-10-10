@@ -156,8 +156,8 @@ una revisión más, no el estado completo. Reemplazar borraría el historial.
   "version": 1,
   "datos": [
     {
-      "id": "api-vanguardia",
-      "nombre": "API Vanguardia",
+      "id": "api-ejemplo",
+      "nombre": "API Ejemplo",
       "url": "https://api.example.mx/health",
       "tipo": "api",
       "entorno": "produccion",
@@ -576,3 +576,328 @@ otro serían el mismo y el portal mostraría solo uno.
 
 **Tope de tamaño.** 512 kB por envío por omisión (`INGESTA_MAXIMO_KB`). Si tu
 lista no cabe, pártela y usa `modo: "agregar"`.
+
+---
+
+## CRM nativo
+
+El CRM nativo de DS Monitor permite llevar clientes, contactos, proyectos,
+cotizaciones, pagos programados, actividades y funcionalidades de desarrollo.
+**No depende de Odoo ni de ningún emisor externo**; vive en el puente con
+persistencia propia (Postgres o archivos).
+
+Empresas del CRM: TechCorp, InnovateLabs, CloudWorks, DevHub.
+
+### Modelo de datos
+
+| Entidad | Descripción |
+|---------|-------------|
+| **Cliente** | Nombre, razón social, RFC, tipo (directo/intermediario/final), enlace a Drive |
+| **Contacto** | Por cliente: nombre, puesto, correo, teléfono, si es responsable de proyectos |
+| **Proyecto** | Por cliente: nombre, alcance, empresa que atiende, responsable interno y del cliente, estado, avance, repos |
+| **Cotización** | Por proyecto: folio, versión, empresa que factura, montos, esquema de cobro, estatus, autorización de Carlos |
+| **PagoProgramado** | Por cotización: parcialidades o mensualidades con fecha esperada y estatus |
+| **Actividad** | Bitácora por cliente: llamada, junta, correo, nota, próximo paso |
+| **Funcionalidad** | Por proyecto: tareas de desarrollo con estado, responsable, prioridad, enlace a repo/PR |
+
+### Control de acceso por roles
+
+El CRM tiene control de acceso por roles. Carlos (Director) ve todo. Los demás
+usuarios ven según sus roles y alcance.
+
+**Roles de fábrica:**
+
+| Rol | Acceso |
+|-----|--------|
+| Director | Todo (licencias, correo, servidores, integraciones, configuración) |
+| Finanzas | Cotizaciones (lectura), cobranza (escritura), costos (lectura) |
+| Comercial | Clientes (escritura), proyectos (lectura), cotizaciones (lectura, sin costos), actividades (escritura) |
+| Desarrollo | Proyectos (lectura), funcionalidades (escritura), sin importes |
+
+Un usuario puede tener varios roles y un alcance limitado (solo ciertos
+proyectos, clientes o empresas). **El filtrado se hace en el puente**: las rutas
+no devuelven campos ni registros fuera del permiso.
+
+### API con token de emisor — `POST /ingesta/clientes`
+
+Un sistema externo o bot puede crear/actualizar clientes, contactos, proyectos y
+actividades con su token de emisor. El emisor necesita el tipo `clientes`.
+
+```json
+{
+  "version": 1,
+  "modo": "agregar",
+  "generadoEn": "2026-10-10T12:00:00Z",
+  "datos": {
+    "clientes": [
+      {
+        "id": "acme-motors",
+        "nombre": "Acme Motors",
+        "razonSocial": "Acme Motors SA de CV",
+        "rfc": "AMO850101XXX",
+        "tipo": "directo",
+        "driveFolderUrl": "https://drive.google.com/drive/folders/..."
+      }
+    ],
+    "contactos": [
+      {
+        "id": "juan-perez",
+        "clienteId": "acme-motors",
+        "nombre": "Juan Pérez García",
+        "puesto": "Gerente de Sistemas",
+        "correo": "sistemas@example.com",
+        "esResponsableProyecto": true
+      }
+    ],
+    "proyectos": [
+      {
+        "id": "sistema-tickets",
+        "clienteId": "acme-motors",
+        "empresaAtiendeId": "techcorp",
+        "nombre": "Migración GLPI",
+        "estado": "en_desarrollo",
+        "responsableClienteId": "juan-perez"
+      }
+    ],
+    "actividades": [
+      {
+        "clienteId": "acme-motors",
+        "proyectoId": "sistema-tickets",
+        "tipo": "junta",
+        "resumen": "Revisión semanal de avances",
+        "fecha": "2026-10-10T10:00:00Z"
+      }
+    ]
+  }
+}
+```
+
+**Campos de cliente:** `id`, `nombre` (obligatorio), `razonSocial`, `rfc`,
+`tipo` (`directo`|`intermediario`|`final`), `clienteFacturacionId`, `driveFolderUrl`, `notas`.
+
+**Campos de contacto:** `id`, `clienteId` (obligatorio), `nombre` (obligatorio),
+`puesto`, `correo`, `telefono`, `esResponsableProyecto`.
+
+**Campos de proyecto:** `id`, `clienteId` (obligatorio), `clienteFinalId`,
+`empresaAtiendeId`, `nombre` (obligatorio), `alcance`, `responsableInterno`
+(objeto con `name`, `email`), `responsableClienteId`, `fechaInicio`,
+`fechaFinEstimada`, `estado` (ver abajo), `avancePct`, `driveUrl`, `repos`, `notas`.
+
+**Estados de proyecto:** `prospecto`, `en_cotizacion`, `aprobado`, `en_desarrollo`,
+`en_pruebas`, `entregado`, `en_soporte`, `pausado`, `cancelado`.
+
+**Campos de actividad:** `id`, `clienteId` (obligatorio), `proyectoId`,
+`cotizacionId`, `tipo` (`llamada`|`junta`|`correo`|`nota`), `resumen` (obligatorio),
+`fecha`, `proximoPaso` (objeto con `descripcion` y `fecha`), `responsable`.
+
+### API para funcionalidades — `POST /ingesta/funcionalidades`
+
+Un sistema externo puede crear/actualizar funcionalidades de desarrollo. El
+emisor necesita el tipo `funcionalidades`.
+
+```json
+{
+  "version": 1,
+  "modo": "agregar",
+  "datos": [
+    {
+      "id": "func-login",
+      "proyectoId": "sistema-tickets",
+      "titulo": "Implementar login SSO",
+      "descripcion": "Integrar con Active Directory del cliente",
+      "estado": "en_progreso",
+      "responsableId": "giovana",
+      "prioridad": "alta",
+      "fechaCompromiso": "2026-10-15T00:00:00Z",
+      "enlace": "https://github.com/org/repo/pull/42"
+    }
+  ]
+}
+```
+
+**Estados de funcionalidad:** `por_hacer`, `en_progreso`, `en_revision`, `hecho`, `bloqueado`.
+
+**Prioridades:** `baja`, `media`, `alta`, `urgente`.
+
+### Consultar responsable de proyecto — `GET /crm/proyectos/:id/responsable`
+
+Devuelve el responsable del lado del cliente para un proyecto. Útil para que un
+bot sepa a quién enviar una cotización autorizada.
+
+```json
+{
+  "nombre": "Juan Pérez García",
+  "correo": "sistemas@example.com",
+  "puesto": "Gerente de Sistemas"
+}
+```
+
+### Registrar envío de cotización — `POST /crm/cotizaciones/:id/envio`
+
+Registra que una cotización ya autorizada se envió al cliente. El bot llama
+esto después de enviar el correo.
+
+```json
+{
+  "enviadaA": {
+    "nombre": "Juan Pérez García",
+    "correo": "sistemas@example.com"
+  },
+  "fechaEnvio": "2026-10-10T14:30:00Z"
+}
+```
+
+La cotización debe estar autorizada (`autorizadaPorCarlosEn` no vacío) para
+poder marcarla como enviada.
+
+---
+
+## Ingesta del CRM nativo (rutas directas)
+
+El CRM nativo también acepta carga directa de datos sin el sobre estándar.
+Estas rutas son más simples y están diseñadas para carga masiva desde un bot
+o script externo.
+
+**El emisor necesita el tipo `crm-nativo`.** Todas las rutas requieren
+`Authorization: Bearer <token>`.
+
+### Clientes — `POST /ingesta/crm-nativo/clientes`
+
+```json
+[
+  {
+    "id": "acme-motors",
+    "nombre": "Acme Motors",
+    "razonSocial": "Acme Motors SA de CV",
+    "rfc": "AMO850101XXX",
+    "tipo": "directo",
+    "driveFolderUrl": "https://drive.google.com/drive/folders/..."
+  }
+]
+```
+
+### Contactos — `POST /ingesta/crm-nativo/contactos`
+
+```json
+[
+  {
+    "id": "juan-perez",
+    "clienteId": "acme-motors",
+    "nombre": "Juan Pérez García",
+    "puesto": "Gerente de Sistemas",
+    "correo": "sistemas@example.com",
+    "esResponsableProyecto": true
+  }
+]
+```
+
+### Proyectos — `POST /ingesta/crm-nativo/proyectos`
+
+```json
+[
+  {
+    "id": "sistema-tickets",
+    "clienteId": "acme-motors",
+    "empresaAtiendeId": "techcorp",
+    "nombre": "Migración GLPI",
+    "estado": "en_desarrollo",
+    "responsableClienteId": "juan-perez"
+  }
+]
+```
+
+### Cotizaciones — `POST /ingesta/crm-nativo/cotizaciones`
+
+```json
+[
+  {
+    "id": "cot-12345",
+    "proyectoId": "sistema-tickets",
+    "folio": "COT-2026-042",
+    "empresaFacturaId": "techcorp",
+    "nombre": "Implementación GLPI fase 1",
+    "subtotal": 150000,
+    "iva": 24000,
+    "total": 174000,
+    "moneda": "MXN",
+    "esquemaCobro": "50-50",
+    "estatus": "enviada",
+    "cotizacionExternaId": "1234567890abcdef/COT-2026-042.pdf"
+  }
+]
+```
+
+**Notas importantes para la carga inicial:**
+
+- **El `id` es la llave única**, no el folio. El folio es opcional y no único
+  (en datos reales ~35% no tiene folio y algunos se repiten).
+- **`cotizacionExternaId`** es la llave externa para idempotencia: si ya existe
+  un registro con ese valor, se actualiza en lugar de crear uno nuevo. Úsalo
+  para identificar el documento original (por ejemplo, la ruta del PDF en
+  Drive: `"folder-id/nombre-archivo.pdf"`).
+- **`estatus: "desconocido"`** es válido para cotizaciones sin resultado
+  conocido (74% en datos reales).
+- La respuesta incluye cuántos se crearon, actualizaron y errores por índice.
+
+### Pagos programados — `POST /ingesta/crm-nativo/pagos`
+
+```json
+[
+  {
+    "id": "pago-1-cot-12345",
+    "cotizacionId": "cot-12345",
+    "numero": 1,
+    "totalPagos": 2,
+    "monto": 87000,
+    "moneda": "MXN",
+    "fechaEsperada": "2026-10-15T00:00:00Z",
+    "estatus": "por_facturar"
+  }
+]
+```
+
+### Actividades — `POST /ingesta/crm-nativo/actividades`
+
+```json
+[
+  {
+    "clienteId": "acme-motors",
+    "proyectoId": "sistema-tickets",
+    "tipo": "junta",
+    "resumen": "Revisión semanal de avances",
+    "fecha": "2026-10-10T10:00:00Z"
+  }
+]
+```
+
+### Funcionalidades — `POST /ingesta/crm-nativo/funcionalidades`
+
+```json
+[
+  {
+    "id": "func-login",
+    "proyectoId": "sistema-tickets",
+    "titulo": "Implementar login SSO",
+    "estado": "en_progreso",
+    "responsableId": "giovana",
+    "prioridad": "alta",
+    "fechaCompromiso": "2026-10-15T00:00:00Z"
+  }
+]
+```
+
+### Respuesta de las rutas de ingesta
+
+Todas las rutas devuelven el mismo formato:
+
+```json
+{
+  "recibidos": 10,
+  "creados": 8,
+  "actualizados": 2,
+  "errores": ["[3] El campo 'nombre' es obligatorio"]
+}
+```
+
+Los errores incluyen el índice del registro que falló. Los registros válidos
+se guardan aunque otros fallen.

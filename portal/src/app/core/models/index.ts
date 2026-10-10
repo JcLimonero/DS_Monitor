@@ -7,6 +7,7 @@ export * from './llamada.model';
 export * from './meeting.model';
 export * from './monitor.model';
 export * from './crm.model';
+export * from './crm-nativo.model';
 export * from './license.model';
 export * from './deployment.model';
 export * from './repo.model';
