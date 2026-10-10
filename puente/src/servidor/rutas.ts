@@ -56,6 +56,9 @@ import {
   TABLA_CRM_PAGOS,
   TABLA_CRM_ACTIVIDADES,
   TABLA_CRM_FUNCIONALIDADES,
+  TABLA_CRM_ORDENES_COMPRA,
+  TABLA_CRM_FACTURAS,
+  TABLA_CRM_PARTIDAS,
   TABLA_ROLES_CRM,
   TABLA_USUARIOS_CRM,
   type Aviso
@@ -110,8 +113,11 @@ import type {
   CrmCliente,
   CrmContacto,
   CrmCotizacion,
+  CrmFactura,
   CrmFuncionalidad,
+  CrmOrdenCompra,
   CrmPagoProgramado,
+  CrmPartida,
   CrmProyecto,
   HostedApp,
   LicenseUsage,
@@ -500,9 +506,9 @@ function buzones_(
 
 /** Los almacenes de datos propios: equipo, dominios y sesiones. */
 export interface Datos {
-  equipo: AlmacenJson<Person[]>;
+  equipo: AlmacenTabla<Person[]>;
   /** Las empresas del grupo (Integraciones → Empresas). */
-  empresas: AlmacenJson<Empresa[]>;
+  empresas: AlmacenTabla<Empresa[]>;
   /** Fuentes apagadas, modos y buzones del portal, compartidos entre dispositivos. */
   ajustesPortal: AlmacenJson<AjustesPortal>;
   /** Proveedores y clientes externos (Integraciones → Proveedores). */
@@ -612,6 +618,12 @@ export interface Datos {
   crmActividades: AlmacenTabla<CrmActividadCliente[]>;
   /** Funcionalidades de desarrollo por proyecto. */
   crmFuncionalidades: AlmacenTabla<CrmFuncionalidad[]>;
+  /** Órdenes de compra recurrentes por cliente/mes. */
+  crmOrdenesCompra: AlmacenTabla<CrmOrdenCompra[]>;
+  /** Facturas emitidas, ligadas a pagos. */
+  crmFacturas: AlmacenTabla<CrmFactura[]>;
+  /** Partidas de cotización con costo para margen. */
+  crmPartidas: AlmacenTabla<CrmPartida[]>;
   /** Roles del CRM (Director, Finanzas, Comercial, Desarrollo). */
   rolesCrm: AlmacenTabla<RolCrm[]>;
   /** Usuarios del CRM con sus roles asignados. */
@@ -840,6 +852,21 @@ export function abrirDatos(persistencia: Persistencia): Datos {
     crmFuncionalidades: new AlmacenTabla<CrmFuncionalidad[]>(
       persistencia,
       TABLA_CRM_FUNCIONALIDADES,
+      []
+    ),
+    crmOrdenesCompra: new AlmacenTabla<CrmOrdenCompra[]>(
+      persistencia,
+      TABLA_CRM_ORDENES_COMPRA,
+      []
+    ),
+    crmFacturas: new AlmacenTabla<CrmFactura[]>(
+      persistencia,
+      TABLA_CRM_FACTURAS,
+      []
+    ),
+    crmPartidas: new AlmacenTabla<CrmPartida[]>(
+      persistencia,
+      TABLA_CRM_PARTIDAS,
       []
     ),
     rolesCrm: new AlmacenTabla<RolCrm[]>(persistencia, TABLA_ROLES_CRM, []),
@@ -6091,7 +6118,13 @@ export function construirRutas(
   // Ingesta del CRM nativo: carga masiva desde sistemas externos.
   registrarRutasIngestaCrm({
     router,
-    datos: datosCrm,
+    datos: {
+      ...datosCrm,
+      ordenesCompra: datos.crmOrdenesCompra,
+      facturas: datos.crmFacturas,
+      partidas: datos.crmPartidas,
+      empresas: datos.empresas
+    },
     emisores: todosLosEmisores
   });
 

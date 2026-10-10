@@ -5,17 +5,24 @@ import {
   validarCliente,
   validarContacto,
   validarCotizacion,
+  validarFactura,
   validarFuncionalidad,
+  validarOrdenCompra,
   validarPagoProgramado,
+  validarPartida,
   validarProyecto,
   type CrmActividadCliente,
   type CrmCliente,
   type CrmContacto,
   type CrmCotizacion,
+  type CrmFactura,
   type CrmFuncionalidad,
+  type CrmOrdenCompra,
   type CrmPagoProgramado,
+  type CrmPartida,
   type CrmProyecto
 } from '../datos/crm-clientes.js';
+import { validarEmpresa, type Empresa } from '../datos/empresas.js';
 import { ErrorPuente } from '../nucleo/errores.js';
 import type { Contexto, Router } from './router.js';
 
@@ -33,6 +40,10 @@ import type { Contexto, Router } from './router.js';
  * POST /ingesta/crm-nativo/pagos
  * POST /ingesta/crm-nativo/actividades
  * POST /ingesta/crm-nativo/funcionalidades
+ * POST /ingesta/crm-nativo/ordenes-compra
+ * POST /ingesta/crm-nativo/facturas
+ * POST /ingesta/crm-nativo/partidas
+ * POST /ingesta/crm-nativo/empresas
  *
  * Todas requieren Authorization: Bearer <token> donde el emisor tiene
  * permiso para el tipo "crm-nativo".
@@ -46,6 +57,10 @@ export interface DatosIngesta {
   pagos: AlmacenTabla<CrmPagoProgramado[]>;
   actividades: AlmacenTabla<CrmActividadCliente[]>;
   funcionalidades: AlmacenTabla<CrmFuncionalidad[]>;
+  ordenesCompra: AlmacenTabla<CrmOrdenCompra[]>;
+  facturas: AlmacenTabla<CrmFactura[]>;
+  partidas: AlmacenTabla<CrmPartida[]>;
+  empresas: AlmacenTabla<Empresa[]>;
 }
 
 export interface DependenciasIngesta {
@@ -402,6 +417,176 @@ export function registrarRutasIngestaCrm(deps: DependenciasIngesta): void {
     }
 
     await datos.funcionalidades.escribir([...porId.values()]);
+    return resultado;
+  });
+
+  // --- Órdenes de compra ---
+  router.post('/ingesta/crm-nativo/ordenes-compra', async (contexto) => {
+    autenticar(contexto, emisores());
+    const cuerpo = contexto.cuerpo as unknown[];
+    if (!Array.isArray(cuerpo)) {
+      throw new ErrorPuente(
+        'El cuerpo debe ser un arreglo de órdenes de compra.',
+        400
+      );
+    }
+    const ahora = new Date().toISOString();
+    const lista = datos.ordenesCompra.leer();
+    const porId = new Map(lista.map((o) => [o.id, o]));
+    const resultado: ResultadoIngesta = {
+      recibidos: cuerpo.length,
+      creados: 0,
+      actualizados: 0,
+      errores: []
+    };
+
+    for (let i = 0; i < cuerpo.length; i++) {
+      const crudo = cuerpo[i] as Record<string, unknown>;
+      try {
+        const id = typeof crudo['id'] === 'string' ? crudo['id'] : undefined;
+        const previo = id ? porId.get(id) : undefined;
+        const oc = validarOrdenCompra(crudo, previo, ahora);
+        if (porId.has(oc.id)) {
+          resultado.actualizados++;
+        } else {
+          resultado.creados++;
+        }
+        porId.set(oc.id, oc);
+      } catch (e) {
+        resultado.errores.push(`[${i}] ${(e as Error).message}`);
+      }
+    }
+
+    await datos.ordenesCompra.escribir([...porId.values()]);
+    return resultado;
+  });
+
+  // --- Facturas ---
+  router.post('/ingesta/crm-nativo/facturas', async (contexto) => {
+    autenticar(contexto, emisores());
+    const cuerpo = contexto.cuerpo as unknown[];
+    if (!Array.isArray(cuerpo)) {
+      throw new ErrorPuente('El cuerpo debe ser un arreglo de facturas.', 400);
+    }
+    const ahora = new Date().toISOString();
+    const lista = datos.facturas.leer();
+    const porId = new Map(lista.map((f) => [f.id, f]));
+    const porUuid = new Map(
+      lista.filter((f) => f.uuid).map((f) => [f.uuid!, f])
+    );
+    const resultado: ResultadoIngesta = {
+      recibidos: cuerpo.length,
+      creados: 0,
+      actualizados: 0,
+      errores: []
+    };
+
+    for (let i = 0; i < cuerpo.length; i++) {
+      const crudo = cuerpo[i] as Record<string, unknown>;
+      try {
+        const id = typeof crudo['id'] === 'string' ? crudo['id'] : undefined;
+        const uuid =
+          typeof crudo['uuid'] === 'string' ? crudo['uuid'] : undefined;
+        let previo = id ? porId.get(id) : undefined;
+        if (!previo && uuid) {
+          previo = porUuid.get(uuid);
+          if (previo) {
+            crudo['id'] = previo.id;
+          }
+        }
+        const factura = validarFactura(crudo, previo, ahora);
+        if (porId.has(factura.id)) {
+          resultado.actualizados++;
+        } else {
+          resultado.creados++;
+        }
+        porId.set(factura.id, factura);
+        if (factura.uuid) {
+          porUuid.set(factura.uuid, factura);
+        }
+      } catch (e) {
+        resultado.errores.push(`[${i}] ${(e as Error).message}`);
+      }
+    }
+
+    await datos.facturas.escribir([...porId.values()]);
+    return resultado;
+  });
+
+  // --- Partidas ---
+  router.post('/ingesta/crm-nativo/partidas', async (contexto) => {
+    autenticar(contexto, emisores());
+    const cuerpo = contexto.cuerpo as unknown[];
+    if (!Array.isArray(cuerpo)) {
+      throw new ErrorPuente('El cuerpo debe ser un arreglo de partidas.', 400);
+    }
+    const ahora = new Date().toISOString();
+    const lista = datos.partidas.leer();
+    const porId = new Map(lista.map((p) => [p.id, p]));
+    const resultado: ResultadoIngesta = {
+      recibidos: cuerpo.length,
+      creados: 0,
+      actualizados: 0,
+      errores: []
+    };
+
+    for (let i = 0; i < cuerpo.length; i++) {
+      const crudo = cuerpo[i] as Record<string, unknown>;
+      try {
+        const id = typeof crudo['id'] === 'string' ? crudo['id'] : undefined;
+        const previo = id ? porId.get(id) : undefined;
+        const partida = validarPartida(crudo, previo, ahora);
+        if (porId.has(partida.id)) {
+          resultado.actualizados++;
+        } else {
+          resultado.creados++;
+        }
+        porId.set(partida.id, partida);
+      } catch (e) {
+        resultado.errores.push(`[${i}] ${(e as Error).message}`);
+      }
+    }
+
+    await datos.partidas.escribir([...porId.values()]);
+    return resultado;
+  });
+
+  // --- Empresas del grupo ---
+  router.post('/ingesta/crm-nativo/empresas', async (contexto) => {
+    autenticar(contexto, emisores());
+    const cuerpo = contexto.cuerpo as unknown[];
+    if (!Array.isArray(cuerpo)) {
+      throw new ErrorPuente('El cuerpo debe ser un arreglo de empresas.', 400);
+    }
+    const ahora = new Date().toISOString();
+    const lista = datos.empresas.leer();
+    const porId = new Map(lista.map((e) => [e.id, e]));
+    const resultado: ResultadoIngesta = {
+      recibidos: cuerpo.length,
+      creados: 0,
+      actualizados: 0,
+      errores: []
+    };
+
+    for (let i = 0; i < cuerpo.length; i++) {
+      const crudo = cuerpo[i] as Record<string, unknown>;
+      try {
+        const id = typeof crudo['id'] === 'string' ? crudo['id'] : undefined;
+        const previo = id ? porId.get(id) : undefined;
+        const orden = previo?.orden ?? lista.length + i;
+        const empresa = validarEmpresa(crudo, previo, ahora, orden);
+        if (porId.has(empresa.id)) {
+          resultado.actualizados++;
+        } else {
+          resultado.creados++;
+        }
+        porId.set(empresa.id, empresa);
+      } catch (e) {
+        resultado.errores.push(`[${i}] ${(e as Error).message}`);
+      }
+    }
+
+    await datos.empresas.escribir([...porId.values()]);
     return resultado;
   });
 }

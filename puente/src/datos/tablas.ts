@@ -771,8 +771,11 @@ import type {
   CrmCliente,
   CrmContacto,
   CrmCotizacion,
+  CrmFactura,
   CrmFuncionalidad,
+  CrmOrdenCompra,
   CrmPagoProgramado,
+  CrmPartida,
   CrmProyecto,
   RolCrm,
   UsuarioCrm
@@ -1118,4 +1121,133 @@ export const TABLA_USUARIOS_CRM: DefinicionTabla<UsuarioCrm[]> = {
     sub: {}
   }),
   deFilas: (filas) => filas.map((f) => objeto<UsuarioCrm>(f['datos']))
+};
+
+// --- Fase 2: OC, facturas y partidas ------------------------------------
+
+export const TABLA_CRM_ORDENES_COMPRA: DefinicionTabla<CrmOrdenCompra[]> = {
+  clave: 'crm-ordenes-compra',
+  tabla: 'crm_ordenes_compra',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_ordenes_compra (
+      id text PRIMARY KEY,
+      cliente_id text NOT NULL,
+      proyecto_id text,
+      folio text NOT NULL,
+      periodo text,
+      monto numeric,
+      moneda text,
+      fecha_emision timestamptz,
+      fecha_vencimiento timestamptz,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_oc_cliente ON crm_ordenes_compra (cliente_id);
+    CREATE INDEX IF NOT EXISTS crm_oc_folio ON crm_ordenes_compra (folio);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((o) => ({
+      id: o.id,
+      cliente_id: o.clienteId,
+      proyecto_id: o.proyectoId ?? null,
+      folio: o.folio,
+      periodo: o.periodo ?? null,
+      monto: o.monto ?? null,
+      moneda: o.moneda ?? null,
+      fecha_emision: fecha(o.fechaEmision),
+      fecha_vencimiento: fecha(o.fechaVencimiento),
+      actualizado_en: o.actualizadoEn,
+      datos: o
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmOrdenCompra>(f['datos']))
+};
+
+export const TABLA_CRM_FACTURAS: DefinicionTabla<CrmFactura[]> = {
+  clave: 'crm-facturas',
+  tabla: 'crm_facturas',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_facturas (
+      id text PRIMARY KEY,
+      empresa_emisora_id text NOT NULL,
+      cliente_id text NOT NULL,
+      proyecto_id text,
+      uuid text,
+      folio text,
+      fecha_emision timestamptz,
+      total numeric,
+      moneda text,
+      fecha_pago_real timestamptz,
+      tiene_complemento boolean,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_facturas_cliente ON crm_facturas (cliente_id);
+    CREATE INDEX IF NOT EXISTS crm_facturas_empresa ON crm_facturas (empresa_emisora_id);
+    CREATE INDEX IF NOT EXISTS crm_facturas_uuid ON crm_facturas (uuid);
+    CREATE INDEX IF NOT EXISTS crm_facturas_folio ON crm_facturas (folio);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((f) => ({
+      id: f.id,
+      empresa_emisora_id: f.empresaEmisoraId,
+      cliente_id: f.clienteId,
+      proyecto_id: f.proyectoId ?? null,
+      uuid: f.uuid ?? null,
+      folio: f.folio ?? null,
+      fecha_emision: fecha(f.fechaEmision),
+      total: f.total ?? null,
+      moneda: f.moneda ?? null,
+      fecha_pago_real: fecha(f.fechaPagoReal),
+      tiene_complemento: f.tieneComplemento ?? null,
+      actualizado_en: f.actualizadoEn,
+      datos: f
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmFactura>(f['datos']))
+};
+
+export const TABLA_CRM_PARTIDAS: DefinicionTabla<CrmPartida[]> = {
+  clave: 'crm-partidas',
+  tabla: 'crm_partidas',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS crm_partidas (
+      id text PRIMARY KEY,
+      cotizacion_id text NOT NULL,
+      numero integer NOT NULL,
+      descripcion text NOT NULL,
+      cantidad numeric,
+      precio_unitario numeric,
+      importe numeric,
+      costo_unitario numeric,
+      costo_total numeric,
+      moneda text,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_partidas_cotizacion ON crm_partidas (cotizacion_id);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((p) => ({
+      id: p.id,
+      cotizacion_id: p.cotizacionId,
+      numero: p.numero,
+      descripcion: p.descripcion,
+      cantidad: p.cantidad ?? null,
+      precio_unitario: p.precioUnitario ?? null,
+      importe: p.importe ?? null,
+      costo_unitario: p.costoUnitario ?? null,
+      costo_total: p.costoTotal ?? null,
+      moneda: p.moneda ?? null,
+      actualizado_en: p.actualizadoEn,
+      datos: p
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<CrmPartida>(f['datos']))
 };
