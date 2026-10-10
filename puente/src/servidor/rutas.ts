@@ -59,6 +59,10 @@ import {
   TABLA_CRM_ORDENES_COMPRA,
   TABLA_CRM_FACTURAS,
   TABLA_CRM_PARTIDAS,
+  TABLA_CRM_CAMBIOS_ETAPA,
+  TABLA_CRM_AVANCES,
+  TABLA_CRM_HITOS,
+  TABLA_CRM_RIESGOS,
   TABLA_ROLES_CRM,
   TABLA_USUARIOS_CRM,
   type Aviso
@@ -108,17 +112,28 @@ import {
   validarCatalogoProveedores,
   type Proveedor
 } from '../datos/proveedores.js';
+import {
+  avisoNuevoSinResponsable,
+  limpiarAvisados,
+  tareasViejasSinResponsable,
+  type TareaSinResponsable
+} from '../datos/aviso-sin-responsable.js';
 import type {
   CrmActividadCliente,
+  CrmAlertasEstancados,
+  CrmAvanceProyecto,
+  CrmCambioEtapa,
   CrmCliente,
   CrmContacto,
   CrmCotizacion,
   CrmFactura,
   CrmFuncionalidad,
+  CrmHito,
   CrmOrdenCompra,
   CrmPagoProgramado,
   CrmPartida,
   CrmProyecto,
+  CrmRiesgo,
   HostedApp,
   LicenseUsage,
   LlamadaArchivada,
@@ -134,7 +149,11 @@ import type {
   VpsStatus
 } from '../nucleo/contrato.js';
 import { registrarRutasCrm, type DatosCrm } from './rutas-crm.js';
-import { registrarRutasIngestaCrm } from './rutas-ingesta-crm.js';
+import { registrarRutasCrmSeguimiento } from './rutas-crm-seguimiento.js';
+import {
+  registrarRutasIngestaCrm,
+  registrarRutasLecturaTareas
+} from './rutas-ingesta-crm.js';
 
 const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   pendiente: 'Pendiente',
@@ -624,6 +643,18 @@ export interface Datos {
   crmFacturas: AlmacenTabla<CrmFactura[]>;
   /** Partidas de cotización con costo para margen. */
   crmPartidas: AlmacenTabla<CrmPartida[]>;
+  /** Cambios de etapa comercial en el kanban. */
+  crmCambiosEtapa: AlmacenTabla<CrmCambioEtapa[]>;
+  /** Avances y actualizaciones de estatus de proyectos. */
+  crmAvances: AlmacenTabla<CrmAvanceProyecto[]>;
+  /** Hitos y entregables de proyectos. */
+  crmHitos: AlmacenTabla<CrmHito[]>;
+  /** Riesgos y bloqueos de proyectos. */
+  crmRiesgos: AlmacenTabla<CrmRiesgo[]>;
+  /** Dias sin movimiento por etapa antes de marcar un lead estancado. */
+  crmAlertasEstancados: AlmacenJson<CrmAlertasEstancados>;
+  /** Tareas sin responsable ya avisadas (para no repetir el de 24 h). */
+  avisoSinResponsable: AlmacenJson<{ avisados: Record<string, string> }>;
   /** Roles del CRM (Director, Finanzas, Comercial, Desarrollo). */
   rolesCrm: AlmacenTabla<RolCrm[]>;
   /** Usuarios del CRM con sus roles asignados. */
@@ -868,6 +899,41 @@ export function abrirDatos(persistencia: Persistencia): Datos {
       persistencia,
       TABLA_CRM_PARTIDAS,
       []
+    ),
+    crmCambiosEtapa: new AlmacenTabla<CrmCambioEtapa[]>(
+      persistencia,
+      TABLA_CRM_CAMBIOS_ETAPA,
+      []
+    ),
+    crmAvances: new AlmacenTabla<CrmAvanceProyecto[]>(
+      persistencia,
+      TABLA_CRM_AVANCES,
+      []
+    ),
+    crmHitos: new AlmacenTabla<CrmHito[]>(persistencia, TABLA_CRM_HITOS, []),
+    crmRiesgos: new AlmacenTabla<CrmRiesgo[]>(
+      persistencia,
+      TABLA_CRM_RIESGOS,
+      []
+    ),
+    crmAlertasEstancados: new AlmacenJson<CrmAlertasEstancados>(
+      persistencia,
+      'crm-alertas-estancados',
+      {
+        diasDefault: 14,
+        diasPorEtapa: {
+          prospecto: 21,
+          en_cotizacion: 10,
+          cotizacion_enviada: 7,
+          negociacion: 14,
+          por_confirmar: 5
+        }
+      }
+    ),
+    avisoSinResponsable: new AlmacenJson<{ avisados: Record<string, string> }>(
+      persistencia,
+      'aviso-sin-responsable',
+      { avisados: {} }
     ),
     rolesCrm: new AlmacenTabla<RolCrm[]>(persistencia, TABLA_ROLES_CRM, []),
     usuariosCrm: new AlmacenTabla<UsuarioCrm[]>(
@@ -6115,15 +6181,62 @@ export function construirRutas(
     equipo: equipoCompleto
   });
 
-  // Ingesta del CRM nativo: carga masiva desde sistemas externos.
-  registrarRutasIngestaCrm({
+  registrarRutasCrmSeguimiento({
     router,
     datos: {
       ...datosCrm,
       ordenesCompra: datos.crmOrdenesCompra,
       facturas: datos.crmFacturas,
       partidas: datos.crmPartidas,
-      empresas: datos.empresas
+      cambiosEtapa: datos.crmCambiosEtapa,
+      avances: datos.crmAvances,
+      hitos: datos.crmHitos,
+      riesgos: datos.crmRiesgos,
+      alertasEstancados: datos.crmAlertasEstancados
+    },
+    correoDeSesion: (contexto) => acceso.sesionDe(tokenDe(contexto))?.correo,
+    correosDelDueno: () => [...correosDelDueno()],
+    equipo: equipoCompleto,
+    pendientes: () => {
+      const deOps = pendientesOps();
+      const personales = datos.personales.leer();
+      return [...deOps, ...personales];
+    },
+    asignarPendiente: (id, quien) =>
+      asignarPendiente(id, quien.email ?? quien.name, {}, undefined)
+  });
+
+  // Ingesta del CRM nativo: carga masiva desde sistemas externos.
+  const datosIngestaCrm = {
+    ...datosCrm,
+    ordenesCompra: datos.crmOrdenesCompra,
+    facturas: datos.crmFacturas,
+    partidas: datos.crmPartidas,
+    empresas: datos.empresas,
+    cambiosEtapa: datos.crmCambiosEtapa,
+    avances: datos.crmAvances,
+    hitos: datos.crmHitos,
+    riesgos: datos.crmRiesgos
+  };
+  registrarRutasIngestaCrm({
+    router,
+    datos: datosIngestaCrm,
+    emisores: todosLosEmisores
+  });
+
+  // Rutas de solo lectura para bots con token de emisor tipo 'lectura-tareas'.
+  registrarRutasLecturaTareas({
+    router,
+    datosIngesta: datosIngestaCrm,
+    datosLectura: {
+      equipo: datos.equipo,
+      rolesCrm: datos.rolesCrm,
+      usuariosCrm: datos.usuariosCrm,
+      pendientes: () => {
+        const deOps = pendientesOps();
+        const personales = datos.personales.leer();
+        return [...deOps, ...personales];
+      }
     },
     emisores: todosLosEmisores
   });
@@ -6282,6 +6395,82 @@ export function construirRutas(
       );
       await mandarTelegram(
         `<b>DS Monitor · lunes</b>\n${texto}\n${cfg().urlPortal}/pendientes?owner=nadie`
+      );
+      return;
+    }
+  });
+
+  // Cada hora: tareas (pendientes, funcionalidades, hitos, riesgos) sin
+  // responsable por mas de 24 h. No se repite la misma tarea.
+  programables.push({
+    nombre: 'sin responsable 24h',
+    cadaMinutos: REVISION_MINUTOS.diario,
+    correr: async () => {
+      const ahora = new Date();
+      const pendientes = (await fuentes.pendientes()).filter(
+        (t) => t.status !== 'hecho' && !t.personal && !t.assignee
+      );
+      const actuales: TareaSinResponsable[] = [
+        ...pendientes.map((t) => ({
+          tipo: 'pendiente' as const,
+          id: t.id,
+          titulo: t.title,
+          desde: t.updatedAt
+        })),
+        ...datos.crmFuncionalidades
+          .leer()
+          .filter((f) => f.estado !== 'hecho' && !f.responsableId)
+          .map((f) => ({
+            tipo: 'funcionalidad' as const,
+            id: f.id,
+            titulo: f.titulo,
+            desde: f.actualizadoEn
+          })),
+        ...datos.crmHitos
+          .leer()
+          .filter((h) => !h.completado && !h.responsableId)
+          .map((h) => ({
+            tipo: 'hito' as const,
+            id: h.id,
+            titulo: h.nombre,
+            desde: h.actualizadoEn
+          })),
+        ...datos.crmRiesgos
+          .leer()
+          .filter((r) => r.abierto && !r.responsableId)
+          .map((r) => ({
+            tipo: 'riesgo' as const,
+            id: r.id,
+            titulo: r.descripcion.slice(0, 100),
+            desde: r.fechaReporte
+          }))
+      ];
+      const limpio = limpiarAvisados(
+        datos.avisoSinResponsable.leer(),
+        actuales
+      );
+      const viejas = tareasViejasSinResponsable(actuales, ahora);
+      const { aviso, estado } = avisoNuevoSinResponsable(viejas, limpio, ahora);
+      await datos.avisoSinResponsable.escribir(estado);
+      if (!aviso) {
+        return 'omitida';
+      }
+      const registro: Aviso = {
+        id: randomBytes(8).toString('hex'),
+        tipo: 'sistema',
+        accion: 'recuerda',
+        persona: 'DS Monitor',
+        tareaId: '',
+        titulo: aviso.titulo,
+        texto: aviso.texto,
+        en: ahora.toISOString(),
+        leido: false
+      };
+      await datos.avisos.escribir(
+        [registro, ...datos.avisos.leer()].slice(0, 200)
+      );
+      await mandarTelegram(
+        `<b>DS Monitor</b>\n${aviso.titulo}\n${cfg().urlPortal}/pendientes?owner=nadie`
       );
       return;
     }

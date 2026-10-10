@@ -46,6 +46,11 @@ const NAV: NavItem[] = [
   { path: '/despliegues', label: 'Despliegues', icon: 'despliegue' },
   { path: '/repos', label: 'Repositorios', icon: 'rama' },
   { path: '/crm', label: 'CRM', icon: 'crm' },
+  { path: '/comercial', label: 'Comercial', icon: 'crm' },
+  { path: '/clientes', label: 'Clientes', icon: 'equipo' },
+  { path: '/ejecucion', label: 'Ejecución', icon: 'tareas' },
+  { path: '/desarrollo', label: 'Desarrollo', icon: 'rama' },
+  { path: '/cobranza', label: 'Cobranza', icon: 'licencia' },
   { path: '/licencias', label: 'Licencias', icon: 'licencia' },
   { path: '/dominios', label: 'Dominios', icon: 'globo' },
   // Lo que se configura.
