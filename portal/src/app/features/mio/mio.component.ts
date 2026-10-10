@@ -16,11 +16,28 @@ import {
   TaskItem,
   TaskStatus
 } from '../../core/models';
+import {
+  CRM_FUNCIONALIDAD_ESTADO_LABEL,
+  CRM_FUNCIONALIDAD_PRIORIDAD_LABEL,
+  CrmFuncionalidadEstado
+} from '../../core/models/crm-nativo.model';
 import { BrandLogoComponent } from '../../ui/brand-logo.component';
 import { FotosPendienteComponent } from '../../ui/fotos-pendiente.component';
 import { IconComponent } from '../../ui/icon.component';
 import { DayPipe, RelativePipe, TimePipe } from '../../ui/portal.pipes';
 import { sinPrefijosDeCorreo } from '../../core/util/text.util';
+
+interface FuncionalidadMio {
+  id: string;
+  titulo: string;
+  descripcion?: string;
+  estado: CrmFuncionalidadEstado;
+  prioridad: 'baja' | 'media' | 'alta' | 'urgente';
+  fechaCompromiso?: string;
+  enlace?: string;
+  proyectoNombre?: string;
+  clienteNombre?: string;
+}
 
 /** Lo que dice la pantalla cuando la liga ya no abre (404 o 410 del puente). */
 const LIGA_VENCIDA =
@@ -53,6 +70,9 @@ export class MioComponent {
     inject(ActivatedRoute).snapshot.paramMap.get('token') ?? '';
 
   readonly priorityLabel = TASK_PRIORITY_LABEL;
+  readonly funcEstadoLabel = CRM_FUNCIONALIDAD_ESTADO_LABEL;
+  readonly funcPrioridadLabel = CRM_FUNCIONALIDAD_PRIORIDAD_LABEL;
+
   readonly persona = signal<{ name: string; role?: string } | undefined>(
     undefined
   );
@@ -70,6 +90,10 @@ export class MioComponent {
   readonly mensajes = signal<
     Record<string, { texto: string; error?: boolean }>
   >({});
+
+  /** Funcionalidades asignadas del CRM nativo. */
+  readonly funcionalidades = signal<FuncionalidadMio[]>([]);
+  readonly verFuncionalidades = signal(true);
 
   readonly abiertos = computed(() =>
     [...this.pendientes()]
@@ -119,6 +143,7 @@ export class MioComponent {
           this.pendientes.set(r.pendientes);
           this.seguimiento.set(new Set(r.seguimiento ?? []));
           this.cargando.set(false);
+          this.cargarFuncionalidades();
         },
         error: (e: unknown) => {
           const http = e as {
@@ -126,7 +151,6 @@ export class MioComponent {
             error?: { error?: string };
             message?: string;
           };
-          // Liga vencida o desconocida: el siguiente paso, no solo el error.
           this.error.set(
             http?.status === 410 || http?.status === 404
               ? LIGA_VENCIDA
@@ -135,6 +159,26 @@ export class MioComponent {
           this.cargando.set(false);
         }
       });
+  }
+
+  cargarFuncionalidades(): void {
+    this.http
+      .get<FuncionalidadMio[]>(
+        `${this.config.gatewayUrl}/mio/${this.token}/funcionalidades`
+      )
+      .subscribe({
+        next: (funcs) => this.funcionalidades.set(funcs),
+        error: () => this.funcionalidades.set([])
+      });
+  }
+
+  readonly funcionalidadesAbiertas = computed(() =>
+    this.funcionalidades().filter((f) => f.estado !== 'hecho')
+  );
+
+  funcVencida(fecha: string | undefined): boolean {
+    if (!fecha) return false;
+    return new Date(fecha) < new Date();
   }
 
   borrador(id: string): string {

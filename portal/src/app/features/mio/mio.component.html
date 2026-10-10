@@ -266,6 +266,83 @@
           </div>
         }
       }
+
+      <!-- Funcionalidades asignadas (CRM nativo) -->
+      @if (funcionalidadesAbiertas().length > 0) {
+        <div class="regla-marca mt-6"></div>
+        <div class="mt-4">
+          <div class="flex items-center justify-between">
+            <h2 class="text-base font-semibold text-ink">
+              Funcionalidades asignadas
+              <span class="ml-1 text-ink-muted font-normal">
+                · {{ funcionalidadesAbiertas().length }}
+              </span>
+            </h2>
+            <button
+              type="button"
+              class="text-xs text-ink-muted"
+              (click)="verFuncionalidades.set(!verFuncionalidades())">
+              {{ verFuncionalidades() ? "Ocultar" : "Mostrar" }}
+            </button>
+          </div>
+          @if (verFuncionalidades()) {
+            <div class="mt-3 space-y-2">
+              @for (f of funcionalidadesAbiertas(); track f.id) {
+                <article class="card card-pad">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0 flex-1">
+                      <p class="text-sm font-medium text-ink">{{ f.titulo }}</p>
+                      <div
+                        class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
+                        <span class="chip bg-surface-muted text-ink-muted">
+                          {{ funcEstadoLabel[f.estado] }}
+                        </span>
+                        <span
+                          class="chip"
+                          [class]="
+                            f.prioridad === 'alta' || f.prioridad === 'urgente'
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200'
+                              : 'bg-surface-muted text-ink-muted'
+                          ">
+                          {{ funcPrioridadLabel[f.prioridad] }}
+                        </span>
+                        @if (f.fechaCompromiso) {
+                          <span
+                            [class]="
+                              funcVencida(f.fechaCompromiso)
+                                ? 'text-danger font-medium'
+                                : 'text-ink-muted'
+                            ">
+                            {{ f.fechaCompromiso | dia }}
+                          </span>
+                        }
+                      </div>
+                      @if (f.proyectoNombre) {
+                        <p class="mt-1 text-xs text-ink-subtle">
+                          {{ f.proyectoNombre }}
+                          @if (f.clienteNombre) {
+                            · {{ f.clienteNombre }}
+                          }
+                        </p>
+                      }
+                      @if (f.descripcion) {
+                        <p class="mt-2 text-sm text-ink-muted">
+                          {{ f.descripcion }}
+                        </p>
+                      }
+                    </div>
+                    @if (f.enlace) {
+                      <a class="btn shrink-0" [href]="f.enlace" target="_blank">
+                        <pt-icon name="externo" class="h-4 w-4" />
+                      </a>
+                    }
+                  </div>
+                </article>
+              }
+            </div>
+          }
+        </div>
+      }
     }
   </div>
 </main>
