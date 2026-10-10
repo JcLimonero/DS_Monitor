@@ -8,11 +8,14 @@ import type {
   CrmCotizacionEstatus,
   CrmCotizacionTipo,
   CrmEsquemaCobro,
+  CrmFactura,
   CrmFuncionalidad,
   CrmFuncionalidadEstado,
   CrmFuncionalidadPrioridad,
+  CrmOrdenCompra,
   CrmPagoEstatus,
   CrmPagoProgramado,
+  CrmPartida,
   CrmProximoPaso,
   CrmProyecto,
   CrmProyectoEstado,
@@ -24,8 +27,11 @@ export type {
   CrmCliente,
   CrmContacto,
   CrmCotizacion,
+  CrmFactura,
   CrmFuncionalidad,
+  CrmOrdenCompra,
   CrmPagoProgramado,
+  CrmPartida,
   CrmProyecto
 };
 
@@ -705,4 +711,153 @@ export function pagosPorVencer(
     const fecha = Date.parse(p.fechaEsperada);
     return fecha >= ahora.getTime() && fecha <= limite;
   });
+}
+
+// --- Fase 2: Validacion de Orden de Compra ---
+
+export function validarOrdenCompra(
+  crudo: unknown,
+  previa: CrmOrdenCompra | undefined,
+  ahora: string
+): CrmOrdenCompra {
+  const o = (crudo ?? {}) as Record<string, unknown>;
+  const clienteId = texto(o['clienteId']);
+  const folio = texto(o['folio']);
+  if (!clienteId) {
+    throw new Error('Cada orden de compra necesita un clienteId.');
+  }
+  if (!folio) {
+    throw new Error('Cada orden de compra necesita un folio.');
+  }
+  const pagoIds = Array.isArray(o['pagoIds'])
+    ? (o['pagoIds'] as unknown[]).map(String).filter(Boolean)
+    : previa?.pagoIds;
+  return {
+    id: texto(o['id']) ?? previa?.id ?? idDeTexto(`oc-${folio}`),
+    clienteId,
+    proyectoId: texto(o['proyectoId']),
+    folio: folio.slice(0, 60),
+    periodo: texto(o['periodo'])?.slice(0, 60),
+    monto: numeroNullable(o['monto'], previa?.monto),
+    moneda: texto(o['moneda'])?.slice(0, 10) ?? previa?.moneda ?? 'MXN',
+    fechaEmision: fechaValida(o['fechaEmision']),
+    fechaVencimiento: fechaValida(o['fechaVencimiento']),
+    pagoIds,
+    notas: texto(o['notas'])?.slice(0, 2000),
+    actualizadoEn: ahora
+  };
+}
+
+// --- Fase 2: Validacion de Factura ---
+
+export function validarFactura(
+  crudo: unknown,
+  previa: CrmFactura | undefined,
+  ahora: string
+): CrmFactura {
+  const f = (crudo ?? {}) as Record<string, unknown>;
+  const empresaEmisoraId = texto(f['empresaEmisoraId']);
+  const clienteId = texto(f['clienteId']);
+  if (!empresaEmisoraId) {
+    throw new Error('Cada factura necesita una empresaEmisoraId.');
+  }
+  if (!clienteId) {
+    throw new Error('Cada factura necesita un clienteId.');
+  }
+  const pagoIds = Array.isArray(f['pagoIds'])
+    ? (f['pagoIds'] as unknown[]).map(String).filter(Boolean)
+    : previa?.pagoIds;
+  const uuid = texto(f['uuid'])?.slice(0, 40);
+  const folio = texto(f['folio'])?.slice(0, 40);
+  return {
+    id:
+      texto(f['id']) ??
+      previa?.id ??
+      idDeTexto(`fac-${uuid ?? folio ?? Date.now()}`),
+    empresaEmisoraId,
+    clienteId,
+    proyectoId: texto(f['proyectoId']),
+    uuid,
+    folio,
+    fechaEmision: fechaValida(f['fechaEmision']),
+    subtotal: numeroNullable(f['subtotal'], previa?.subtotal),
+    iva: numeroNullable(f['iva'], previa?.iva),
+    total: numeroNullable(f['total'], previa?.total),
+    moneda: texto(f['moneda'])?.slice(0, 10) ?? previa?.moneda ?? 'MXN',
+    fechaPagoReal: fechaValida(f['fechaPagoReal']),
+    tieneComplemento: f['tieneComplemento'] === true,
+    fechaComplemento: fechaValida(f['fechaComplemento']),
+    uuidComplemento: texto(f['uuidComplemento'])?.slice(0, 40),
+    pagoIds,
+    archivoUrl: texto(f['archivoUrl'])?.slice(0, 500),
+    notas: texto(f['notas'])?.slice(0, 2000),
+    actualizadoEn: ahora
+  };
+}
+
+// --- Fase 2: Validacion de Partida ---
+
+export function validarPartida(
+  crudo: unknown,
+  previa: CrmPartida | undefined,
+  ahora: string
+): CrmPartida {
+  const p = (crudo ?? {}) as Record<string, unknown>;
+  const cotizacionId = texto(p['cotizacionId']);
+  const descripcion = texto(p['descripcion']);
+  if (!cotizacionId) {
+    throw new Error('Cada partida necesita un cotizacionId.');
+  }
+  if (!descripcion) {
+    throw new Error('Cada partida necesita una descripción.');
+  }
+  const numero_ = entero(p['numero'], previa?.numero ?? 1);
+  return {
+    id:
+      texto(p['id']) ??
+      previa?.id ??
+      idDeTexto(`part-${cotizacionId}-${numero_}`),
+    cotizacionId,
+    numero: numero_,
+    descripcion: descripcion.slice(0, 500),
+    cantidad: numero(p['cantidad'], previa?.cantidad ?? 1),
+    precioUnitario: numeroNullable(p['precioUnitario'], previa?.precioUnitario),
+    importe: numeroNullable(p['importe'], previa?.importe),
+    costoUnitario: numeroNullable(p['costoUnitario'], previa?.costoUnitario),
+    costoTotal: numeroNullable(p['costoTotal'], previa?.costoTotal),
+    moneda: texto(p['moneda'])?.slice(0, 10) ?? previa?.moneda ?? 'MXN',
+    notas: texto(p['notas'])?.slice(0, 500),
+    actualizadoEn: ahora
+  };
+}
+
+// --- Fase 2: Ocultar costos de partidas ---
+
+export function ocultarCostosPartida<
+  T extends {
+    costoUnitario?: number | null;
+    costoTotal?: number | null;
+  }
+>(partida: T, ocultarCostos: boolean): T {
+  if (!ocultarCostos) return partida;
+  const { costoUnitario, costoTotal, ...resto } = partida;
+  return resto as T;
+}
+
+/** Calcula el margen de una cotizacion a partir de sus partidas. */
+export function margenDeCotizacion(
+  cotizacionId: string,
+  partidas: CrmPartida[]
+): { venta: number; costo: number; margen: number; margenPct: number } | null {
+  const deEsta = partidas.filter((p) => p.cotizacionId === cotizacionId);
+  if (deEsta.length === 0) return null;
+  const venta = deEsta
+    .filter((p) => p.importe != null)
+    .reduce((sum, p) => sum + (p.importe ?? 0), 0);
+  const costo = deEsta
+    .filter((p) => p.costoTotal != null)
+    .reduce((sum, p) => sum + (p.costoTotal ?? 0), 0);
+  const margen = venta - costo;
+  const margenPct = venta > 0 ? (margen / venta) * 100 : 0;
+  return { venta, costo, margen, margenPct };
 }

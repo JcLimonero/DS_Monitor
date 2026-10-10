@@ -585,6 +585,101 @@ export interface CrmFuncionalidad {
   actualizadoEn: string;
 }
 
+// --- Fase 2: OC, facturas y partidas ---
+
+/**
+ * Una orden de compra recurrente por cliente/mes.
+ * Ligada a cliente/proyecto y opcionalmente a uno o mas pagos.
+ */
+export interface CrmOrdenCompra {
+  id: string;
+  /** Cliente que emite la OC. */
+  clienteId: string;
+  /** Proyecto relacionado (opcional). */
+  proyectoId?: string;
+  /** Folio de la OC del cliente. */
+  folio: string;
+  /** Periodo que cubre (ej. "Octubre 2026", "Q4 2026"). */
+  periodo?: string;
+  /** Monto autorizado (null = por confirmar). */
+  monto?: number | null;
+  moneda?: string;
+  /** Fecha de emision de la OC. */
+  fechaEmision?: string;
+  /** Fecha de vencimiento de la OC. */
+  fechaVencimiento?: string;
+  /** IDs de pagos cubiertos por esta OC. */
+  pagoIds?: string[];
+  notas?: string;
+  actualizadoEn: string;
+}
+
+/**
+ * Una factura emitida, ligada a uno o mas pagos.
+ */
+export interface CrmFactura {
+  id: string;
+  /** Empresa del grupo que emite la factura. */
+  empresaEmisoraId: string;
+  /** Cliente que recibe la factura. */
+  clienteId: string;
+  /** Proyecto relacionado (opcional). */
+  proyectoId?: string;
+  /** UUID fiscal (CFDI). */
+  uuid?: string;
+  /** Folio fiscal (serie + numero). */
+  folio?: string;
+  /** Fecha de emision. */
+  fechaEmision?: string;
+  /** Subtotal antes de IVA. */
+  subtotal?: number | null;
+  /** IVA. */
+  iva?: number | null;
+  /** Total con IVA. */
+  total?: number | null;
+  moneda?: string;
+  /** Fecha de pago real de esta factura. */
+  fechaPagoReal?: string;
+  /** Tiene complemento de pago. */
+  tieneComplemento?: boolean;
+  /** Fecha del complemento de pago. */
+  fechaComplemento?: string;
+  /** UUID del complemento (si es diferente). */
+  uuidComplemento?: string;
+  /** IDs de pagos que cubre esta factura. */
+  pagoIds?: string[];
+  /** URL al PDF o XML de la factura. */
+  archivoUrl?: string;
+  notas?: string;
+  actualizadoEn: string;
+}
+
+/**
+ * Una partida (linea) de una cotizacion, con costo para calcular margen.
+ * Solo visible con permiso de costos.
+ */
+export interface CrmPartida {
+  id: string;
+  cotizacionId: string;
+  /** Numero de linea (1, 2, 3...). */
+  numero: number;
+  /** Descripcion o concepto. */
+  descripcion: string;
+  /** Cantidad (default 1). */
+  cantidad?: number;
+  /** Precio unitario de venta. */
+  precioUnitario?: number | null;
+  /** Importe de venta (cantidad * precio). */
+  importe?: number | null;
+  /** Costo unitario (solo con permiso de costos). */
+  costoUnitario?: number | null;
+  /** Costo total (solo con permiso de costos). */
+  costoTotal?: number | null;
+  moneda?: string;
+  notas?: string;
+  actualizadoEn: string;
+}
+
 // --- Control de acceso por roles ---
 
 /**

@@ -963,6 +963,143 @@ o script externo.
 ]
 ```
 
+### Órdenes de compra — `POST /ingesta/crm-nativo/ordenes-compra`
+
+Órdenes de compra recurrentes por cliente/mes, ligadas opcionalmente a pagos.
+
+```json
+[
+  {
+    "id": "oc-acme-oct-2026",
+    "clienteId": "acme-motors",
+    "proyectoId": "sistema-tickets",
+    "folio": "OC-2026-0042",
+    "periodo": "Octubre 2026",
+    "monto": 50000,
+    "moneda": "MXN",
+    "fechaEmision": "2026-10-01T00:00:00Z",
+    "fechaVencimiento": "2026-10-31T00:00:00Z",
+    "pagoIds": ["pago-1-cot-12345", "pago-2-cot-12345"]
+  },
+  {
+    "id": "oc-pendiente",
+    "clienteId": "acme-motors",
+    "folio": "OC-2026-0050",
+    "periodo": "Q4 2026",
+    "monto": null,
+    "notas": "Monto por definir en junta de presupuesto"
+  }
+]
+```
+
+**Campos:** `id`, `clienteId` (obligatorio), `proyectoId`, `folio` (obligatorio),
+`periodo`, `monto` (null = por confirmar), `moneda`, `fechaEmision`,
+`fechaVencimiento`, `pagoIds` (arreglo de IDs de pagos cubiertos), `notas`.
+
+### Facturas — `POST /ingesta/crm-nativo/facturas`
+
+Facturas emitidas, ligadas a pagos. Se usa el `uuid` como llave externa para
+idempotencia: si ya existe una factura con ese UUID, se actualiza.
+
+```json
+[
+  {
+    "id": "fac-001",
+    "empresaEmisoraId": "techcorp",
+    "clienteId": "acme-motors",
+    "proyectoId": "sistema-tickets",
+    "uuid": "ABCD1234-5678-90EF-GHIJ-KLMNOPQRSTUV",
+    "folio": "A-1234",
+    "fechaEmision": "2026-10-10T00:00:00Z",
+    "subtotal": 75000,
+    "iva": 12000,
+    "total": 87000,
+    "moneda": "MXN",
+    "fechaPagoReal": "2026-10-15T00:00:00Z",
+    "tieneComplemento": true,
+    "fechaComplemento": "2026-10-20T00:00:00Z",
+    "uuidComplemento": "WXYZ1234-5678-90AB-CDEF-GHIJKLMNOPQR",
+    "pagoIds": ["pago-1-cot-12345"],
+    "archivoUrl": "https://drive.example.com/facturas/A-1234.pdf"
+  }
+]
+```
+
+**Campos:** `id`, `empresaEmisoraId` (obligatorio), `clienteId` (obligatorio),
+`proyectoId`, `uuid` (CFDI), `folio`, `fechaEmision`, `subtotal`, `iva`, `total`
+(null = sin monto), `moneda`, `fechaPagoReal`, `tieneComplemento`,
+`fechaComplemento`, `uuidComplemento`, `pagoIds`, `archivoUrl`, `notas`.
+
+### Partidas — `POST /ingesta/crm-nativo/partidas`
+
+Partidas (líneas) de una cotización, con costo para calcular margen. Los campos
+de costo (`costoUnitario`, `costoTotal`) solo son visibles con permiso de costos.
+
+```json
+[
+  {
+    "id": "part-cot-12345-1",
+    "cotizacionId": "cot-12345",
+    "numero": 1,
+    "descripcion": "Desarrollo módulo principal",
+    "cantidad": 1,
+    "precioUnitario": 100000,
+    "importe": 100000,
+    "costoUnitario": 60000,
+    "costoTotal": 60000,
+    "moneda": "MXN"
+  },
+  {
+    "id": "part-cot-12345-2",
+    "cotizacionId": "cot-12345",
+    "numero": 2,
+    "descripcion": "Capacitación (8 horas)",
+    "cantidad": 8,
+    "precioUnitario": 2500,
+    "importe": 20000,
+    "costoUnitario": 1000,
+    "costoTotal": 8000
+  }
+]
+```
+
+**Campos:** `id`, `cotizacionId` (obligatorio), `numero`, `descripcion`
+(obligatorio), `cantidad`, `precioUnitario`, `importe` (null = sin precio),
+`costoUnitario`, `costoTotal` (null = sin costo), `moneda`, `notas`.
+
+El margen se calcula como `(venta - costo) / venta * 100`. Solo disponible con
+permiso de `costos`.
+
+### Empresas del grupo — `POST /ingesta/crm-nativo/empresas`
+
+El catálogo de empresas del grupo es editable en producción desde
+Integraciones → Empresas en el portal, o por ingesta con esta ruta. Cada
+empresa identifica a una entidad que factura o atiende clientes.
+
+```json
+[
+  {
+    "id": "limonlabs",
+    "nombre": "LimonLabs",
+    "descripcion": "laboratorio de innovación y prototipos",
+    "color": "lime",
+    "cuentas": ["correo-limon"],
+    "activa": true
+  }
+]
+```
+
+**Campos:** `id` (se genera del nombre si no viene), `nombre` (obligatorio),
+`descripcion` (lo que se le cuenta al modelo de IA), `color` (nombre Tailwind:
+violet, cyan, emerald, orange, lime, etc.), `cuentas` (IDs de buzones que le
+pertenecen), `activa` (por omisión `true`).
+
+**Notas:**
+
+- Una empresa inactiva no se ofrece en selectores ni al modelo de IA.
+- El `color` se usa para la etiqueta en la UI.
+- Los nombres de empresa y datos en los ejemplos son ficticios.
+
 ### Respuesta de las rutas de ingesta
 
 Todas las rutas devuelven el mismo formato:
