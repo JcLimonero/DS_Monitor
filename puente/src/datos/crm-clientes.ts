@@ -33,7 +33,7 @@ export type {
  * actividades y funcionalidades propios del grupo.
  * NO depende de Odoo ni de ningun emisor externo.
  *
- * Empresas: Dealer Solutions, Nexus Q Tech, Operativ AI, LimonLabs.
+ * Empresas: TechCorp, InnovateLabs, CloudWorks, DevHub.
  * (Itech Dev se maneja aparte, solo si Carlos lo pide.)
  */
 
