@@ -49,6 +49,15 @@ import {
   TABLA_REGISTRO_CORREO,
   TABLA_SERVIDORES,
   TABLA_SESIONES,
+  TABLA_CRM_CLIENTES,
+  TABLA_CRM_CONTACTOS,
+  TABLA_CRM_PROYECTOS,
+  TABLA_CRM_COTIZACIONES,
+  TABLA_CRM_PAGOS,
+  TABLA_CRM_ACTIVIDADES,
+  TABLA_CRM_FUNCIONALIDADES,
+  TABLA_ROLES_CRM,
+  TABLA_USUARIOS_CRM,
   type Aviso
 } from '../datos/tablas.js';
 import {
@@ -97,6 +106,13 @@ import {
   type Proveedor
 } from '../datos/proveedores.js';
 import type {
+  CrmActividadCliente,
+  CrmCliente,
+  CrmContacto,
+  CrmCotizacion,
+  CrmFuncionalidad,
+  CrmPagoProgramado,
+  CrmProyecto,
   HostedApp,
   LicenseUsage,
   LlamadaArchivada,
@@ -104,11 +120,14 @@ import type {
   Meeting,
   MonitorTarget,
   Person,
+  RolCrm,
   TaskComment,
   TaskItem,
   TaskStatus,
+  UsuarioCrm,
   VpsStatus
 } from '../nucleo/contrato.js';
+import { registrarRutasCrm, type DatosCrm } from './rutas-crm.js';
 
 const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   pendiente: 'Pendiente',
@@ -576,6 +595,26 @@ export interface Datos {
   crmSeguimiento: AlmacenJson<SeguimientoCrm>;
   /** Dias sin movimiento por etapa antes de crear el pendiente de la cotizacion. */
   crmAjustes: AlmacenJson<AjustesCotizaciones>;
+
+  // --- CRM nativo (independiente de Odoo) ---
+  /** Los clientes del CRM nativo. */
+  crmClientes: AlmacenTabla<CrmCliente[]>;
+  /** Los contactos de cada cliente. */
+  crmContactos: AlmacenTabla<CrmContacto[]>;
+  /** Proyectos de los clientes. */
+  crmProyectos: AlmacenTabla<CrmProyecto[]>;
+  /** Cotizaciones por proyecto. */
+  crmCotizaciones: AlmacenTabla<CrmCotizacion[]>;
+  /** Pagos programados de cada cotizacion. */
+  crmPagos: AlmacenTabla<CrmPagoProgramado[]>;
+  /** Actividades registradas (llamadas, juntas, correos). */
+  crmActividades: AlmacenTabla<CrmActividadCliente[]>;
+  /** Funcionalidades de desarrollo por proyecto. */
+  crmFuncionalidades: AlmacenTabla<CrmFuncionalidad[]>;
+  /** Roles del CRM (Director, Finanzas, Comercial, Desarrollo). */
+  rolesCrm: AlmacenTabla<RolCrm[]>;
+  /** Usuarios del CRM con sus roles asignados. */
+  usuariosCrm: AlmacenTabla<UsuarioCrm[]>;
 }
 
 /** Lee todos los almacenes (una sola lectura de la coleccion); al arrancar. */
@@ -765,6 +804,48 @@ export function abrirDatos(persistencia: Persistencia): Datos {
       persistencia,
       'crm-ajustes',
       AJUSTES_COTIZACIONES_VACIOS
+    ),
+    // CRM nativo (independiente de Odoo)
+    crmClientes: new AlmacenTabla<CrmCliente[]>(
+      persistencia,
+      TABLA_CRM_CLIENTES,
+      []
+    ),
+    crmContactos: new AlmacenTabla<CrmContacto[]>(
+      persistencia,
+      TABLA_CRM_CONTACTOS,
+      []
+    ),
+    crmProyectos: new AlmacenTabla<CrmProyecto[]>(
+      persistencia,
+      TABLA_CRM_PROYECTOS,
+      []
+    ),
+    crmCotizaciones: new AlmacenTabla<CrmCotizacion[]>(
+      persistencia,
+      TABLA_CRM_COTIZACIONES,
+      []
+    ),
+    crmPagos: new AlmacenTabla<CrmPagoProgramado[]>(
+      persistencia,
+      TABLA_CRM_PAGOS,
+      []
+    ),
+    crmActividades: new AlmacenTabla<CrmActividadCliente[]>(
+      persistencia,
+      TABLA_CRM_ACTIVIDADES,
+      []
+    ),
+    crmFuncionalidades: new AlmacenTabla<CrmFuncionalidad[]>(
+      persistencia,
+      TABLA_CRM_FUNCIONALIDADES,
+      []
+    ),
+    rolesCrm: new AlmacenTabla<RolCrm[]>(persistencia, TABLA_ROLES_CRM, []),
+    usuariosCrm: new AlmacenTabla<UsuarioCrm[]>(
+      persistencia,
+      TABLA_USUARIOS_CRM,
+      []
     )
   };
 }
@@ -5923,6 +6004,26 @@ export function construirRutas(
         'cotización sin movimiento'
       ),
     programables
+  });
+
+  // CRM nativo: clientes, proyectos, cotizaciones con control de acceso por rol.
+  const datosCrm: DatosCrm = {
+    clientes: datos.crmClientes,
+    contactos: datos.crmContactos,
+    proyectos: datos.crmProyectos,
+    cotizaciones: datos.crmCotizaciones,
+    pagos: datos.crmPagos,
+    actividades: datos.crmActividades,
+    funcionalidades: datos.crmFuncionalidades,
+    roles: datos.rolesCrm,
+    usuarios: datos.usuariosCrm
+  };
+  registrarRutasCrm({
+    router,
+    datos: datosCrm,
+    correoDeSesion: (contexto) => acceso.sesionDe(tokenDe(contexto))?.correo,
+    correosDelDueno: () => [...correosDelDueno()],
+    equipo: equipoCompleto
   });
 
   // El propio puente se reporta en Ejecuciones: cada tarea programada deja su
