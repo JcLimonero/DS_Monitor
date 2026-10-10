@@ -7,30 +7,70 @@ import {
   signal
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { catchError, combineLatest, map, of, switchMap } from 'rxjs';
+import {
+  catchError,
+  combineLatest,
+  map,
+  of,
+  startWith,
+  Subject,
+  switchMap
+} from 'rxjs';
+import {
+  calcularSemaforo,
+  ETAPA_LABEL,
+  etapaEfectiva
+} from '../../core/crm/crm-tablero';
+import { EmpresasService } from '../../core/empresas/empresas.service';
 import {
   CRM_PROYECTO_ESTADO_LABEL,
   CRM_COTIZACION_ESTATUS_LABEL,
   CRM_FUNCIONALIDAD_ESTADO_LABEL,
+  CRM_FUENTE_AVANCE_LABEL,
+  CRM_SEMAFORO_LABEL,
+  CRM_TIPO_RIESGO_LABEL,
+  type CrmAvanceProyecto,
+  type CrmCambioEtapa,
   type CrmCliente,
   type CrmContacto,
   type CrmCotizacion,
+  type CrmFactura,
   type CrmFuncionalidad,
-  type CrmProyecto
+  type CrmHito,
+  type CrmOrdenCompra,
+  type CrmPagoProgramado,
+  type CrmPartida,
+  type CrmProyecto,
+  type CrmRiesgo
 } from '../../core/models/crm-nativo.model';
+import type { Person } from '../../core/models';
 import { CrmService } from '../../core/sources/gateway/crm.service';
+import { PuenteAdminService } from '../../core/sources/gateway/puente-admin.service';
+import { PortalStore } from '../../core/state/portal.store';
+import { DialogoComponent } from '../../ui/dialogo.component';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
+import { DecimalPipe } from '@angular/common';
 import { DayPipe, MoneyPipe, RelativePipe } from '../../ui/portal.pipes';
 
 interface DatosProyecto {
   proyecto: CrmProyecto;
   cliente: CrmCliente | null;
+  clienteFinal: CrmCliente | null;
   responsable: CrmContacto | null;
   cotizaciones: CrmCotizacion[];
   funcionalidades: CrmFuncionalidad[];
+  avances: CrmAvanceProyecto[];
+  cambios: CrmCambioEtapa[];
+  hitos: CrmHito[];
+  riesgos: CrmRiesgo[];
+  pagos: CrmPagoProgramado[];
+  ordenes: CrmOrdenCompra[];
+  facturas: CrmFactura[];
+  partidas: CrmPartida[];
 }
 
 @Component({
@@ -39,10 +79,13 @@ interface DatosProyecto {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     RouterLink,
+    FormsModule,
+    DialogoComponent,
     EmptyStateComponent,
     IconComponent,
     PageHeaderComponent,
     DayPipe,
+    DecimalPipe,
     MoneyPipe,
     RelativePipe
   ],
@@ -85,6 +128,20 @@ interface DatosProyecto {
                 <span class="info-valor">{{ d.responsable.nombre }}</span>
               </div>
             }
+            @if (d.clienteFinal) {
+              <div class="info-item">
+                <span class="info-label">Cliente final</span>
+                <a class="link" [routerLink]="['/clientes', d.clienteFinal.id]">
+                  {{ d.clienteFinal.nombre }}
+                </a>
+              </div>
+            }
+            @if (empresaNombre()) {
+              <div class="info-item">
+                <span class="info-label">Empresa</span>
+                <span class="info-valor">{{ empresaNombre() }}</span>
+              </div>
+            }
             @if (d.proyecto.responsableInterno) {
               <div class="info-item">
                 <span class="info-label">Responsable interno</span>
@@ -93,6 +150,18 @@ interface DatosProyecto {
                 </span>
               </div>
             }
+            <div class="info-item">
+              <span class="info-label">Etapa comercial</span>
+              <span class="chip">{{
+                etapaLabel[etapaDe(d.proyecto) ?? 'por_confirmar']
+              }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Semáforo</span>
+              <span class="chip chip--semaforo-{{ semaforo() }}">
+                {{ semaforoLabel[semaforo()] }}
+              </span>
+            </div>
             @if (d.proyecto.fechaInicio) {
               <div class="info-item">
                 <span class="info-label">Inicio</span>
@@ -215,6 +284,191 @@ interface DatosProyecto {
           </section>
         }
 
+        <!-- Linea de tiempo -->
+        <section class="card seccion">
+          <div class="seccion-header">
+            <h3 class="seccion-titulo">Línea de tiempo</h3>
+            @if (crm.puedeEditarProyectos()) {
+              <button type="button" class="btn" (click)="abrirAvance()">
+                <pt-icon name="mas" class="h-4 w-4" />
+                Avance
+              </button>
+            }
+          </div>
+          @if (lineaTiempo().length === 0) {
+            <p class="sin-datos">Sin avances ni cambios de etapa</p>
+          } @else {
+            <ul class="lista-items">
+              @for (ev of lineaTiempo(); track ev.id) {
+                <li class="contacto-item">
+                  <div class="contacto-info">
+                    <span class="contacto-nombre">{{ ev.titulo }}</span>
+                    <span class="contacto-puesto">{{ ev.detalle }}</span>
+                  </div>
+                  <span class="text-xs text-ink-muted">{{
+                    ev.fecha | relativo
+                  }}</span>
+                </li>
+              }
+            </ul>
+          }
+        </section>
+
+        <!-- Hitos -->
+        <section class="card seccion">
+          <div class="seccion-header">
+            <h3 class="seccion-titulo">
+              Hitos
+              <span class="badge">{{ d.hitos.length }}</span>
+            </h3>
+            @if (crm.puedeEditarProyectos()) {
+              <button type="button" class="btn" (click)="abrirHito()">
+                <pt-icon name="mas" class="h-4 w-4" />
+                Hito
+              </button>
+            }
+          </div>
+          @if (d.hitos.length === 0) {
+            <p class="sin-datos">Sin hitos</p>
+          } @else {
+            <div class="lista-items">
+              @for (h of d.hitos; track h.id) {
+                <div class="contacto-item">
+                  <div class="contacto-info">
+                    <span class="contacto-nombre">
+                      {{ h.nombre }}
+                      @if (h.completado) {
+                        <span class="chip chip--autorizada">Hecho</span>
+                      }
+                    </span>
+                    <span class="contacto-puesto">
+                      Compromiso
+                      {{ h.fechaCompromiso ? (h.fechaCompromiso | dia) : '—' }}
+                      · Real
+                      {{ h.fechaReal ? (h.fechaReal | dia) : '—' }}
+                      @if (nombreDe(h.responsableId); as n) {
+                        · {{ n }}
+                      }
+                    </span>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </section>
+
+        <!-- Riesgos -->
+        <section class="card seccion">
+          <div class="seccion-header">
+            <h3 class="seccion-titulo">
+              Riesgos y bloqueos
+              <span class="badge">{{ riesgosAbiertos() }}</span>
+            </h3>
+            @if (crm.puedeEditarProyectos()) {
+              <button type="button" class="btn" (click)="abrirRiesgo()">
+                <pt-icon name="mas" class="h-4 w-4" />
+                Riesgo
+              </button>
+            }
+          </div>
+          @if (d.riesgos.length === 0) {
+            <p class="sin-datos">Sin riesgos</p>
+          } @else {
+            <div class="lista-items">
+              @for (r of d.riesgos; track r.id) {
+                <div class="contacto-item">
+                  <div class="contacto-info">
+                    <span class="contacto-nombre">
+                      {{ r.descripcion }}
+                      <span class="chip">{{ tipoRiesgoLabel[r.tipo] }}</span>
+                    </span>
+                    <span class="contacto-puesto">
+                      {{ r.abierto ? 'Abierto' : 'Cerrado' }}
+                      @if (nombreDe(r.responsableId); as n) {
+                        · {{ n }}
+                      }
+                    </span>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </section>
+
+        <!-- Pendientes ligados -->
+        @if (pendientesLigados().length > 0) {
+          <section class="card seccion">
+            <h3 class="seccion-titulo">Pendientes ligados</h3>
+            <div class="lista-items">
+              @for (t of pendientesLigados(); track t.id) {
+                <a class="link" routerLink="/pendientes">{{ t.title }}</a>
+              }
+            </div>
+          </section>
+        }
+
+        <!-- Proximos cobros -->
+        @if (crm.puedeVerCobranza() && proximosCobros().length > 0) {
+          <section class="card seccion">
+            <h3 class="seccion-titulo">Próximos cobros</h3>
+            <div class="lista-items">
+              @for (p of proximosCobros(); track p.id) {
+                <div class="cotizacion-item">
+                  <span>
+                    {{ p.nota ?? 'Pago' }}
+                    ·
+                    @if (p.fechaEsperada) {
+                      {{ p.fechaEsperada | dia }}
+                    } @else {
+                      Por confirmar
+                    }
+                  </span>
+                  <span class="cotizacion-monto">{{
+                    p.monto | moneda: p.moneda
+                  }}</span>
+                </div>
+              }
+            </div>
+          </section>
+        }
+
+        <!-- OC, facturas y margen -->
+        @if (crm.puedeVerCobranza()) {
+          <section class="card seccion">
+            <h3 class="seccion-titulo">Órdenes de compra y facturas</h3>
+            @if (d.ordenes.length === 0 && d.facturas.length === 0) {
+              <p class="sin-datos">Sin OC ni facturas</p>
+            } @else {
+              @for (oc of d.ordenes; track oc.id) {
+                <div class="cotizacion-item">
+                  <span>OC {{ oc.folio }} {{ oc.periodo }}</span>
+                  <span class="cotizacion-monto">{{
+                    oc.monto | moneda: oc.moneda
+                  }}</span>
+                </div>
+              }
+              @for (f of d.facturas; track f.id) {
+                <div class="cotizacion-item">
+                  <span>Factura {{ f.folio ?? f.uuid }}</span>
+                  <span class="cotizacion-monto">{{
+                    f.total | moneda: f.moneda
+                  }}</span>
+                </div>
+              }
+            }
+            @if (crm.puedeVerCostos() && margen(); as m) {
+              <div class="cotizacion-total">
+                <span>Margen</span>
+                <span class="total-valor"
+                  >{{ m.margen | moneda }} ({{
+                    m.margenPct | number: '1.0-0'
+                  }}%)</span
+                >
+              </div>
+            }
+          </section>
+        }
+
         <!-- Enlaces -->
         @if (d.proyecto.driveUrl || d.proyecto.repos?.length) {
           <section class="card seccion">
@@ -236,6 +490,105 @@ interface DatosProyecto {
           </section>
         }
       </div>
+    }
+
+    @if (dialogo(); as tipo) {
+      <pt-dialogo
+        [titulo]="
+          tipo === 'avance'
+            ? 'Registrar avance'
+            : tipo === 'hito'
+              ? 'Nuevo hito'
+              : 'Nuevo riesgo'
+        "
+        (cerrar)="dialogo.set(null)">
+        <form class="grid gap-3" (ngSubmit)="guardarDialogo()">
+          @if (tipo === 'avance') {
+            <label>
+              <span class="mb-1 block text-xs font-medium text-ink-muted"
+                >Nota</span
+              >
+              <textarea
+                class="field"
+                [(ngModel)]="formNota"
+                name="nota"></textarea>
+            </label>
+            <label>
+              <span class="mb-1 block text-xs font-medium text-ink-muted"
+                >Avance %</span
+              >
+              <input
+                class="field"
+                type="number"
+                min="0"
+                max="100"
+                [(ngModel)]="formPct"
+                name="pct" />
+            </label>
+          }
+          @if (tipo === 'hito') {
+            <label>
+              <span class="mb-1 block text-xs font-medium text-ink-muted"
+                >Nombre</span
+              >
+              <input class="field" [(ngModel)]="formNombre" name="nombre" />
+            </label>
+            <label>
+              <span class="mb-1 block text-xs font-medium text-ink-muted"
+                >Fecha compromiso</span
+              >
+              <input
+                class="field"
+                type="date"
+                [(ngModel)]="formFecha"
+                name="fecha" />
+            </label>
+          }
+          @if (tipo === 'riesgo') {
+            <label>
+              <span class="mb-1 block text-xs font-medium text-ink-muted"
+                >Descripción</span
+              >
+              <textarea
+                class="field"
+                [(ngModel)]="formNota"
+                name="desc"></textarea>
+            </label>
+            <label>
+              <span class="mb-1 block text-xs font-medium text-ink-muted"
+                >Tipo</span
+              >
+              <select class="field" [(ngModel)]="formTipo" name="tipo">
+                <option value="riesgo">Riesgo</option>
+                <option value="bloqueo">Bloqueo</option>
+              </select>
+            </label>
+          }
+          <label>
+            <span class="mb-1 block text-xs font-medium text-ink-muted"
+              >Responsable</span
+            >
+            <select class="field" [(ngModel)]="formResponsable" name="resp">
+              <option value="">Elige a alguien</option>
+              @for (p of equipo(); track p.id) {
+                <option [value]="p.id">{{ p.name }}</option>
+              }
+            </select>
+          </label>
+        </form>
+        <div class="dialogo-pie flex gap-2">
+          <button
+            type="button"
+            class="btn btn-primary"
+            [disabled]="!puedeGuardarDialogo()"
+            (click)="guardarDialogo()">
+            Guardar
+          </button>
+          <button type="button" class="btn" (click)="dialogo.set(null)">
+            Cancelar
+          </button>
+        </div>
+      </pt-dialogo>
     }
   `,
   styles: `
@@ -547,16 +900,35 @@ interface DatosProyecto {
       --chip-bg: var(--accent-red-bg);
       --chip-text: var(--accent-red);
     }
+    .chip--semaforo-en_tiempo {
+      --chip-bg: var(--accent-green-bg);
+      --chip-text: var(--accent-green);
+    }
+    .chip--semaforo-en_riesgo {
+      --chip-bg: var(--accent-orange-bg);
+      --chip-text: var(--accent-orange);
+    }
+    .chip--semaforo-atrasado {
+      --chip-bg: var(--accent-red-bg);
+      --chip-text: var(--accent-red);
+    }
   `
 })
 export class ProyectoDetalleComponent {
   readonly crm = inject(CrmService);
+  private readonly empresasSvc = inject(EmpresasService);
+  private readonly admin = inject(PuenteAdminService);
+  private readonly store = inject(PortalStore);
 
   readonly id = input.required<string>();
 
   readonly estadoLabel = CRM_PROYECTO_ESTADO_LABEL;
   readonly estatusLabel = CRM_COTIZACION_ESTATUS_LABEL;
   readonly funcEstadoLabel = CRM_FUNCIONALIDAD_ESTADO_LABEL;
+  readonly etapaLabel = ETAPA_LABEL;
+  readonly semaforoLabel = CRM_SEMAFORO_LABEL;
+  readonly tipoRiesgoLabel = CRM_TIPO_RIESGO_LABEL;
+  readonly fuenteLabel = CRM_FUENTE_AVANCE_LABEL;
 
   readonly estadosFuncionalidad = [
     { key: 'por_hacer', label: 'Por hacer' },
@@ -567,17 +939,55 @@ export class ProyectoDetalleComponent {
 
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
+  readonly dialogo = signal<'avance' | 'hito' | 'riesgo' | null>(null);
+  formNota = '';
+  formNombre = '';
+  formFecha = '';
+  formPct = 0;
+  formTipo = 'riesgo';
+  formResponsable = '';
+  private readonly recarga = new Subject<void>();
+
+  readonly equipo = toSignal(
+    this.admin.disponible
+      ? this.admin.equipo().pipe(catchError(() => of([] as Person[])))
+      : of([] as Person[]),
+    { initialValue: [] as Person[] }
+  );
 
   private readonly _datos = toSignal(
-    this.crm.obtenerProyectos().pipe(
+    this.recarga.pipe(
+      startWith(undefined),
       switchMap(() => {
         const proyectoId = this.id();
         return combineLatest([
           this.crm.obtenerProyecto(proyectoId),
-          this.crm.obtenerClientes(),
-          this.crm.obtenerContactos(),
-          this.crm.obtenerCotizaciones(proyectoId),
-          this.crm.obtenerFuncionalidades(proyectoId)
+          this.crm.obtenerClientes().pipe(catchError(() => of([]))),
+          this.crm.obtenerContactos().pipe(catchError(() => of([]))),
+          this.crm
+            .obtenerCotizaciones(proyectoId)
+            .pipe(catchError(() => of([]))),
+          this.crm
+            .obtenerFuncionalidades(proyectoId)
+            .pipe(catchError(() => of([]))),
+          this.crm.obtenerAvances(proyectoId).pipe(catchError(() => of([]))),
+          this.crm
+            .obtenerCambiosEtapa(proyectoId)
+            .pipe(catchError(() => of([]))),
+          this.crm.obtenerHitos(proyectoId).pipe(catchError(() => of([]))),
+          this.crm.obtenerRiesgos(proyectoId).pipe(catchError(() => of([]))),
+          this.crm
+            .obtenerPagos(undefined, proyectoId)
+            .pipe(catchError(() => of([]))),
+          this.crm
+            .obtenerOrdenesCompra({ proyectoId })
+            .pipe(catchError(() => of([]))),
+          this.crm
+            .obtenerFacturas({ proyectoId })
+            .pipe(catchError(() => of([]))),
+          this.crm
+            .obtenerPartidas({ proyectoId })
+            .pipe(catchError(() => of([])))
         ]).pipe(
           map(
             ([
@@ -585,11 +995,23 @@ export class ProyectoDetalleComponent {
               clientes,
               contactos,
               cotizaciones,
-              funcionalidades
+              funcionalidades,
+              avances,
+              cambios,
+              hitos,
+              riesgos,
+              pagos,
+              ordenes,
+              facturas,
+              partidas
             ]) => {
               this.cargando.set(false);
               const cliente =
                 clientes.find((c) => c.id === proyecto.clienteId) ?? null;
+              const clienteFinal = proyecto.clienteFinalId
+                ? (clientes.find((c) => c.id === proyecto.clienteFinalId) ??
+                  null)
+                : null;
               const responsable = proyecto.responsableClienteId
                 ? (contactos.find(
                     (c) => c.id === proyecto.responsableClienteId
@@ -598,9 +1020,18 @@ export class ProyectoDetalleComponent {
               return {
                 proyecto,
                 cliente,
+                clienteFinal,
                 responsable,
                 cotizaciones,
-                funcionalidades
+                funcionalidades,
+                avances,
+                cambios,
+                hitos,
+                riesgos,
+                pagos,
+                ordenes,
+                facturas,
+                partidas
               };
             }
           )
@@ -616,11 +1047,98 @@ export class ProyectoDetalleComponent {
 
   readonly datos = computed(() => this._datos());
 
+  readonly empresaNombre = computed(() => {
+    const id = this.datos()?.proyecto.empresaAtiendeId;
+    if (!id) return undefined;
+    return this.empresasSvc.lista().find((e) => e.id === id)?.nombre;
+  });
+
+  readonly semaforo = computed(() => {
+    const d = this.datos();
+    if (!d) return 'en_tiempo' as const;
+    return calcularSemaforo(d.proyecto, d.hitos);
+  });
+
+  readonly riesgosAbiertos = computed(
+    () => this.datos()?.riesgos.filter((r) => r.abierto).length ?? 0
+  );
+
+  readonly lineaTiempo = computed(() => {
+    const d = this.datos();
+    if (!d) return [];
+    const evs = [
+      ...d.avances.map((a) => ({
+        id: `av-${a.id}`,
+        fecha: a.fecha,
+        titulo: a.nota,
+        detalle: [
+          this.fuenteLabel[a.fuente],
+          a.avancePct !== undefined ? `${a.avancePct}%` : undefined,
+          a.autor?.name
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      })),
+      ...d.cambios.map((c) => ({
+        id: `ce-${c.id}`,
+        fecha: c.fecha,
+        titulo: `Etapa: ${this.etapaLabel[c.etapaNueva]}`,
+        detalle: [c.autor?.name, c.nota].filter(Boolean).join(' · ')
+      }))
+    ];
+    return evs.sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 20);
+  });
+
+  readonly proximosCobros = computed(() => {
+    const d = this.datos();
+    if (!d) return [];
+    return d.pagos
+      .filter((p) => p.estatus !== 'pagado')
+      .sort((a, b) =>
+        (a.fechaEsperada ?? '9999').localeCompare(b.fechaEsperada ?? '9999')
+      )
+      .slice(0, 6);
+  });
+
+  readonly pendientesLigados = computed(() => {
+    const d = this.datos();
+    if (!d) return [];
+    const ids = new Set(
+      d.funcionalidades.map((f) => f.pendienteId).filter(Boolean)
+    );
+    const nombre = d.proyecto.nombre.toLowerCase();
+    return this.store
+      .tasks()
+      .filter(
+        (t) =>
+          t.status !== 'hecho' &&
+          (ids.has(t.id) || t.project?.toLowerCase() === nombre)
+      );
+  });
+
+  readonly margen = computed(() => {
+    const d = this.datos();
+    if (!d || d.partidas.length === 0) return null;
+    const venta = d.partidas.reduce((s, p) => s + (p.importe ?? 0), 0);
+    const costo = d.partidas.reduce((s, p) => s + (p.costoTotal ?? 0), 0);
+    const margen = venta - costo;
+    return { margen, margenPct: venta > 0 ? (margen / venta) * 100 : 0 };
+  });
+
   readonly totalCotizado = computed(() => {
     const d = this.datos();
     if (!d) return 0;
     return d.cotizaciones.reduce((sum, c) => sum + (c.total ?? 0), 0);
   });
+
+  etapaDe(proyecto: CrmProyecto) {
+    return etapaEfectiva(proyecto);
+  }
+
+  nombreDe(id?: string): string | undefined {
+    if (!id) return undefined;
+    return this.equipo().find((p) => p.id === id)?.name;
+  }
 
   volverUrl(): string {
     const d = this.datos();
@@ -634,5 +1152,84 @@ export class ProyectoDetalleComponent {
     const d = this.datos();
     if (!d) return 0;
     return d.funcionalidades.filter((f) => f.estado === estado).length;
+  }
+
+  abrirAvance(): void {
+    this.formNota = '';
+    this.formPct = this.datos()?.proyecto.avancePct ?? 0;
+    this.formResponsable = '';
+    this.dialogo.set('avance');
+  }
+
+  abrirHito(): void {
+    this.formNombre = '';
+    this.formFecha = '';
+    this.formResponsable = '';
+    this.dialogo.set('hito');
+  }
+
+  abrirRiesgo(): void {
+    this.formNota = '';
+    this.formTipo = 'riesgo';
+    this.formResponsable = '';
+    this.dialogo.set('riesgo');
+  }
+
+  puedeGuardarDialogo(): boolean {
+    const tipo = this.dialogo();
+    if (tipo === 'avance') return this.formNota.trim().length > 0;
+    if (tipo === 'hito') {
+      return !!this.formNombre.trim() && !!this.formResponsable;
+    }
+    if (tipo === 'riesgo') {
+      return !!this.formNota.trim() && !!this.formResponsable;
+    }
+    return false;
+  }
+
+  guardarDialogo(): void {
+    if (!this.puedeGuardarDialogo()) return;
+    const proyectoId = this.id();
+    const tipo = this.dialogo();
+    const listo = () => {
+      this.dialogo.set(null);
+      this.recarga.next();
+    };
+    const fallo = (err: { error?: { error?: string }; message?: string }) => {
+      this.error.set(err.error?.error ?? err.message ?? 'No se pudo guardar.');
+    };
+    if (tipo === 'avance') {
+      this.crm
+        .guardarAvance({
+          proyectoId,
+          nota: this.formNota.trim(),
+          avancePct: Number(this.formPct) || undefined,
+          fuente: 'manual'
+        })
+        .subscribe({ next: listo, error: fallo });
+    } else if (tipo === 'hito') {
+      this.crm
+        .guardarHito({
+          proyectoId,
+          nombre: this.formNombre.trim(),
+          fechaCompromiso: this.formFecha
+            ? new Date(`${this.formFecha}T12:00:00`).toISOString()
+            : undefined,
+          completado: false,
+          responsableId: this.formResponsable
+        })
+        .subscribe({ next: listo, error: fallo });
+    } else if (tipo === 'riesgo') {
+      this.crm
+        .guardarRiesgo({
+          proyectoId,
+          tipo: this.formTipo === 'bloqueo' ? 'bloqueo' : 'riesgo',
+          descripcion: this.formNota.trim(),
+          abierto: true,
+          fechaReporte: new Date().toISOString(),
+          responsableId: this.formResponsable
+        })
+        .subscribe({ next: listo, error: fallo });
+    }
   }
 }

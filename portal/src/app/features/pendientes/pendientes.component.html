@@ -329,7 +329,7 @@
           name="responsable">
           <option value="todos">Todos</option>
           <option value="mios">Solo míos</option>
-          <option value="nadie">Sin asignar</option>
+          <option value="nadie">Sin responsable</option>
           @for (person of people(); track person.id) {
             <option [value]="person.id">{{ person.name }}</option>
           }

@@ -103,8 +103,8 @@
           [tipos]="['equipo']" />
         <pt-emisores-config
           titulo="API para el CRM nativo"
-          descripcion="Otro sistema (un bot, un script) puede cargar clientes, proyectos, cotizaciones, pagos, actividades y funcionalidades con su token a las rutas /ingesta/crm-nativo/*."
-          [tipos]="['crm-nativo']"
+          descripcion="Otro sistema (un bot, un script) puede cargar clientes, proyectos, cotizaciones, pagos, actividades y funcionalidades con su token a las rutas /ingesta/crm-nativo/*, o leer tareas sin responsable con el tipo lectura-tareas."
+          [tipos]="['crm-nativo', 'lectura-tareas']"
           cuenta="crm" />
         <pt-emisores-config
           titulo="Administrar todos los emisores"

@@ -264,6 +264,18 @@ export interface CrmAlertasEstancados {
   diasDefault: number;
 }
 
+/** Alertas de estancados si nadie las configura. */
+export const ALERTAS_ESTANCADOS_OMISION: CrmAlertasEstancados = {
+  diasDefault: 14,
+  diasPorEtapa: {
+    prospecto: 21,
+    en_cotizacion: 10,
+    cotizacion_enviada: 7,
+    negociacion: 14,
+    por_confirmar: 5
+  }
+};
+
 /** Esquema de cobro de una cotización. */
 export type CrmEsquemaCobro =
   | 'unico'
