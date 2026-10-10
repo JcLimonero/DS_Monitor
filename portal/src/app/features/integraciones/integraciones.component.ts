@@ -55,8 +55,7 @@ const PESTANAS: { id: Pestana; titulo: string; detalle: string }[] = [
   {
     id: 'proveedores',
     titulo: 'Proveedores',
-    detalle:
-      'Clientes y proveedores externos: Vanguardia, Birdom y los que se agreguen'
+    detalle: 'Clientes y proveedores externos para el dictado de pendientes'
   },
   {
     id: 'avisos',

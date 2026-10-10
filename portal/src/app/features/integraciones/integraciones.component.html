@@ -101,6 +101,16 @@
           titulo="API para alimentar el equipo"
           descripcion="Otro sistema puede mandar la lista de personas con su token: POST /ingesta/equipo. Se mezclan con las capturadas en Equipo, sin repetir."
           [tipos]="['equipo']" />
+        <pt-emisores-config
+          titulo="API para el CRM nativo"
+          descripcion="Otro sistema (un bot, un script) puede cargar clientes, proyectos, cotizaciones, pagos, actividades y funcionalidades con su token a las rutas /ingesta/crm-nativo/*."
+          [tipos]="['crm-nativo']"
+          cuenta="crm" />
+        <pt-emisores-config
+          titulo="Administrar todos los emisores"
+          descripcion="Edita los tipos de envío de cualquier emisor sin regenerar su token. Solo para el Director."
+          [tipos]="[]"
+          [modoAdmin]="true" />
       }
     }
   </div>
