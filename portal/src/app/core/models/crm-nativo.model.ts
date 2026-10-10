@@ -214,6 +214,8 @@ export interface CrmHito {
   fechaReal?: string;
   /** Completado o no. */
   completado: boolean;
+  /** Id del responsable interno (del catálogo de Equipo). */
+  responsableId?: string;
   /** Orden para mostrar. */
   orden?: number;
   actualizadoEn: string;
@@ -243,6 +245,8 @@ export interface CrmRiesgo {
   mitigacion?: string;
   /** Quién reportó. */
   reportadoPor?: Person;
+  /** Id del responsable interno de atenderlo (del catálogo de Equipo). */
+  responsableId?: string;
   /** Cuándo se reportó. */
   fechaReporte: string;
   /** Abierto o cerrado. */
