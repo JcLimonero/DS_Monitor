@@ -381,7 +381,8 @@ export type CrmProyectoEstado =
   | 'entregado'
   | 'en_soporte'
   | 'pausado'
-  | 'cancelado';
+  | 'cancelado'
+  | 'por_confirmar';
 
 /** Un proyecto de un cliente del CRM nativo. */
 export interface CrmProyecto {
@@ -400,7 +401,8 @@ export interface CrmProyecto {
   responsableClienteId?: string;
   fechaInicio?: string;
   fechaFinEstimada?: string;
-  estado: CrmProyectoEstado;
+  /** Si no se conoce el estado, se omite o se pone 'por_confirmar'. */
+  estado?: CrmProyectoEstado;
   /** Porcentaje de avance (0–100). */
   avancePct?: number;
   /** Carpeta en Drive del proyecto. */
@@ -412,7 +414,24 @@ export interface CrmProyecto {
 }
 
 /** Esquema de cobro de una cotizacion. */
-export type CrmEsquemaCobro = 'unico' | 'parcialidades' | 'mensual';
+export type CrmEsquemaCobro =
+  | 'unico'
+  | 'parcialidades'
+  | 'mensual'
+  | 'mixto'
+  | 'anual'
+  | 'cuatrimestral'
+  | 'bolsa_horas'
+  | 'por_definir';
+
+/** Tipo de cotizacion segun quien es el receptor. */
+export type CrmCotizacionTipo =
+  /** Venta a cliente externo (ingreso). */
+  | 'venta'
+  /** Cotizacion entre empresas propias (transferencia interna). */
+  | 'interna'
+  /** Cotizacion de proveedor hacia empresa propia (gasto). */
+  | 'gasto';
 
 /** Estado de una cotizacion. */
 export type CrmCotizacionEstatus =
@@ -427,26 +446,36 @@ export type CrmCotizacionEstatus =
 /** Una cotizacion del CRM nativo. */
 export interface CrmCotizacion {
   id: string;
-  /** Proyecto al que pertenece. */
-  proyectoId: string;
+  /** Cliente al que pertenece (obligatorio si no hay proyecto). */
+  clienteId?: string;
+  /** Proyecto al que pertenece (opcional: hay cotizaciones sin proyecto asignado). */
+  proyectoId?: string;
   /** Folio (ej. DS-2026-042, NQ-2026-015). */
   folio?: string;
   /** Version de la cotizacion (1, 2, 3...). */
   version?: number;
-  /** Empresa del grupo que factura ESTA cotizacion. */
+  /** Empresa del grupo que emite/factura ESTA cotizacion. */
   empresaFacturaId?: string;
+  /** Empresa que recibe la cotizacion (para internas/gastos). */
+  empresaReceptoraId?: string;
+  /** Tipo: venta (ingreso), interna (entre empresas propias), gasto (de proveedor). */
+  tipo?: CrmCotizacionTipo;
   nombre: string;
   fechaEmision?: string;
   /** Dias de vigencia desde emision. */
   vigenciaDias?: number;
   /** Fecha de vencimiento calculada o fija. */
   fechaVencimiento?: string;
-  subtotal: number;
-  iva: number;
-  total: number;
-  moneda: string;
-  esquemaCobro: CrmEsquemaCobro;
-  estatus: CrmCotizacionEstatus;
+  /** null = sin monto (distinto de 0). */
+  subtotal?: number | null;
+  /** null = sin monto o IVA por confirmar. */
+  iva?: number | null;
+  /** null = sin monto (distinto de 0). */
+  total?: number | null;
+  moneda?: string;
+  /** null o 'por_definir' si no se conoce el esquema. */
+  esquemaCobro?: CrmEsquemaCobro | null;
+  estatus?: CrmCotizacionEstatus;
   /** Cuando se envio al cliente. */
   fechaEnvio?: string;
   /** Contacto al que se envio. */
@@ -463,28 +492,39 @@ export interface CrmCotizacion {
   pdfUrl?: string;
   /** Liga con una cotizacion de ingesta si corresponde. */
   cotizacionExternaId?: string;
+  /** Notas: evidencia de estatus, texto original del esquema, 'IVA por confirmar', etc. */
+  notas?: string;
   actualizadoEn: string;
 }
 
 /** Estado de un pago programado. */
 export type CrmPagoEstatus =
-  'por_facturar' | 'facturado' | 'pagado' | 'vencido';
+  'por_facturar' | 'facturado' | 'pagado' | 'vencido' | 'por_confirmar';
 
 /** Un pago programado (parcialidad o mensualidad). */
 export interface CrmPagoProgramado {
   id: string;
-  cotizacionId: string;
-  /** Numero de pago (1 de 3, 2 de 3, etc.). */
-  numero: number;
-  /** Total de pagos de esta cotizacion. */
-  totalPagos: number;
-  monto: number;
-  moneda: string;
-  fechaEsperada: string;
-  estatus: CrmPagoEstatus;
+  /** Cotizacion a la que pertenece (opcional si es pago ligado a proyecto sin cotizacion). */
+  cotizacionId?: string;
+  /** Proyecto al que pertenece (para pagos sin cotizacion emitida, ej. mensualidades futuras). */
+  proyectoId?: string;
+  /** Cliente (requerido si no hay cotizacion ni proyecto). */
+  clienteId?: string;
+  /** Numero de pago (1 de 3, 2 de 3, etc.). Opcional para pagos por confirmar. */
+  numero?: number;
+  /** Total de pagos de esta cotizacion. Opcional si no se conoce. */
+  totalPagos?: number;
+  /** null = monto por confirmar (distinto de 0). */
+  monto?: number | null;
+  moneda?: string;
+  /** null o ausente = fecha por confirmar. */
+  fechaEsperada?: string | null;
+  /** true si la fecha esta por confirmar. */
+  fechaPorConfirmar?: boolean;
+  estatus?: CrmPagoEstatus;
   /** Fecha real de pago. */
   fechaPagoReal?: string;
-  /** Nota (ej. "Octubre 2026"). */
+  /** Nota (ej. "Octubre 2026", "Mensualidad soporte"). */
   nota?: string;
   actualizadoEn: string;
 }

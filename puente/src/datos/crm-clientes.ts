@@ -6,6 +6,7 @@ import type {
   CrmContacto,
   CrmCotizacion,
   CrmCotizacionEstatus,
+  CrmCotizacionTipo,
   CrmEsquemaCobro,
   CrmFuncionalidad,
   CrmFuncionalidadEstado,
@@ -54,13 +55,25 @@ export const ESTADOS_PROYECTO: CrmProyectoEstado[] = [
   'entregado',
   'en_soporte',
   'pausado',
-  'cancelado'
+  'cancelado',
+  'por_confirmar'
 ];
 
 export const ESQUEMAS_COBRO: CrmEsquemaCobro[] = [
   'unico',
   'parcialidades',
-  'mensual'
+  'mensual',
+  'mixto',
+  'anual',
+  'cuatrimestral',
+  'bolsa_horas',
+  'por_definir'
+];
+
+export const TIPOS_COTIZACION: CrmCotizacionTipo[] = [
+  'venta',
+  'interna',
+  'gasto'
 ];
 
 export const ESTATUS_COTIZACION: CrmCotizacionEstatus[] = [
@@ -77,7 +90,8 @@ export const ESTATUS_PAGO: CrmPagoEstatus[] = [
   'por_facturar',
   'facturado',
   'pagado',
-  'vencido'
+  'vencido',
+  'por_confirmar'
 ];
 
 export const TIPOS_ACTIVIDAD: CrmActividadClienteTipo[] = [
@@ -138,8 +152,22 @@ function numero(v: unknown, defecto = 0): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : defecto;
 }
 
+function numeroNullable(
+  v: unknown,
+  defecto: number | null | undefined
+): number | null | undefined {
+  if (v === null) return null;
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  return defecto;
+}
+
 function entero(v: unknown, defecto = 0): number {
   return typeof v === 'number' && Number.isInteger(v) ? v : defecto;
+}
+
+function enteroOpcional(v: unknown, defecto?: number): number | undefined {
+  if (typeof v === 'number' && Number.isInteger(v)) return v;
+  return defecto;
 }
 
 // --- Validacion de Cliente ---
@@ -284,7 +312,7 @@ export function validarProyecto(
     responsableClienteId: texto(p['responsableClienteId']),
     fechaInicio: fechaValida(p['fechaInicio']),
     fechaFinEstimada: fechaValida(p['fechaFinEstimada']),
-    estado: estado ?? previo?.estado ?? 'prospecto',
+    estado: estado ?? previo?.estado,
     avancePct: Math.max(0, Math.min(100, avancePct)),
     driveUrl: texto(p['driveUrl'])?.slice(0, 500),
     repos,
@@ -302,12 +330,13 @@ export function validarCotizacion(
 ): CrmCotizacion {
   const c = (crudo ?? {}) as Record<string, unknown>;
   const nombre = texto(c['nombre']);
-  const proyectoId = texto(c['proyectoId']);
+  const proyectoId = texto(c['proyectoId']) ?? previa?.proyectoId;
+  const clienteId = texto(c['clienteId']) ?? previa?.clienteId;
   if (!nombre) {
     throw new Error('Cada cotización necesita un nombre.');
   }
-  if (!proyectoId) {
-    throw new Error('Cada cotización necesita un proyectoId.');
+  if (!proyectoId && !clienteId) {
+    throw new Error('Cada cotización necesita un proyectoId o un clienteId.');
   }
   const estatus = texto(c['estatus']) as CrmCotizacionEstatus | undefined;
   if (estatus && !ESTATUS_COTIZACION.includes(estatus)) {
@@ -315,31 +344,47 @@ export function validarCotizacion(
       `El estatus "${estatus}" no es válido. Usa: ${ESTATUS_COTIZACION.join(', ')}.`
     );
   }
-  const esquemaCobro = texto(c['esquemaCobro']) as CrmEsquemaCobro | undefined;
+  const esquemaCobroTexto = texto(c['esquemaCobro']);
+  const esquemaCobro =
+    esquemaCobroTexto === null
+      ? null
+      : (esquemaCobroTexto as CrmEsquemaCobro | undefined);
   if (esquemaCobro && !ESQUEMAS_COBRO.includes(esquemaCobro)) {
     throw new Error(
       `El esquema de cobro "${esquemaCobro}" no es válido. Usa: ${ESQUEMAS_COBRO.join(', ')}.`
     );
   }
-  const subtotal = numero(c['subtotal'], previa?.subtotal ?? 0);
-  const iva = numero(c['iva'], previa?.iva ?? 0);
-  const total = numero(c['total'], previa?.total ?? subtotal + iva);
+  const tipo = texto(c['tipo']) as CrmCotizacionTipo | undefined;
+  if (tipo && !TIPOS_COTIZACION.includes(tipo)) {
+    throw new Error(
+      `El tipo "${tipo}" no es válido. Usa: ${TIPOS_COTIZACION.join(', ')}.`
+    );
+  }
+  const subtotal = numeroNullable(c['subtotal'], previa?.subtotal);
+  const iva = numeroNullable(c['iva'], previa?.iva);
+  const total = numeroNullable(c['total'], previa?.total);
   return {
     id: texto(c['id']) ?? previa?.id ?? idDeTexto(`cot-${nombre}`),
+    clienteId,
     proyectoId,
     folio: texto(c['folio'])?.slice(0, 40),
-    version: entero(c['version'], previa?.version),
+    version: enteroOpcional(c['version'], previa?.version),
     empresaFacturaId: texto(c['empresaFacturaId']),
+    empresaReceptoraId: texto(c['empresaReceptoraId']),
+    tipo: tipo ?? previa?.tipo,
     nombre: nombre.slice(0, 200),
     fechaEmision: fechaValida(c['fechaEmision']),
-    vigenciaDias: entero(c['vigenciaDias'], previa?.vigenciaDias),
+    vigenciaDias: enteroOpcional(c['vigenciaDias'], previa?.vigenciaDias),
     fechaVencimiento: fechaValida(c['fechaVencimiento']),
     subtotal,
     iva,
     total,
     moneda: texto(c['moneda'])?.slice(0, 10) ?? previa?.moneda ?? 'MXN',
-    esquemaCobro: esquemaCobro ?? previa?.esquemaCobro ?? 'unico',
-    estatus: estatus ?? previa?.estatus ?? 'borrador',
+    esquemaCobro:
+      c['esquemaCobro'] === null
+        ? null
+        : (esquemaCobro ?? previa?.esquemaCobro),
+    estatus: estatus ?? previa?.estatus,
     fechaEnvio: fechaValida(c['fechaEnvio']),
     enviadaAId: texto(c['enviadaAId']),
     autorizadaPorCarlosEn: fechaValida(c['autorizadaPorCarlosEn']),
@@ -348,6 +393,7 @@ export function validarCotizacion(
     ordenCompra: texto(c['ordenCompra'])?.slice(0, 60),
     pdfUrl: texto(c['pdfUrl'])?.slice(0, 500),
     cotizacionExternaId: texto(c['cotizacionExternaId']),
+    notas: texto(c['notas'])?.slice(0, 4000),
     actualizadoEn: ahora
   };
 }
@@ -360,9 +406,13 @@ export function validarPagoProgramado(
   ahora: string
 ): CrmPagoProgramado {
   const p = (crudo ?? {}) as Record<string, unknown>;
-  const cotizacionId = texto(p['cotizacionId']);
-  if (!cotizacionId) {
-    throw new Error('Cada pago programado necesita un cotizacionId.');
+  const cotizacionId = texto(p['cotizacionId']) ?? previo?.cotizacionId;
+  const proyectoId = texto(p['proyectoId']) ?? previo?.proyectoId;
+  const clienteId = texto(p['clienteId']) ?? previo?.clienteId;
+  if (!cotizacionId && !proyectoId && !clienteId) {
+    throw new Error(
+      'Cada pago necesita un cotizacionId, proyectoId o clienteId.'
+    );
   }
   const estatus = texto(p['estatus']) as CrmPagoEstatus | undefined;
   if (estatus && !ESTATUS_PAGO.includes(estatus)) {
@@ -370,24 +420,32 @@ export function validarPagoProgramado(
       `El estatus "${estatus}" no es válido. Usa: ${ESTATUS_PAGO.join(', ')}.`
     );
   }
-  const fechaEsperada = fechaValida(p['fechaEsperada']);
-  if (!fechaEsperada && !previo?.fechaEsperada) {
-    throw new Error('Cada pago programado necesita una fechaEsperada.');
-  }
-  const numero_ = entero(p['numero'], previo?.numero ?? 1);
-  const totalPagos = entero(p['totalPagos'], previo?.totalPagos ?? 1);
+  const fechaEsperadaRaw = p['fechaEsperada'];
+  const fechaEsperada =
+    fechaEsperadaRaw === null
+      ? null
+      : (fechaValida(fechaEsperadaRaw) ?? previo?.fechaEsperada);
+  const fechaPorConfirmar =
+    fechaEsperada === null || p['fechaPorConfirmar'] === true;
+  const numero_ = enteroOpcional(p['numero'], previo?.numero);
+  const totalPagos = enteroOpcional(p['totalPagos'], previo?.totalPagos);
+  const monto = numeroNullable(p['monto'], previo?.monto);
+  const idBase = cotizacionId ?? proyectoId ?? clienteId;
   return {
     id:
       texto(p['id']) ??
       previo?.id ??
-      idDeTexto(`pago-${cotizacionId}-${numero_}`),
+      idDeTexto(`pago-${idBase}-${numero_ ?? 'x'}`),
     cotizacionId,
+    proyectoId,
+    clienteId,
     numero: numero_,
     totalPagos,
-    monto: numero(p['monto'], previo?.monto ?? 0),
+    monto,
     moneda: texto(p['moneda'])?.slice(0, 10) ?? previo?.moneda ?? 'MXN',
-    fechaEsperada: fechaEsperada ?? previo!.fechaEsperada,
-    estatus: estatus ?? previo?.estatus ?? 'por_facturar',
+    fechaEsperada,
+    fechaPorConfirmar,
+    estatus: estatus ?? previo?.estatus,
     fechaPagoReal: fechaValida(p['fechaPagoReal']),
     nota: texto(p['nota'])?.slice(0, 200),
     actualizadoEn: ahora
@@ -604,48 +662,47 @@ export function calcularAvanceProyecto(
   return Math.round((hechas / del.length) * 100);
 }
 
-/** Total por cobrar de una cotizacion (pagos no pagados). */
+/** Total por cobrar de una cotizacion (pagos no pagados con monto conocido). */
 export function porCobrarDeCotizacion(
   cotizacionId: string,
   pagos: CrmPagoProgramado[]
 ): number {
   return pagosDeCoitzacion(cotizacionId, pagos)
-    .filter((p) => p.estatus !== 'pagado')
-    .reduce((sum, p) => sum + p.monto, 0);
+    .filter((p) => p.estatus !== 'pagado' && p.monto != null)
+    .reduce((sum, p) => sum + (p.monto ?? 0), 0);
 }
 
-/** Total cobrado de una cotizacion (pagos pagados). */
+/** Total cobrado de una cotizacion (pagos pagados con monto conocido). */
 export function cobradoDeCotizacion(
   cotizacionId: string,
   pagos: CrmPagoProgramado[]
 ): number {
   return pagosDeCoitzacion(cotizacionId, pagos)
-    .filter((p) => p.estatus === 'pagado')
-    .reduce((sum, p) => sum + p.monto, 0);
+    .filter((p) => p.estatus === 'pagado' && p.monto != null)
+    .reduce((sum, p) => sum + (p.monto ?? 0), 0);
 }
 
-/** Pagos vencidos (fecha esperada pasada y no pagados). */
+/** Pagos vencidos (fecha esperada pasada y no pagados). Ignora pagos sin fecha. */
 export function pagosVencidos(
   pagos: CrmPagoProgramado[],
   ahora = new Date()
 ): CrmPagoProgramado[] {
-  return pagos.filter(
-    (p) =>
-      p.estatus !== 'pagado' && Date.parse(p.fechaEsperada) < ahora.getTime()
-  );
+  return pagos.filter((p) => {
+    if (p.estatus === 'pagado' || !p.fechaEsperada) return false;
+    return Date.parse(p.fechaEsperada) < ahora.getTime();
+  });
 }
 
-/** Pagos proximos a vencer (en los proximos N dias). */
+/** Pagos proximos a vencer (en los proximos N dias). Ignora pagos sin fecha. */
 export function pagosPorVencer(
   pagos: CrmPagoProgramado[],
   dias: number,
   ahora = new Date()
 ): CrmPagoProgramado[] {
   const limite = ahora.getTime() + dias * 86_400_000;
-  return pagos.filter(
-    (p) =>
-      p.estatus !== 'pagado' &&
-      Date.parse(p.fechaEsperada) >= ahora.getTime() &&
-      Date.parse(p.fechaEsperada) <= limite
-  );
+  return pagos.filter((p) => {
+    if (p.estatus === 'pagado' || !p.fechaEsperada) return false;
+    const fecha = Date.parse(p.fechaEsperada);
+    return fecha >= ahora.getTime() && fecha <= limite;
+  });
 }

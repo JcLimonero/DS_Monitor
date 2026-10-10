@@ -586,7 +586,8 @@ cotizaciones, pagos programados, actividades y funcionalidades de desarrollo.
 **No depende de Odoo ni de ningún emisor externo**; vive en el puente con
 persistencia propia (Postgres o archivos).
 
-Empresas del CRM: TechCorp, InnovateLabs, CloudWorks, DevHub.
+Empresas del CRM: TechCorp, InnovateLabs, CloudWorks, DevHub, LimonLabs.
+(Los nombres de empresas y datos en los ejemplos son ficticios.)
 
 ### Modelo de datos
 
@@ -802,9 +803,22 @@ o script externo.
     "nombre": "Migración GLPI",
     "estado": "en_desarrollo",
     "responsableClienteId": "juan-perez"
+  },
+  {
+    "id": "proyecto-sin-estado",
+    "clienteId": "acme-motors",
+    "nombre": "Propuesta consultoría",
+    "notas": "Proyecto en evaluación, estado por confirmar"
   }
 ]
 ```
+
+**Notas importantes:**
+
+- **`estado` es opcional**: si no se conoce, se omite o se usa `por_confirmar`.
+  Ya no se asigna `prospecto` por omisión.
+- Estados válidos: `prospecto`, `en_cotizacion`, `aprobado`, `en_desarrollo`,
+  `en_pruebas`, `entregado`, `en_soporte`, `pausado`, `cancelado`, `por_confirmar`.
 
 ### Cotizaciones — `POST /ingesta/crm-nativo/cotizaciones`
 
@@ -820,23 +834,55 @@ o script externo.
     "iva": 24000,
     "total": 174000,
     "moneda": "MXN",
-    "esquemaCobro": "50-50",
+    "esquemaCobro": "parcialidades",
     "estatus": "enviada",
-    "cotizacionExternaId": "1234567890abcdef/COT-2026-042.pdf"
+    "cotizacionExternaId": "1234567890abcdef/COT-2026-042.pdf",
+    "notas": "50% al iniciar, 50% al entregar"
+  },
+  {
+    "id": "cot-sin-proyecto",
+    "clienteId": "acme-motors",
+    "nombre": "Propuesta inicial consultoría",
+    "total": null,
+    "estatus": "desconocido",
+    "notas": "Monto por definir en reunión, IVA por confirmar"
+  },
+  {
+    "id": "cot-interna",
+    "clienteId": "techcorp",
+    "empresaFacturaId": "innovatelabs",
+    "empresaReceptoraId": "techcorp",
+    "tipo": "interna",
+    "nombre": "Desarrollo componente React",
+    "subtotal": 80000,
+    "iva": 12800,
+    "total": 92800,
+    "esquemaCobro": "mensual"
   }
 ]
 ```
 
 **Notas importantes para la carga inicial:**
 
-- **El `id` es la llave única**, no el folio. El folio es opcional y no único
-  (en datos reales ~35% no tiene folio y algunos se repiten).
+- **El `id` es la llave única**, no el folio. El folio es opcional y no único.
+- **`proyectoId` ahora es opcional**: si no hay proyecto, usa `clienteId`.
 - **`cotizacionExternaId`** es la llave externa para idempotencia: si ya existe
   un registro con ese valor, se actualiza en lugar de crear uno nuevo. Úsalo
   para identificar el documento original (por ejemplo, la ruta del PDF en
   Drive: `"folder-id/nombre-archivo.pdf"`).
-- **`estatus: "desconocido"`** es válido para cotizaciones sin resultado
-  conocido (74% en datos reales).
+- **`estatus`** ya no tiene valor por omisión. Si no lo conoces, omítelo.
+  `"desconocido"` es válido para cotizaciones sin resultado conocido.
+- **`subtotal`, `iva`, `total` pueden ser `null`** (sin monto, distinto de 0).
+  Las sumas en cobranza ignoran valores nulos; la UI muestra "sin monto".
+- **`esquemaCobro`** acepta: `unico`, `parcialidades`, `mensual`, `mixto`,
+  `anual`, `cuatrimestral`, `bolsa_horas`, `por_definir`. Puede ser `null` si
+  no se conoce. Ya no tiene valor por omisión.
+- **`tipo`**: `venta` (ingreso a cliente), `interna` (entre empresas propias),
+  `gasto` (de proveedor hacia empresa). Por omisión `venta`.
+- **`empresaReceptoraId`**: para cotizaciones internas o gastos, indica quién
+  recibe la cotización.
+- **`notas`**: texto libre para evidencia del estatus, esquema de cobro
+  original, "IVA por confirmar", etc.
 - La respuesta incluye cuántos se crearon, actualizaron y errores por índice.
 
 ### Pagos programados — `POST /ingesta/crm-nativo/pagos`
@@ -852,9 +898,40 @@ o script externo.
     "moneda": "MXN",
     "fechaEsperada": "2026-10-15T00:00:00Z",
     "estatus": "por_facturar"
+  },
+  {
+    "id": "pago-sin-cot-1",
+    "proyectoId": "sistema-tickets",
+    "nota": "Mensualidad soporte Noviembre 2026",
+    "monto": 15000,
+    "moneda": "MXN",
+    "fechaEsperada": "2026-11-01T00:00:00Z",
+    "estatus": "por_facturar"
+  },
+  {
+    "id": "pago-por-confirmar",
+    "proyectoId": "sistema-tickets",
+    "nota": "Pago final (monto por definir)",
+    "monto": null,
+    "fechaEsperada": null,
+    "fechaPorConfirmar": true,
+    "estatus": "por_confirmar"
   }
 ]
 ```
+
+**Notas importantes:**
+
+- **`cotizacionId` ahora es opcional**: usa `proyectoId` para pagos sin
+  cotización emitida (ej. mensualidades de soporte), o `clienteId` si tampoco
+  hay proyecto.
+- **`monto` puede ser `null`** (monto por confirmar, distinto de 0). Las sumas
+  en cobranza ignoran valores nulos; la UI muestra "sin monto".
+- **`fechaEsperada` puede ser `null`** o `fechaPorConfirmar: true` para fechas
+  pendientes de definir. La UI muestra "por confirmar".
+- **`numero` y `totalPagos` son opcionales** para pagos por confirmar.
+- **`estatus`** acepta: `por_facturar`, `facturado`, `pagado`, `vencido`,
+  `por_confirmar`. Ya no tiene valor por omisión.
 
 ### Actividades — `POST /ingesta/crm-nativo/actividades`
 

@@ -357,7 +357,11 @@ export function camposOcultos(
 
 /** Oculta campos de costos de una cotizacion. */
 export function ocultarCostosCotizacion<
-  T extends { subtotal?: number; iva?: number; total?: number }
+  T extends {
+    subtotal?: number | null;
+    iva?: number | null;
+    total?: number | null;
+  }
 >(cotizacion: T, ocultar: CamposOcultos): T {
   if (!ocultar.ocultarCostos) return cotizacion;
   const { subtotal, iva, total, ...resto } = cotizacion;
@@ -366,7 +370,7 @@ export function ocultarCostosCotizacion<
 }
 
 /** Oculta campos de costos de un pago. */
-export function ocultarCostosPago<T extends { monto?: number }>(
+export function ocultarCostosPago<T extends { monto?: number | null }>(
   pago: T,
   ocultar: CamposOcultos
 ): T {

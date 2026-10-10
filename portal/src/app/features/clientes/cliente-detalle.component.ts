@@ -150,9 +150,15 @@ interface DatosCliente {
                   [routerLink]="['/proyectos', proyecto.id]">
                   <div class="proyecto-info">
                     <span class="proyecto-nombre">{{ proyecto.nombre }}</span>
-                    <span class="chip chip--estado-{{ proyecto.estado }}">
-                      {{ estadoLabel[proyecto.estado] }}
-                    </span>
+                    @if (proyecto.estado) {
+                      <span class="chip chip--estado-{{ proyecto.estado }}">
+                        {{ estadoLabel[proyecto.estado] }}
+                      </span>
+                    } @else {
+                      <span class="chip chip--estado-por_confirmar">
+                        Por confirmar
+                      </span>
+                    }
                   </div>
                   @if (proyecto.avancePct !== undefined) {
                     <div class="avance">
@@ -194,9 +200,11 @@ interface DatosCliente {
                           >
                         }
                       </span>
-                      <span class="chip chip--estatus-{{ cot.estatus }}">
-                        {{ estatusLabel[cot.estatus] }}
-                      </span>
+                      @if (cot.estatus) {
+                        <span class="chip chip--estatus-{{ cot.estatus }}">
+                          {{ estatusLabel[cot.estatus] }}
+                        </span>
+                      }
                     </div>
                     <div class="cotizacion-monto">
                       {{ cot.total | moneda: cot.moneda }}
@@ -651,8 +659,11 @@ export class ClienteDetalleComponent {
                   const proyectosDelCliente = proyectos
                     .filter((p) => p.clienteId === clienteId)
                     .map((p) => p.id);
-                  return cots.filter((c) =>
-                    proyectosDelCliente.includes(c.proyectoId)
+                  return cots.filter(
+                    (c) =>
+                      (c.proyectoId &&
+                        proyectosDelCliente.includes(c.proyectoId)) ||
+                      c.clienteId === clienteId
                   );
                 })
               );
@@ -668,12 +679,19 @@ export class ClienteDetalleComponent {
                         .filter((p) => p.clienteId === clienteId)
                         .map((p) => p.id);
                       const cotsDelCliente = cots
-                        .filter((c) =>
-                          proyectosDelCliente.includes(c.proyectoId)
+                        .filter(
+                          (c) =>
+                            (c.proyectoId &&
+                              proyectosDelCliente.includes(c.proyectoId)) ||
+                            c.clienteId === clienteId
                         )
                         .map((c) => c.id);
-                      return pagos.filter((p) =>
-                        cotsDelCliente.includes(p.cotizacionId)
+                      return pagos.filter(
+                        (p) =>
+                          (p.cotizacionId &&
+                            cotsDelCliente.includes(p.cotizacionId)) ||
+                          (p.proyectoId &&
+                            proyectosDelCliente.includes(p.proyectoId))
                       );
                     })
                   );
@@ -723,15 +741,15 @@ export class ClienteDetalleComponent {
     const datos = this.datos();
     if (!datos) return 0;
     return datos.pagos
-      .filter((p) => p.estatus === 'pagado')
-      .reduce((sum, p) => sum + p.monto, 0);
+      .filter((p) => p.estatus === 'pagado' && p.monto != null)
+      .reduce((sum, p) => sum + (p.monto ?? 0), 0);
   });
 
   readonly porCobrar = computed(() => {
     const datos = this.datos();
     if (!datos) return 0;
     return datos.pagos
-      .filter((p) => p.estatus !== 'pagado')
-      .reduce((sum, p) => sum + p.monto, 0);
+      .filter((p) => p.estatus !== 'pagado' && p.monto != null)
+      .reduce((sum, p) => sum + (p.monto ?? 0), 0);
   });
 }

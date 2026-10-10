@@ -61,9 +61,15 @@ interface DatosProyecto {
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Estado</span>
-              <span class="chip chip--estado-{{ d.proyecto.estado }}">
-                {{ estadoLabel[d.proyecto.estado] }}
-              </span>
+              @if (d.proyecto.estado) {
+                <span class="chip chip--estado-{{ d.proyecto.estado }}">
+                  {{ estadoLabel[d.proyecto.estado] }}
+                </span>
+              } @else {
+                <span class="chip chip--estado-por_confirmar">
+                  Por confirmar
+                </span>
+              }
             </div>
             @if (d.cliente) {
               <div class="info-item">
@@ -151,9 +157,11 @@ interface DatosProyecto {
                           >
                         }
                       </span>
-                      <span class="chip chip--estatus-{{ cot.estatus }}">
-                        {{ estatusLabel[cot.estatus] }}
-                      </span>
+                      @if (cot.estatus) {
+                        <span class="chip chip--estatus-{{ cot.estatus }}">
+                          {{ estatusLabel[cot.estatus] }}
+                        </span>
+                      }
                       @if (cot.autorizadaPorCarlosEn) {
                         <span class="chip chip--autorizada">
                           <pt-icon name="ok" class="h-3 w-3" />
