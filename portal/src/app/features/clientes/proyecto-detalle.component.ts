@@ -6,7 +6,7 @@ import {
   input,
   signal
 } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import {
@@ -921,6 +921,7 @@ export class ProyectoDetalleComponent {
   private readonly store = inject(PortalStore);
 
   readonly id = input.required<string>();
+  private readonly id$ = toObservable(this.id);
 
   readonly estadoLabel = CRM_PROYECTO_ESTADO_LABEL;
   readonly estatusLabel = CRM_COTIZACION_ESTATUS_LABEL;
@@ -956,10 +957,8 @@ export class ProyectoDetalleComponent {
   );
 
   private readonly _datos = toSignal(
-    this.recarga.pipe(
-      startWith(undefined),
-      switchMap(() => {
-        const proyectoId = this.id();
+    combineLatest([this.id$, this.recarga.pipe(startWith(undefined))]).pipe(
+      switchMap(([proyectoId]) => {
         return combineLatest([
           this.crm.obtenerProyecto(proyectoId),
           this.crm.obtenerClientes().pipe(catchError(() => of([]))),
