@@ -156,8 +156,8 @@ una revisión más, no el estado completo. Reemplazar borraría el historial.
   "version": 1,
   "datos": [
     {
-      "id": "api-vanguardia",
-      "nombre": "API Vanguardia",
+      "id": "api-ejemplo",
+      "nombre": "API Ejemplo",
       "url": "https://api.example.mx/health",
       "tipo": "api",
       "entorno": "produccion",
@@ -586,7 +586,7 @@ cotizaciones, pagos programados, actividades y funcionalidades de desarrollo.
 **No depende de Odoo ni de ningún emisor externo**; vive en el puente con
 persistencia propia (Postgres o archivos).
 
-Empresas del CRM: Dealer Solutions, Nexus Q Tech, Operativ AI, LimonLabs.
+Empresas del CRM: TechCorp, InnovateLabs, CloudWorks, DevHub.
 
 ### Modelo de datos
 
@@ -631,38 +631,38 @@ actividades con su token de emisor. El emisor necesita el tipo `clientes`.
   "datos": {
     "clientes": [
       {
-        "id": "grupo-vanguardia",
-        "nombre": "Grupo Vanguardia",
-        "razonSocial": "Vanguardia Automotriz SA de CV",
-        "rfc": "VAU850101XXX",
+        "id": "acme-motors",
+        "nombre": "Acme Motors",
+        "razonSocial": "Acme Motors SA de CV",
+        "rfc": "AMO850101XXX",
         "tipo": "directo",
         "driveFolderUrl": "https://drive.google.com/drive/folders/..."
       }
     ],
     "contactos": [
       {
-        "id": "marco-lopez",
-        "clienteId": "grupo-vanguardia",
-        "nombre": "Marco Antonio López Avelar",
+        "id": "juan-perez",
+        "clienteId": "acme-motors",
+        "nombre": "Juan Pérez García",
         "puesto": "Gerente de Sistemas",
-        "correo": "gerentesistemas@grupovanguardia.com",
+        "correo": "sistemas@example.com",
         "esResponsableProyecto": true
       }
     ],
     "proyectos": [
       {
-        "id": "glpi-vanguardia",
-        "clienteId": "grupo-vanguardia",
-        "empresaAtiendeId": "dealer-solutions",
+        "id": "sistema-tickets",
+        "clienteId": "acme-motors",
+        "empresaAtiendeId": "techcorp",
         "nombre": "Migración GLPI",
         "estado": "en_desarrollo",
-        "responsableClienteId": "marco-lopez"
+        "responsableClienteId": "juan-perez"
       }
     ],
     "actividades": [
       {
-        "clienteId": "grupo-vanguardia",
-        "proyectoId": "glpi-vanguardia",
+        "clienteId": "acme-motors",
+        "proyectoId": "sistema-tickets",
         "tipo": "junta",
         "resumen": "Revisión semanal de avances",
         "fecha": "2026-10-10T10:00:00Z"
@@ -702,7 +702,7 @@ emisor necesita el tipo `funcionalidades`.
   "datos": [
     {
       "id": "func-login",
-      "proyectoId": "glpi-vanguardia",
+      "proyectoId": "sistema-tickets",
       "titulo": "Implementar login SSO",
       "descripcion": "Integrar con Active Directory del cliente",
       "estado": "en_progreso",
@@ -726,8 +726,8 @@ bot sepa a quién enviar una cotización autorizada.
 
 ```json
 {
-  "nombre": "Marco Antonio López Avelar",
-  "correo": "gerentesistemas@grupovanguardia.com",
+  "nombre": "Juan Pérez García",
+  "correo": "sistemas@example.com",
   "puesto": "Gerente de Sistemas"
 }
 ```
@@ -740,8 +740,8 @@ esto después de enviar el correo.
 ```json
 {
   "enviadaA": {
-    "nombre": "Marco Antonio López Avelar",
-    "correo": "gerentesistemas@grupovanguardia.com"
+    "nombre": "Juan Pérez García",
+    "correo": "sistemas@example.com"
   },
   "fechaEnvio": "2026-10-10T14:30:00Z"
 }
@@ -766,10 +766,10 @@ o script externo.
 ```json
 [
   {
-    "id": "grupo-vanguardia",
-    "nombre": "Grupo Vanguardia",
-    "razonSocial": "Vanguardia Automotriz SA de CV",
-    "rfc": "VAU850101XXX",
+    "id": "acme-motors",
+    "nombre": "Acme Motors",
+    "razonSocial": "Acme Motors SA de CV",
+    "rfc": "AMO850101XXX",
     "tipo": "directo",
     "driveFolderUrl": "https://drive.google.com/drive/folders/..."
   }
@@ -781,11 +781,11 @@ o script externo.
 ```json
 [
   {
-    "id": "marco-lopez",
-    "clienteId": "grupo-vanguardia",
-    "nombre": "Marco Antonio López Avelar",
+    "id": "juan-perez",
+    "clienteId": "acme-motors",
+    "nombre": "Juan Pérez García",
     "puesto": "Gerente de Sistemas",
-    "correo": "gerentesistemas@grupovanguardia.com",
+    "correo": "sistemas@example.com",
     "esResponsableProyecto": true
   }
 ]
@@ -796,12 +796,12 @@ o script externo.
 ```json
 [
   {
-    "id": "glpi-vanguardia",
-    "clienteId": "grupo-vanguardia",
-    "empresaAtiendeId": "dealer-solutions",
+    "id": "sistema-tickets",
+    "clienteId": "acme-motors",
+    "empresaAtiendeId": "techcorp",
     "nombre": "Migración GLPI",
     "estado": "en_desarrollo",
-    "responsableClienteId": "marco-lopez"
+    "responsableClienteId": "juan-perez"
   }
 ]
 ```
@@ -812,9 +812,9 @@ o script externo.
 [
   {
     "id": "cot-12345",
-    "proyectoId": "glpi-vanguardia",
-    "folio": "DS-2026-042",
-    "empresaFacturaId": "dealer-solutions",
+    "proyectoId": "sistema-tickets",
+    "folio": "COT-2026-042",
+    "empresaFacturaId": "techcorp",
     "nombre": "Implementación GLPI fase 1",
     "subtotal": 150000,
     "iva": 24000,
@@ -822,7 +822,7 @@ o script externo.
     "moneda": "MXN",
     "esquemaCobro": "50-50",
     "estatus": "enviada",
-    "cotizacionExternaId": "1234567890abcdef/DS-2026-042.pdf"
+    "cotizacionExternaId": "1234567890abcdef/COT-2026-042.pdf"
   }
 ]
 ```
@@ -861,8 +861,8 @@ o script externo.
 ```json
 [
   {
-    "clienteId": "grupo-vanguardia",
-    "proyectoId": "glpi-vanguardia",
+    "clienteId": "acme-motors",
+    "proyectoId": "sistema-tickets",
     "tipo": "junta",
     "resumen": "Revisión semanal de avances",
     "fecha": "2026-10-10T10:00:00Z"
@@ -876,7 +876,7 @@ o script externo.
 [
   {
     "id": "func-login",
-    "proyectoId": "glpi-vanguardia",
+    "proyectoId": "sistema-tickets",
     "titulo": "Implementar login SSO",
     "estado": "en_progreso",
     "responsableId": "giovana",

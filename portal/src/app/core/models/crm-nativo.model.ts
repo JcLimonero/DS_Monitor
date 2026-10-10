@@ -14,7 +14,7 @@ export const CRM_CLIENTE_TIPO_LABEL: Record<CrmClienteTipo, string> = {
 
 /**
  * Un cliente del CRM nativo: vive en el puente, no en Odoo.
- * Empresas: Dealer Solutions, Nexus Q Tech, Operativ AI, LimonLabs.
+ * Empresas: TechCorp, InnovateLabs, CloudWorks, DevHub.
  */
 export interface CrmCliente {
   id: string;
@@ -25,7 +25,7 @@ export interface CrmCliente {
   tipo: CrmClienteTipo;
   /**
    * Si este cliente es final, el intermediario que le factura.
-   * Ej: Nexus factura a Total Dealer → cliente final es Grupo Popul.
+   * Ej: TechCorp factura a Distribuidora XYZ → cliente final es Corporativo ABC.
    */
   clienteFacturacionId?: string;
   /** Carpeta en Drive del cliente. */
@@ -78,7 +78,7 @@ export interface CrmProyecto {
   clienteId: string;
   /** Cliente final si el que paga es intermediario. */
   clienteFinalId?: string;
-  /** Empresa del grupo que atiende (Dealer Solutions, Nexus Q Tech, etc.). */
+  /** Empresa del grupo que atiende (TechCorp, InnovateLabs, etc.). */
   empresaAtiendeId?: string;
   nombre: string;
   alcance?: string;
