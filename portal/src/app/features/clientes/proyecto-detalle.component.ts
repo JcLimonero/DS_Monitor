@@ -7,6 +7,7 @@ import {
   signal
 } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import {
@@ -36,6 +37,7 @@ import {
   type CrmCliente,
   type CrmContacto,
   type CrmCotizacion,
+  type CrmCotizacionEstatus,
   type CrmFactura,
   type CrmFuncionalidad,
   type CrmHito,
@@ -43,7 +45,9 @@ import {
   type CrmPagoProgramado,
   type CrmPartida,
   type CrmProyecto,
-  type CrmRiesgo
+  type CrmProyectoEstado,
+  type CrmRiesgo,
+  type CrmSemaforoProyecto
 } from '../../core/models/crm-nativo.model';
 import type { Person } from '../../core/models';
 import { CrmService } from '../../core/sources/gateway/crm.service';
@@ -53,7 +57,6 @@ import { DialogoComponent } from '../../ui/dialogo.component';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
-import { DecimalPipe } from '@angular/common';
 import { DayPipe, MoneyPipe, RelativePipe } from '../../ui/portal.pipes';
 
 interface DatosProyecto {
@@ -73,6 +76,43 @@ interface DatosProyecto {
   partidas: CrmPartida[];
 }
 
+const SEMAFORO_CLASE: Record<CrmSemaforoProyecto, string> = {
+  en_tiempo:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200',
+  en_riesgo:
+    'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200',
+  atrasado: 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200'
+};
+
+const ESTATUS_COT_CLASE: Record<CrmCotizacionEstatus, string> = {
+  borrador: 'bg-surface-muted text-ink-muted',
+  enviada: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200',
+  aprobada:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200',
+  rechazada: 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200',
+  vencida:
+    'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200',
+  obsoleta: 'bg-surface-muted text-ink-subtle',
+  desconocido: 'bg-surface-muted text-ink-muted'
+};
+
+const ESTADO_CLASE: Record<CrmProyectoEstado, string> = {
+  prospecto: 'bg-surface-muted text-ink-muted',
+  en_cotizacion: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200',
+  aprobado:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200',
+  en_desarrollo:
+    'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-200',
+  en_pruebas:
+    'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200',
+  entregado:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200',
+  en_soporte: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200',
+  pausado: 'bg-surface-muted text-ink-subtle',
+  cancelado: 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200',
+  por_confirmar: 'bg-surface-muted text-ink-muted'
+};
+
 @Component({
   selector: 'pt-proyecto-detalle',
   standalone: true,
@@ -90,193 +130,246 @@ interface DatosProyecto {
     RelativePipe
   ],
   template: `
-    <pt-page-header [title]="datos()?.proyecto?.nombre ?? 'Proyecto'" />
+    <pt-page-header [title]="datos()?.proyecto?.nombre ?? 'Proyecto'">
+      <a class="btn" [routerLink]="volverUrl()">
+        <pt-icon name="anterior" class="h-4 w-4" />
+        Volver
+      </a>
+    </pt-page-header>
 
     @if (cargando()) {
-      <div class="loading-message">Cargando...</div>
+      <p class="py-8 text-center text-ink-muted">Cargando…</p>
     } @else if (error()) {
       <pt-empty-state icon="alerta" title="Error" [hint]="error()!" />
     } @else if (datos(); as d) {
-      <div class="detalle">
-        <!-- Info del proyecto -->
-        <section class="card seccion">
-          <h3 class="seccion-titulo">Información</h3>
-          <div class="info-grid">
-            <div class="info-item">
-              <span class="info-label">Estado</span>
+      <div class="flex flex-col gap-4">
+        <section class="card card-pad">
+          <h2 class="mb-3 text-base font-semibold text-ink">Información</h2>
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p
+                class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                Estado
+              </p>
               @if (d.proyecto.estado) {
-                <span class="chip chip--estado-{{ d.proyecto.estado }}">
+                <span
+                  class="chip mt-1"
+                  [class]="estadoClase[d.proyecto.estado]">
                   {{ estadoLabel[d.proyecto.estado] }}
                 </span>
               } @else {
-                <span class="chip chip--estado-por_confirmar">
-                  Por confirmar
-                </span>
+                <span class="chip mt-1 bg-surface-muted text-ink-muted"
+                  >Por confirmar</span
+                >
               }
             </div>
             @if (d.cliente) {
-              <div class="info-item">
-                <span class="info-label">Cliente</span>
-                <a class="link" [routerLink]="['/clientes', d.cliente.id]">
+              <div>
+                <p
+                  class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Cliente
+                </p>
+                <a
+                  class="mt-1 block text-info hover:underline"
+                  [routerLink]="['/clientes', d.cliente.id]">
                   {{ d.cliente.nombre }}
                 </a>
               </div>
             }
             @if (d.responsable) {
-              <div class="info-item">
-                <span class="info-label">Responsable (cliente)</span>
-                <span class="info-valor">{{ d.responsable.nombre }}</span>
+              <div>
+                <p
+                  class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Responsable (cliente)
+                </p>
+                <p class="mt-1 text-ink">{{ d.responsable.nombre }}</p>
               </div>
             }
             @if (d.clienteFinal) {
-              <div class="info-item">
-                <span class="info-label">Cliente final</span>
-                <a class="link" [routerLink]="['/clientes', d.clienteFinal.id]">
+              <div>
+                <p
+                  class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Cliente final
+                </p>
+                <a
+                  class="mt-1 block text-info hover:underline"
+                  [routerLink]="['/clientes', d.clienteFinal.id]">
                   {{ d.clienteFinal.nombre }}
                 </a>
               </div>
             }
             @if (empresaNombre()) {
-              <div class="info-item">
-                <span class="info-label">Empresa</span>
-                <span class="info-valor">{{ empresaNombre() }}</span>
+              <div>
+                <p
+                  class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Empresa
+                </p>
+                <p class="mt-1 text-ink">{{ empresaNombre() }}</p>
               </div>
             }
             @if (d.proyecto.responsableInterno) {
-              <div class="info-item">
-                <span class="info-label">Responsable interno</span>
-                <span class="info-valor">
+              <div>
+                <p
+                  class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Responsable interno
+                </p>
+                <p class="mt-1 text-ink">
                   {{ d.proyecto.responsableInterno.name }}
-                </span>
+                </p>
               </div>
             }
-            <div class="info-item">
-              <span class="info-label">Etapa comercial</span>
-              <span class="chip">{{
-                etapaLabel[etapaDe(d.proyecto) ?? 'por_confirmar']
-              }}</span>
+            <div>
+              <p
+                class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                Etapa comercial
+              </p>
+              <span class="chip mt-1 bg-brand-soft text-brand">
+                {{ etapaLabel[etapaDe(d.proyecto) ?? 'por_confirmar'] }}
+              </span>
             </div>
-            <div class="info-item">
-              <span class="info-label">Semáforo</span>
-              <span class="chip chip--semaforo-{{ semaforo() }}">
+            <div>
+              <p
+                class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                Semáforo
+              </p>
+              <span class="chip mt-1" [class]="semaforoClase[semaforo()]">
                 {{ semaforoLabel[semaforo()] }}
               </span>
             </div>
             @if (d.proyecto.fechaInicio) {
-              <div class="info-item">
-                <span class="info-label">Inicio</span>
-                <span class="info-valor">
-                  {{ d.proyecto.fechaInicio | dia }}
-                </span>
+              <div>
+                <p
+                  class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Inicio
+                </p>
+                <p class="mt-1 text-ink">{{ d.proyecto.fechaInicio | dia }}</p>
               </div>
             }
             @if (d.proyecto.fechaFinEstimada) {
-              <div class="info-item">
-                <span class="info-label">Fin estimado</span>
-                <span class="info-valor">
+              <div>
+                <p
+                  class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Fin estimado
+                </p>
+                <p class="mt-1 text-ink">
                   {{ d.proyecto.fechaFinEstimada | dia }}
-                </span>
+                </p>
               </div>
             }
           </div>
 
           @if (d.proyecto.avancePct !== undefined) {
-            <div class="avance-grande">
-              <div class="avance-header">
-                <span class="avance-label">Avance del proyecto</span>
-                <span class="avance-porcentaje"
+            <div class="mt-4 border-t border-line pt-3">
+              <div class="mb-2 flex items-center justify-between">
+                <span class="text-sm text-ink-muted">Avance del proyecto</span>
+                <span class="text-lg font-semibold tabular-nums text-accent"
                   >{{ d.proyecto.avancePct }}%</span
                 >
               </div>
-              <div class="avance-barra">
+              <div class="h-2 overflow-hidden rounded bg-surface-muted">
                 <div
-                  class="avance-progreso"
+                  class="h-full rounded bg-accent transition-all"
                   [style.width.%]="d.proyecto.avancePct"></div>
               </div>
             </div>
           }
 
           @if (d.proyecto.alcance) {
-            <div class="alcance">
-              <span class="info-label">Alcance</span>
-              <p class="alcance-texto">{{ d.proyecto.alcance }}</p>
+            <div class="mt-3">
+              <p
+                class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                Alcance
+              </p>
+              <p class="mt-1 whitespace-pre-wrap text-ink-muted">
+                {{ d.proyecto.alcance }}
+              </p>
             </div>
           }
         </section>
 
-        <!-- Cotizaciones -->
         @if (crm.puedeVerCotizaciones()) {
-          <section class="card seccion">
-            <h3 class="seccion-titulo">
+          <section class="card card-pad">
+            <h2 class="mb-3 flex items-center gap-2 text-base font-semibold">
               Cotizaciones
-              <span class="badge">{{ d.cotizaciones.length }}</span>
-            </h3>
+              <span class="chip bg-surface-muted text-ink-muted">{{
+                d.cotizaciones.length
+              }}</span>
+            </h2>
             @if (d.cotizaciones.length === 0) {
-              <p class="sin-datos">Sin cotizaciones</p>
+              <p class="text-sm italic text-ink-muted">Sin cotizaciones</p>
             } @else {
-              <div class="lista-items">
+              <div class="divide-y divide-line">
                 @for (cot of d.cotizaciones; track cot.id) {
-                  <div class="cotizacion-item">
-                    <div class="cotizacion-info">
-                      <span class="cotizacion-nombre">
+                  <div
+                    class="flex flex-wrap items-center justify-between gap-3 py-3">
+                    <div class="flex min-w-0 flex-wrap items-center gap-2">
+                      <span class="font-medium text-ink">
                         {{ cot.nombre }}
                         @if (cot.folio) {
-                          <span class="cotizacion-folio"
+                          <span class="font-normal text-ink-muted"
                             >({{ cot.folio }})</span
                           >
                         }
                       </span>
                       @if (cot.estatus) {
-                        <span class="chip chip--estatus-{{ cot.estatus }}">
+                        <span
+                          class="chip"
+                          [class]="estatusCotClase[cot.estatus]">
                           {{ estatusLabel[cot.estatus] }}
                         </span>
                       }
                       @if (cot.autorizadaPorCarlosEn) {
-                        <span class="chip chip--autorizada">
+                        <span
+                          class="chip bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200">
                           <pt-icon name="ok" class="h-3 w-3" />
                           Autorizada
                         </span>
                       }
                     </div>
-                    <div class="cotizacion-monto">
-                      {{ cot.total | moneda: cot.moneda }}
-                    </div>
+                    <span class="shrink-0 font-semibold tabular-nums">{{
+                      cot.total | moneda: cot.moneda
+                    }}</span>
                   </div>
                 }
               </div>
-              <div class="cotizacion-total">
-                <span>Total cotizado:</span>
-                <span class="total-valor">{{ totalCotizado() | moneda }}</span>
+              <div
+                class="mt-3 flex items-center justify-between border-t border-line pt-3 font-medium">
+                <span>Total cotizado</span>
+                <span class="text-lg tabular-nums text-accent">{{
+                  totalCotizado() | moneda
+                }}</span>
               </div>
             }
           </section>
         }
 
-        <!-- Funcionalidades -->
         @if (crm.puedeVerDesarrollo()) {
-          <section class="card seccion">
-            <div class="seccion-header">
-              <h3 class="seccion-titulo">
+          <section class="card card-pad">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 class="flex items-center gap-2 text-base font-semibold">
                 Funcionalidades
-                <span class="badge">{{ d.funcionalidades.length }}</span>
-              </h3>
+                <span class="chip bg-surface-muted text-ink-muted">{{
+                  d.funcionalidades.length
+                }}</span>
+              </h2>
               <a
-                class="btn btn--text"
+                class="btn"
                 routerLink="/desarrollo"
                 [queryParams]="{ proyecto: id() }">
                 Ver tablero
               </a>
             </div>
             @if (d.funcionalidades.length === 0) {
-              <p class="sin-datos">Sin funcionalidades</p>
+              <p class="text-sm italic text-ink-muted">Sin funcionalidades</p>
             } @else {
-              <div class="func-resumen">
+              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 @for (estado of estadosFuncionalidad; track estado.key) {
-                  <div class="func-estado">
-                    <span class="func-count">
+                  <div
+                    class="rounded-lg bg-surface-muted px-3 py-3 text-center">
+                    <p class="text-2xl font-semibold tabular-nums">
                       {{ contarFuncionalidades(estado.key) }}
-                    </span>
-                    <span class="func-label">{{ estado.label }}</span>
+                    </p>
+                    <p class="text-xs text-ink-muted">{{ estado.label }}</p>
                   </div>
                 }
               </div>
@@ -284,10 +377,9 @@ interface DatosProyecto {
           </section>
         }
 
-        <!-- Linea de tiempo -->
-        <section class="card seccion">
-          <div class="seccion-header">
-            <h3 class="seccion-titulo">Línea de tiempo</h3>
+        <section class="card card-pad">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-base font-semibold">Línea de tiempo</h2>
             @if (crm.puedeEditarProyectos()) {
               <button type="button" class="btn" (click)="abrirAvance()">
                 <pt-icon name="mas" class="h-4 w-4" />
@@ -296,16 +388,19 @@ interface DatosProyecto {
             }
           </div>
           @if (lineaTiempo().length === 0) {
-            <p class="sin-datos">Sin avances ni cambios de etapa</p>
+            <p class="text-sm italic text-ink-muted">
+              Sin avances ni cambios de etapa
+            </p>
           } @else {
-            <ul class="lista-items">
+            <ul class="divide-y divide-line">
               @for (ev of lineaTiempo(); track ev.id) {
-                <li class="contacto-item">
-                  <div class="contacto-info">
-                    <span class="contacto-nombre">{{ ev.titulo }}</span>
-                    <span class="contacto-puesto">{{ ev.detalle }}</span>
+                <li
+                  class="flex flex-wrap items-start justify-between gap-3 py-3">
+                  <div class="min-w-0">
+                    <p class="font-medium text-ink">{{ ev.titulo }}</p>
+                    <p class="text-sm text-ink-muted">{{ ev.detalle }}</p>
                   </div>
-                  <span class="text-xs text-ink-muted">{{
+                  <span class="shrink-0 text-xs text-ink-muted">{{
                     ev.fecha | relativo
                   }}</span>
                 </li>
@@ -314,13 +409,14 @@ interface DatosProyecto {
           }
         </section>
 
-        <!-- Hitos -->
-        <section class="card seccion">
-          <div class="seccion-header">
-            <h3 class="seccion-titulo">
+        <section class="card card-pad">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 class="flex items-center gap-2 text-base font-semibold">
               Hitos
-              <span class="badge">{{ d.hitos.length }}</span>
-            </h3>
+              <span class="chip bg-surface-muted text-ink-muted">{{
+                d.hitos.length
+              }}</span>
+            </h2>
             @if (crm.puedeEditarProyectos()) {
               <button type="button" class="btn" (click)="abrirHito()">
                 <pt-icon name="mas" class="h-4 w-4" />
@@ -329,41 +425,42 @@ interface DatosProyecto {
             }
           </div>
           @if (d.hitos.length === 0) {
-            <p class="sin-datos">Sin hitos</p>
+            <p class="text-sm italic text-ink-muted">Sin hitos</p>
           } @else {
-            <div class="lista-items">
+            <div class="divide-y divide-line">
               @for (h of d.hitos; track h.id) {
-                <div class="contacto-item">
-                  <div class="contacto-info">
-                    <span class="contacto-nombre">
-                      {{ h.nombre }}
-                      @if (h.completado) {
-                        <span class="chip chip--autorizada">Hecho</span>
-                      }
-                    </span>
-                    <span class="contacto-puesto">
-                      Compromiso
-                      {{ h.fechaCompromiso ? (h.fechaCompromiso | dia) : '—' }}
-                      · Real
-                      {{ h.fechaReal ? (h.fechaReal | dia) : '—' }}
-                      @if (nombreDe(h.responsableId); as n) {
-                        · {{ n }}
-                      }
-                    </span>
-                  </div>
+                <div class="py-3">
+                  <p class="flex flex-wrap items-center gap-2 font-medium">
+                    {{ h.nombre }}
+                    @if (h.completado) {
+                      <span
+                        class="chip bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200"
+                        >Hecho</span
+                      >
+                    }
+                  </p>
+                  <p class="text-sm text-ink-muted">
+                    Compromiso
+                    {{ h.fechaCompromiso ? (h.fechaCompromiso | dia) : '—' }}
+                    · Real {{ h.fechaReal ? (h.fechaReal | dia) : '—' }}
+                    @if (nombreDe(h.responsableId); as n) {
+                      · {{ n }}
+                    }
+                  </p>
                 </div>
               }
             </div>
           }
         </section>
 
-        <!-- Riesgos -->
-        <section class="card seccion">
-          <div class="seccion-header">
-            <h3 class="seccion-titulo">
+        <section class="card card-pad">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 class="flex items-center gap-2 text-base font-semibold">
               Riesgos y bloqueos
-              <span class="badge">{{ riesgosAbiertos() }}</span>
-            </h3>
+              <span class="chip bg-surface-muted text-ink-muted">{{
+                riesgosAbiertos()
+              }}</span>
+            </h2>
             @if (crm.puedeEditarProyectos()) {
               <button type="button" class="btn" (click)="abrirRiesgo()">
                 <pt-icon name="mas" class="h-4 w-4" />
@@ -372,49 +469,60 @@ interface DatosProyecto {
             }
           </div>
           @if (d.riesgos.length === 0) {
-            <p class="sin-datos">Sin riesgos</p>
+            <p class="text-sm italic text-ink-muted">Sin riesgos</p>
           } @else {
-            <div class="lista-items">
+            <div class="divide-y divide-line">
               @for (r of d.riesgos; track r.id) {
-                <div class="contacto-item">
-                  <div class="contacto-info">
-                    <span class="contacto-nombre">
-                      {{ r.descripcion }}
-                      <span class="chip">{{ tipoRiesgoLabel[r.tipo] }}</span>
+                <div class="py-3">
+                  <p class="flex flex-wrap items-center gap-2 font-medium">
+                    {{ r.descripcion }}
+                    <span
+                      class="chip"
+                      [class]="
+                        r.tipo === 'bloqueo'
+                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200'
+                          : 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200'
+                      ">
+                      {{ tipoRiesgoLabel[r.tipo] }}
                     </span>
-                    <span class="contacto-puesto">
-                      {{ r.abierto ? 'Abierto' : 'Cerrado' }}
-                      @if (nombreDe(r.responsableId); as n) {
-                        · {{ n }}
-                      }
-                    </span>
-                  </div>
+                    @if (!r.abierto) {
+                      <span class="chip bg-surface-muted text-ink-muted"
+                        >Cerrado</span
+                      >
+                    }
+                  </p>
+                  <p class="text-sm text-ink-muted">
+                    {{ r.abierto ? 'Abierto' : 'Cerrado' }}
+                    @if (nombreDe(r.responsableId); as n) {
+                      · {{ n }}
+                    }
+                  </p>
                 </div>
               }
             </div>
           }
         </section>
 
-        <!-- Pendientes ligados -->
         @if (pendientesLigados().length > 0) {
-          <section class="card seccion">
-            <h3 class="seccion-titulo">Pendientes ligados</h3>
-            <div class="lista-items">
+          <section class="card card-pad">
+            <h2 class="mb-3 text-base font-semibold">Pendientes ligados</h2>
+            <div class="flex flex-col gap-2">
               @for (t of pendientesLigados(); track t.id) {
-                <a class="link" routerLink="/pendientes">{{ t.title }}</a>
+                <a class="text-info hover:underline" routerLink="/pendientes">{{
+                  t.title
+                }}</a>
               }
             </div>
           </section>
         }
 
-        <!-- Proximos cobros -->
         @if (crm.puedeVerCobranza() && proximosCobros().length > 0) {
-          <section class="card seccion">
-            <h3 class="seccion-titulo">Próximos cobros</h3>
-            <div class="lista-items">
+          <section class="card card-pad">
+            <h2 class="mb-3 text-base font-semibold">Próximos cobros</h2>
+            <div class="divide-y divide-line">
               @for (p of proximosCobros(); track p.id) {
-                <div class="cotizacion-item">
-                  <span>
+                <div class="flex items-center justify-between gap-3 py-3">
+                  <span class="text-ink">
                     {{ p.nota ?? 'Pago' }}
                     ·
                     @if (p.fechaEsperada) {
@@ -423,7 +531,7 @@ interface DatosProyecto {
                       Por confirmar
                     }
                   </span>
-                  <span class="cotizacion-monto">{{
+                  <span class="font-semibold tabular-nums">{{
                     p.monto | moneda: p.moneda
                   }}</span>
                 </div>
@@ -432,34 +540,38 @@ interface DatosProyecto {
           </section>
         }
 
-        <!-- OC, facturas y margen -->
         @if (crm.puedeVerCobranza()) {
-          <section class="card seccion">
-            <h3 class="seccion-titulo">Órdenes de compra y facturas</h3>
+          <section class="card card-pad">
+            <h2 class="mb-3 text-base font-semibold">
+              Órdenes de compra y facturas
+            </h2>
             @if (d.ordenes.length === 0 && d.facturas.length === 0) {
-              <p class="sin-datos">Sin OC ni facturas</p>
+              <p class="text-sm italic text-ink-muted">Sin OC ni facturas</p>
             } @else {
-              @for (oc of d.ordenes; track oc.id) {
-                <div class="cotizacion-item">
-                  <span>OC {{ oc.folio }} {{ oc.periodo }}</span>
-                  <span class="cotizacion-monto">{{
-                    oc.monto | moneda: oc.moneda
-                  }}</span>
-                </div>
-              }
-              @for (f of d.facturas; track f.id) {
-                <div class="cotizacion-item">
-                  <span>Factura {{ f.folio ?? f.uuid }}</span>
-                  <span class="cotizacion-monto">{{
-                    f.total | moneda: f.moneda
-                  }}</span>
-                </div>
-              }
+              <div class="divide-y divide-line">
+                @for (oc of d.ordenes; track oc.id) {
+                  <div class="flex items-center justify-between gap-3 py-3">
+                    <span>OC {{ oc.folio }} {{ oc.periodo }}</span>
+                    <span class="font-semibold tabular-nums">{{
+                      oc.monto | moneda: oc.moneda
+                    }}</span>
+                  </div>
+                }
+                @for (f of d.facturas; track f.id) {
+                  <div class="flex items-center justify-between gap-3 py-3">
+                    <span>Factura {{ f.folio ?? f.uuid }}</span>
+                    <span class="font-semibold tabular-nums">{{
+                      f.total | moneda: f.moneda
+                    }}</span>
+                  </div>
+                }
+              </div>
             }
             @if (crm.puedeVerCostos() && margen(); as m) {
-              <div class="cotizacion-total">
+              <div
+                class="mt-3 flex items-center justify-between border-t border-line pt-3 font-medium">
                 <span>Margen</span>
-                <span class="total-valor"
+                <span class="tabular-nums text-accent"
                   >{{ m.margen | moneda }} ({{
                     m.margenPct | number: '1.0-0'
                   }}%)</span
@@ -469,19 +581,22 @@ interface DatosProyecto {
           </section>
         }
 
-        <!-- Enlaces -->
         @if (d.proyecto.driveUrl || d.proyecto.repos?.length) {
-          <section class="card seccion">
-            <h3 class="seccion-titulo">Enlaces</h3>
-            <div class="enlaces">
+          <section class="card card-pad">
+            <h2 class="mb-3 text-base font-semibold">Enlaces</h2>
+            <div class="flex flex-wrap gap-2">
               @if (d.proyecto.driveUrl) {
-                <a class="enlace" [href]="d.proyecto.driveUrl" target="_blank">
+                <a
+                  class="btn"
+                  [href]="d.proyecto.driveUrl"
+                  target="_blank"
+                  rel="noopener">
                   <pt-icon name="externo" class="h-4 w-4" />
                   Google Drive
                 </a>
               }
               @for (repo of d.proyecto.repos ?? []; track repo) {
-                <a class="enlace" [href]="repo" target="_blank">
+                <a class="btn" [href]="repo" target="_blank" rel="noopener">
                   <pt-icon name="rama" class="h-4 w-4" />
                   Repositorio
                 </a>
@@ -590,328 +705,6 @@ interface DatosProyecto {
         </div>
       </pt-dialogo>
     }
-  `,
-  styles: `
-    :host {
-      display: block;
-      padding: var(--space-4);
-    }
-
-    .loading-message {
-      text-align: center;
-      color: var(--text-secondary);
-      padding: var(--space-8);
-    }
-
-    .detalle {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-4);
-    }
-
-    .seccion {
-      padding: var(--space-4);
-    }
-
-    .seccion-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: var(--space-3);
-    }
-
-    .seccion-titulo {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      margin: 0 0 var(--space-3) 0;
-      font-size: 1rem;
-      font-weight: 600;
-    }
-
-    .seccion-header .seccion-titulo {
-      margin-bottom: 0;
-    }
-
-    .badge {
-      background: var(--surface-secondary);
-      color: var(--text-secondary);
-      font-size: 0.75rem;
-      font-weight: 500;
-      padding: 2px 8px;
-      border-radius: 10px;
-    }
-
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: var(--space-3);
-    }
-
-    .info-item {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-1);
-    }
-
-    .info-label {
-      font-size: 0.75rem;
-      color: var(--text-tertiary);
-      text-transform: uppercase;
-    }
-
-    .info-valor {
-      color: var(--text-primary);
-    }
-
-    .link {
-      color: var(--accent);
-      text-decoration: none;
-    }
-
-    .link:hover {
-      text-decoration: underline;
-    }
-
-    .avance-grande {
-      margin-top: var(--space-4);
-      padding-top: var(--space-3);
-      border-top: 1px solid var(--border);
-    }
-
-    .avance-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: var(--space-2);
-    }
-
-    .avance-label {
-      font-size: 0.875rem;
-      color: var(--text-secondary);
-    }
-
-    .avance-porcentaje {
-      font-size: 1.25rem;
-      font-weight: 600;
-      color: var(--accent);
-    }
-
-    .avance-barra {
-      height: 8px;
-      background: var(--surface-secondary);
-      border-radius: 4px;
-      overflow: hidden;
-    }
-
-    .avance-progreso {
-      height: 100%;
-      background: var(--accent);
-      border-radius: 4px;
-    }
-
-    .alcance {
-      margin-top: var(--space-3);
-    }
-
-    .alcance-texto {
-      margin: var(--space-1) 0 0 0;
-      color: var(--text-secondary);
-      white-space: pre-wrap;
-    }
-
-    .sin-datos {
-      color: var(--text-secondary);
-      font-style: italic;
-      margin: 0;
-    }
-
-    .lista-items {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
-
-    .cotizacion-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: var(--space-3);
-      padding: var(--space-2) 0;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .cotizacion-item:last-child {
-      border-bottom: none;
-    }
-
-    .cotizacion-info {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      flex-wrap: wrap;
-    }
-
-    .cotizacion-nombre {
-      font-weight: 500;
-    }
-
-    .cotizacion-folio {
-      color: var(--text-secondary);
-      font-size: 0.875rem;
-    }
-
-    .cotizacion-monto {
-      font-weight: 600;
-      font-family: var(--font-mono);
-    }
-
-    .cotizacion-total {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: var(--space-3);
-      padding-top: var(--space-3);
-      border-top: 1px solid var(--border);
-      font-weight: 500;
-    }
-
-    .total-valor {
-      font-size: 1.125rem;
-      font-family: var(--font-mono);
-      color: var(--accent);
-    }
-
-    .func-resumen {
-      display: flex;
-      gap: var(--space-4);
-      flex-wrap: wrap;
-    }
-
-    .func-estado {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: var(--space-1);
-      min-width: 80px;
-    }
-
-    .func-count {
-      font-size: 1.5rem;
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-
-    .func-label {
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      text-align: center;
-    }
-
-    .enlaces {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--space-2);
-    }
-
-    .enlace {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-2);
-      padding: var(--space-2) var(--space-3);
-      background: var(--surface-secondary);
-      border-radius: var(--radius);
-      color: var(--text-primary);
-      text-decoration: none;
-      transition: background-color 0.15s;
-    }
-
-    .enlace:hover {
-      background: var(--surface-hover);
-    }
-
-    .chip--autorizada {
-      --chip-bg: var(--accent-green-bg);
-      --chip-text: var(--accent-green);
-    }
-
-    .chip--estatus-borrador {
-      --chip-bg: var(--surface-secondary);
-      --chip-text: var(--text-secondary);
-    }
-    .chip--estatus-enviada {
-      --chip-bg: var(--accent-blue-bg);
-      --chip-text: var(--accent-blue);
-    }
-    .chip--estatus-aprobada {
-      --chip-bg: var(--accent-green-bg);
-      --chip-text: var(--accent-green);
-    }
-    .chip--estatus-rechazada {
-      --chip-bg: var(--accent-red-bg);
-      --chip-text: var(--accent-red);
-    }
-    .chip--estatus-vencida {
-      --chip-bg: var(--accent-orange-bg);
-      --chip-text: var(--accent-orange);
-    }
-    .chip--estatus-obsoleta {
-      --chip-bg: var(--surface-secondary);
-      --chip-text: var(--text-tertiary);
-    }
-    .chip--estatus-desconocido {
-      --chip-bg: var(--surface-secondary);
-      --chip-text: var(--text-secondary);
-    }
-
-    .chip--estado-prospecto {
-      --chip-bg: var(--surface-secondary);
-      --chip-text: var(--text-secondary);
-    }
-    .chip--estado-en_cotizacion {
-      --chip-bg: var(--accent-blue-bg);
-      --chip-text: var(--accent-blue);
-    }
-    .chip--estado-aprobado {
-      --chip-bg: var(--accent-green-bg);
-      --chip-text: var(--accent-green);
-    }
-    .chip--estado-en_desarrollo {
-      --chip-bg: var(--accent-purple-bg);
-      --chip-text: var(--accent-purple);
-    }
-    .chip--estado-en_pruebas {
-      --chip-bg: var(--accent-orange-bg);
-      --chip-text: var(--accent-orange);
-    }
-    .chip--estado-entregado {
-      --chip-bg: var(--accent-green-bg);
-      --chip-text: var(--accent-green);
-    }
-    .chip--estado-en_soporte {
-      --chip-bg: var(--accent-blue-bg);
-      --chip-text: var(--accent-blue);
-    }
-    .chip--estado-pausado {
-      --chip-bg: var(--surface-secondary);
-      --chip-text: var(--text-tertiary);
-    }
-    .chip--estado-cancelado {
-      --chip-bg: var(--accent-red-bg);
-      --chip-text: var(--accent-red);
-    }
-    .chip--semaforo-en_tiempo {
-      --chip-bg: var(--accent-green-bg);
-      --chip-text: var(--accent-green);
-    }
-    .chip--semaforo-en_riesgo {
-      --chip-bg: var(--accent-orange-bg);
-      --chip-text: var(--accent-orange);
-    }
-    .chip--semaforo-atrasado {
-      --chip-bg: var(--accent-red-bg);
-      --chip-text: var(--accent-red);
-    }
   `
 })
 export class ProyectoDetalleComponent {
@@ -930,6 +723,9 @@ export class ProyectoDetalleComponent {
   readonly semaforoLabel = CRM_SEMAFORO_LABEL;
   readonly tipoRiesgoLabel = CRM_TIPO_RIESGO_LABEL;
   readonly fuenteLabel = CRM_FUENTE_AVANCE_LABEL;
+  readonly semaforoClase = SEMAFORO_CLASE;
+  readonly estatusCotClase = ESTATUS_COT_CLASE;
+  readonly estadoClase = ESTADO_CLASE;
 
   readonly estadosFuncionalidad = [
     { key: 'por_hacer', label: 'Por hacer' },
@@ -1031,7 +827,7 @@ export class ProyectoDetalleComponent {
                 ordenes,
                 facturas,
                 partidas
-              };
+              } satisfies DatosProyecto;
             }
           )
         );

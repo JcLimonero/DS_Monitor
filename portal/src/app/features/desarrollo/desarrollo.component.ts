@@ -7,7 +7,7 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   catchError,
   combineLatest,
@@ -20,8 +20,9 @@ import {
 import {
   CRM_FUNCIONALIDAD_ESTADO_LABEL,
   CRM_FUNCIONALIDAD_PRIORIDAD_LABEL,
-  CrmFuncionalidadEstado,
   type CrmFuncionalidad,
+  type CrmFuncionalidadEstado,
+  type CrmFuncionalidadPrioridad,
   type CrmProyecto
 } from '../../core/models/crm-nativo.model';
 import type { Person } from '../../core/models';
@@ -33,15 +34,28 @@ import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 import { RelativePipe } from '../../ui/portal.pipes';
 
-interface FuncionalidadConContexto extends CrmFuncionalidad {
-  proyecto?: CrmProyecto;
-  responsable?: Person;
-}
+const ESTADOS_KANBAN: CrmFuncionalidadEstado[] = [
+  'por_hacer',
+  'en_progreso',
+  'en_revision',
+  'bloqueado',
+  'hecho'
+];
 
-interface ColumnaKanban {
-  estado: CrmFuncionalidadEstado;
-  etiqueta: string;
-  items: FuncionalidadConContexto[];
+const PRIORIDAD_CLASE: Record<CrmFuncionalidadPrioridad, string> = {
+  baja: 'bg-surface-muted text-ink-muted',
+  media: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200',
+  alta: 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200',
+  urgente: 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200'
+};
+
+function estadoVecino(
+  actual: CrmFuncionalidadEstado,
+  direccion: -1 | 1
+): CrmFuncionalidadEstado | undefined {
+  const i = ESTADOS_KANBAN.indexOf(actual);
+  if (i < 0) return undefined;
+  return ESTADOS_KANBAN[i + direccion];
 }
 
 @Component({
@@ -58,41 +72,12 @@ interface ColumnaKanban {
     RelativePipe
   ],
   template: `
-    <pt-page-header title="Desarrollo" />
-
-    @if (crm.cargando()) {
-      <div class="loading-message">Cargando...</div>
-    } @else if (!crm.puedeVerDesarrollo()) {
-      <pt-empty-state
-        icon="usuario"
-        title="Sin acceso"
-        hint="No tienes permiso para ver desarrollo." />
-    } @else if (error()) {
-      <pt-empty-state icon="alerta" title="Error" [hint]="error()!" />
-    } @else {
-      <!-- Filtros -->
-      <div class="filtros">
-        <select
-          class="field"
-          [value]="filtroProyecto()"
-          (change)="filtrarProyecto($event)">
-          <option value="">Todos los proyectos</option>
-          @for (p of proyectos(); track p.id) {
-            <option [value]="p.id">{{ p.nombre }}</option>
-          }
-        </select>
-        <select
-          class="field"
-          [value]="filtroResponsable()"
-          (change)="filtrarResponsable($event)">
-          <option value="">Todos los responsables</option>
-          <option value="__nadie__">Sin responsable</option>
-          @for (p of equipo(); track p.id) {
-            <option [value]="p.id">{{ p.name }}</option>
-          }
-        </select>
-        @if (crm.puedeEditarDesarrollo()) {
-          <button type="button" class="btn" (click)="abrirAlta()">
+    <pt-page-header
+      title="Desarrollo"
+      subtitle="Funcionalidades por estado. Arrastra o usa los botones.">
+      @if (crm.puedeEditarDesarrollo()) {
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="btn btn-primary" (click)="abrirAlta()">
             <pt-icon name="mas" class="h-4 w-4" />
             Funcionalidad
           </button>
@@ -102,101 +87,194 @@ interface ColumnaKanban {
             [disabled]="sinResponsable().length === 0"
             (click)="abrirLote()">
             Asignar en lote
+            @if (sinResponsable().length > 0) {
+              <span class="chip bg-amber-100 text-amber-900">{{
+                sinResponsable().length
+              }}</span>
+            }
           </button>
-        }
+        </div>
+      }
+    </pt-page-header>
+
+    @if (crm.cargando()) {
+      <p class="py-8 text-center text-ink-muted">Cargando…</p>
+    } @else if (!crm.puedeVerDesarrollo()) {
+      <pt-empty-state
+        icon="usuario"
+        title="Sin acceso"
+        hint="No tienes permiso para ver desarrollo." />
+    } @else if (error()) {
+      <pt-empty-state icon="alerta" title="Error" [hint]="error()!" />
+    } @else {
+      <div class="mb-4 flex flex-wrap gap-3">
+        <select
+          class="field max-w-xs"
+          [value]="filtroProyecto()"
+          (change)="filtrarProyecto($event)">
+          <option value="">Todos los proyectos</option>
+          @for (p of proyectos(); track p.id) {
+            <option [value]="p.id">{{ p.nombre }}</option>
+          }
+        </select>
+        <select
+          class="field max-w-xs"
+          [value]="filtroResponsable()"
+          (change)="filtrarResponsable($event)">
+          <option value="">Todos los responsables</option>
+          <option value="__nadie__">Sin responsable</option>
+          @for (p of equipo(); track p.id) {
+            <option [value]="p.id">{{ p.name }}</option>
+          }
+        </select>
       </div>
 
-      <!-- Resumen de avance -->
+      @if (sinResponsable().length > 0) {
+        <p class="banner banner-warn mb-4">
+          <pt-icon name="alerta" class="h-4 w-4" />
+          {{ sinResponsable().length }}
+          {{
+            sinResponsable().length === 1
+              ? 'funcionalidad sin responsable'
+              : 'funcionalidades sin responsable'
+          }}.
+        </p>
+      }
+
       @if (filtroProyecto()) {
-        <div class="resumen">
-          <div class="resumen-item">
-            <span class="resumen-valor">{{ avanceProyecto() }}%</span>
-            <span class="resumen-label">Avance</span>
+        <div class="mb-4 grid gap-3 sm:grid-cols-3">
+          <div class="card card-pad">
+            <p class="text-2xl font-semibold tabular-nums text-accent">
+              {{ avanceProyecto() }}%
+            </p>
+            <p class="text-xs font-medium text-ink-muted">Avance</p>
           </div>
-          <div class="resumen-item">
-            <span class="resumen-valor">{{ totalFuncionalidades() }}</span>
-            <span class="resumen-label">Funcionalidades</span>
+          <div class="card card-pad">
+            <p class="text-2xl font-semibold tabular-nums text-ink">
+              {{ totalFuncionalidades() }}
+            </p>
+            <p class="text-xs font-medium text-ink-muted">Funcionalidades</p>
           </div>
-          <div class="resumen-item">
-            <span class="resumen-valor">{{ funcionalidesHechas() }}</span>
-            <span class="resumen-label">Completadas</span>
+          <div class="card card-pad">
+            <p class="text-2xl font-semibold tabular-nums text-ok">
+              {{ funcionalidesHechas() }}
+            </p>
+            <p class="text-xs font-medium text-ink-muted">Completadas</p>
           </div>
         </div>
       }
 
-      <!-- Tablero Kanban -->
-      @if (columnas().length === 0) {
-        <pt-empty-state
-          icon="tareas"
-          title="Sin funcionalidades"
-          [hint]="
-            filtroProyecto() || filtroResponsable()
-              ? 'No hay funcionalidades que coincidan con los filtros.'
-              : 'Aún no hay funcionalidades registradas.'
-          " />
-      } @else {
-        <div class="kanban">
-          @for (col of columnas(); track col.estado) {
-            <div class="kanban-columna">
-              <div class="kanban-header">
-                <span class="kanban-titulo">{{ col.etiqueta }}</span>
-                <span class="kanban-count">{{ col.items.length }}</span>
-              </div>
-              <div class="kanban-items">
-                @for (func of col.items; track func.id) {
-                  <div
-                    class="kanban-card"
-                    [class.prioridad-alta]="
-                      func.prioridad === 'alta' || func.prioridad === 'urgente'
-                    ">
-                    <div class="func-header">
-                      <span class="func-titulo">{{ func.titulo }}</span>
-                      <span class="chip chip--{{ func.prioridad }}">
-                        {{ prioridadLabel[func.prioridad] }}
+      <div class="flex gap-3 overflow-x-auto pb-4">
+        @for (col of columnas(); track col.estado) {
+          <section
+            class="flex w-[280px] shrink-0 flex-col rounded-xl bg-surface-muted"
+            (dragover)="permitirSoltar($event)"
+            (drop)="soltar(col.estado, $event)">
+            <header
+              class="flex items-center justify-between gap-2 border-b border-line px-3 py-3">
+              <h2 class="text-sm font-semibold text-ink">{{ col.etiqueta }}</h2>
+              <span class="chip bg-surface text-ink-muted">{{
+                col.items.length
+              }}</span>
+            </header>
+            <div class="flex min-h-[120px] flex-1 flex-col gap-2 p-2">
+              @if (col.items.length === 0) {
+                <p class="px-2 py-6 text-center text-xs text-ink-subtle">
+                  Sin ítems
+                </p>
+              }
+              @for (func of col.items; track func.id) {
+                <article
+                  class="card card-pad flex flex-col gap-2"
+                  [class.ring-2]="
+                    func.prioridad === 'alta' || func.prioridad === 'urgente'
+                  "
+                  [class.ring-amber-400]="func.prioridad === 'alta'"
+                  [class.ring-rose-400]="func.prioridad === 'urgente'"
+                  draggable="true"
+                  (dragstart)="empezarArrastre(func, $event)">
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="text-sm font-semibold text-ink">{{
+                      func.titulo
+                    }}</span>
+                    <span
+                      class="chip shrink-0"
+                      [class]="prioridadClase[func.prioridad]">
+                      {{ prioridadLabel[func.prioridad] }}
+                    </span>
+                  </div>
+                  @if (func.descripcion) {
+                    <p class="line-clamp-2 text-xs text-ink-muted">
+                      {{ func.descripcion }}
+                    </p>
+                  }
+                  <div class="flex flex-wrap gap-2 text-xs text-ink-muted">
+                    @if (func.responsable) {
+                      <span class="inline-flex items-center gap-1">
+                        <pt-icon name="usuario" class="h-3 w-3" />
+                        {{ func.responsable.name }}
                       </span>
-                    </div>
-                    @if (func.descripcion) {
-                      <p class="func-desc">{{ func.descripcion }}</p>
+                    } @else {
+                      <span class="chip bg-amber-100 text-amber-900"
+                        >Sin responsable</span
+                      >
                     }
-                    <div class="func-meta">
-                      @if (func.responsable) {
-                        <span class="func-responsable">
-                          <pt-icon name="usuario" class="h-3 w-3" />
-                          {{ func.responsable.name }}
-                        </span>
-                      }
-                      @if (func.fechaCompromiso) {
-                        <span
-                          class="func-fecha"
-                          [class.vencida]="estaVencida(func.fechaCompromiso)">
-                          <pt-icon name="agenda" class="h-3 w-3" />
-                          {{ func.fechaCompromiso | relativo }}
-                        </span>
-                      }
-                    </div>
-                    @if (!filtroProyecto() && func.proyecto) {
-                      <a
-                        class="func-proyecto"
-                        [routerLink]="['/proyectos', func.proyectoId]">
-                        {{ func.proyecto.nombre }}
-                      </a>
-                    }
-                    @if (func.enlace) {
-                      <a
-                        class="func-enlace"
-                        [href]="func.enlace"
-                        target="_blank">
-                        <pt-icon name="externo" class="h-3 w-3" />
-                        Ver
-                      </a>
+                    @if (func.fechaCompromiso) {
+                      <span
+                        class="inline-flex items-center gap-1"
+                        [class.text-danger]="estaVencida(func.fechaCompromiso)">
+                        <pt-icon name="agenda" class="h-3 w-3" />
+                        {{ func.fechaCompromiso | relativo }}
+                      </span>
                     }
                   </div>
-                }
-              </div>
+                  @if (!filtroProyecto() && func.proyecto) {
+                    <a
+                      class="text-xs text-info hover:underline"
+                      [routerLink]="['/proyectos', func.proyectoId]">
+                      {{ func.proyecto.nombre }}
+                    </a>
+                  }
+                  @if (func.enlace) {
+                    <a
+                      class="inline-flex items-center gap-1 text-xs text-info hover:underline"
+                      [href]="func.enlace"
+                      target="_blank"
+                      rel="noopener">
+                      <pt-icon name="externo" class="h-3 w-3" />
+                      Ver
+                    </a>
+                  }
+                  @if (crm.puedeEditarDesarrollo()) {
+                    <div class="flex gap-2">
+                      <button
+                        type="button"
+                        class="btn min-h-11 min-w-11 px-2"
+                        [disabled]="!col.anterior || moviendo()"
+                        [attr.aria-label]="
+                          'Mover a ' + (col.anteriorLabel ?? '')
+                        "
+                        (click)="mover(func, col.anterior)">
+                        <pt-icon name="anterior" class="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        class="btn min-h-11 min-w-11 px-2"
+                        [disabled]="!col.siguiente || moviendo()"
+                        [attr.aria-label]="
+                          'Mover a ' + (col.siguienteLabel ?? '')
+                        "
+                        (click)="mover(func, col.siguiente)">
+                        <pt-icon name="siguiente" class="h-4 w-4" />
+                      </button>
+                    </div>
+                  }
+                </article>
+              }
             </div>
-          }
-        </div>
-      }
+          </section>
+        }
+      </div>
 
       @if (dialogo() === 'alta') {
         <pt-dialogo titulo="Nueva funcionalidad" (cerrar)="dialogo.set(null)">
@@ -279,207 +357,23 @@ interface ColumnaKanban {
         </pt-dialogo>
       }
     }
-  `,
-  styles: `
-    :host {
-      display: block;
-      padding: var(--space-4);
-    }
-
-    .loading-message {
-      text-align: center;
-      color: var(--text-secondary);
-      padding: var(--space-8);
-    }
-
-    .filtros {
-      display: flex;
-      gap: var(--space-3);
-      margin-bottom: var(--space-4);
-      flex-wrap: wrap;
-    }
-
-    .filtros select {
-      min-width: 200px;
-    }
-
-    .resumen {
-      display: flex;
-      gap: var(--space-4);
-      margin-bottom: var(--space-4);
-      padding: var(--space-3);
-      background: var(--surface-secondary);
-      border-radius: var(--radius);
-    }
-
-    .resumen-item {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-1);
-    }
-
-    .resumen-valor {
-      font-size: 1.5rem;
-      font-weight: 600;
-      color: var(--accent);
-    }
-
-    .resumen-label {
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-    }
-
-    .kanban {
-      display: flex;
-      gap: var(--space-3);
-      overflow-x: auto;
-      padding-bottom: var(--space-4);
-    }
-
-    .kanban-columna {
-      flex: 0 0 280px;
-      min-width: 280px;
-      background: var(--surface-secondary);
-      border-radius: var(--radius);
-      display: flex;
-      flex-direction: column;
-      max-height: calc(100vh - 250px);
-    }
-
-    .kanban-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: var(--space-3);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .kanban-titulo {
-      font-weight: 600;
-      font-size: 0.875rem;
-    }
-
-    .kanban-count {
-      background: var(--surface-primary);
-      color: var(--text-secondary);
-      font-size: 0.75rem;
-      font-weight: 500;
-      padding: 2px 8px;
-      border-radius: 10px;
-    }
-
-    .kanban-items {
-      flex: 1;
-      overflow-y: auto;
-      padding: var(--space-2);
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
-
-    .kanban-card {
-      background: var(--surface-primary);
-      border-radius: var(--radius);
-      padding: var(--space-3);
-      box-shadow: var(--shadow-sm);
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
-
-    .kanban-card.prioridad-alta {
-      border-left: 3px solid var(--accent-orange);
-    }
-
-    .func-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: var(--space-2);
-    }
-
-    .func-titulo {
-      font-weight: 500;
-      font-size: 0.875rem;
-      line-height: 1.3;
-    }
-
-    .func-desc {
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      margin: 0;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-
-    .func-meta {
-      display: flex;
-      gap: var(--space-3);
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-    }
-
-    .func-responsable,
-    .func-fecha {
-      display: flex;
-      align-items: center;
-      gap: var(--space-1);
-    }
-
-    .func-fecha.vencida {
-      color: var(--accent-red);
-    }
-
-    .func-proyecto {
-      font-size: 0.75rem;
-      color: var(--accent);
-      text-decoration: none;
-    }
-
-    .func-proyecto:hover {
-      text-decoration: underline;
-    }
-
-    .func-enlace {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-1);
-      font-size: 0.75rem;
-      color: var(--accent);
-      text-decoration: none;
-    }
-
-    .chip--baja {
-      --chip-bg: var(--surface-secondary);
-      --chip-text: var(--text-secondary);
-    }
-    .chip--media {
-      --chip-bg: var(--accent-blue-bg);
-      --chip-text: var(--accent-blue);
-    }
-    .chip--alta {
-      --chip-bg: var(--accent-orange-bg);
-      --chip-text: var(--accent-orange);
-    }
-    .chip--urgente {
-      --chip-bg: var(--accent-red-bg);
-      --chip-text: var(--accent-red);
-    }
   `
 })
 export class DesarrolloComponent {
   readonly crm = inject(CrmService);
   private readonly admin = inject(PuenteAdminService);
+  private readonly ruta = inject(ActivatedRoute);
 
   readonly estadoLabel = CRM_FUNCIONALIDAD_ESTADO_LABEL;
   readonly prioridadLabel = CRM_FUNCIONALIDAD_PRIORIDAD_LABEL;
+  readonly prioridadClase = PRIORIDAD_CLASE;
 
-  readonly filtroProyecto = signal('');
+  readonly filtroProyecto = signal(
+    this.ruta.snapshot.queryParamMap.get('proyecto') ?? ''
+  );
   readonly filtroResponsable = signal('');
   readonly error = signal<string | null>(null);
+  readonly moviendo = signal(false);
   readonly dialogo = signal<'alta' | 'lote' | null>(null);
   altaTitulo = '';
   altaProyecto = '';
@@ -550,23 +444,21 @@ export class DesarrolloComponent {
   });
 
   readonly columnas = computed(() => {
-    const estados: CrmFuncionalidadEstado[] = [
-      'por_hacer',
-      'en_progreso',
-      'en_revision',
-      'bloqueado',
-      'hecho'
-    ];
-
     const funcionalidades = this.funcionalidadesFiltradas();
 
-    return estados
-      .map((estado) => ({
+    return ESTADOS_KANBAN.map((estado) => {
+      const anterior = estadoVecino(estado, -1);
+      const siguiente = estadoVecino(estado, 1);
+      return {
         estado,
         etiqueta: this.estadoLabel[estado],
-        items: funcionalidades.filter((f) => f.estado === estado)
-      }))
-      .filter((col) => col.items.length > 0 || col.estado !== 'bloqueado');
+        items: funcionalidades.filter((f) => f.estado === estado),
+        anterior,
+        siguiente,
+        anteriorLabel: anterior ? this.estadoLabel[anterior] : undefined,
+        siguienteLabel: siguiente ? this.estadoLabel[siguiente] : undefined
+      };
+    });
   });
 
   readonly totalFuncionalidades = computed(
@@ -584,6 +476,10 @@ export class DesarrolloComponent {
     return Math.round((this.funcionalidesHechas() / total) * 100);
   });
 
+  readonly sinResponsable = computed(() =>
+    this.funcionalidadesFiltradas().filter((f) => !f.responsableId)
+  );
+
   filtrarProyecto(event: Event): void {
     const select = event.target as HTMLSelectElement;
     this.filtroProyecto.set(select.value);
@@ -598,9 +494,62 @@ export class DesarrolloComponent {
     return new Date(fecha) < new Date();
   }
 
-  readonly sinResponsable = computed(() =>
-    this.funcionalidadesFiltradas().filter((f) => !f.responsableId)
-  );
+  empezarArrastre(func: CrmFuncionalidad, evento: DragEvent): void {
+    evento.dataTransfer?.setData('text/plain', func.id);
+    evento.dataTransfer?.setDragImage(
+      (evento.currentTarget as HTMLElement) ?? new Image(),
+      20,
+      20
+    );
+  }
+
+  permitirSoltar(evento: DragEvent): void {
+    evento.preventDefault();
+  }
+
+  soltar(estado: CrmFuncionalidadEstado, evento: DragEvent): void {
+    evento.preventDefault();
+    const id = evento.dataTransfer?.getData('text/plain');
+    if (!id) return;
+    const func = this.funcionalidadesFiltradas().find((f) => f.id === id);
+    if (!func) return;
+    this.mover(func, estado);
+  }
+
+  mover(func: CrmFuncionalidad, estado?: CrmFuncionalidadEstado): void {
+    if (!estado || func.estado === estado || this.moviendo()) return;
+    if (!func.responsableId) {
+      this.error.set('Asigna un responsable antes de mover la funcionalidad.');
+      return;
+    }
+    this.moviendo.set(true);
+    this.crm
+      .guardarFuncionalidad({
+        id: func.id,
+        proyectoId: func.proyectoId,
+        titulo: func.titulo,
+        descripcion: func.descripcion,
+        estado,
+        prioridad: func.prioridad,
+        responsableId: func.responsableId,
+        fechaCompromiso: func.fechaCompromiso,
+        enlace: func.enlace,
+        pendienteId: func.pendienteId,
+        orden: func.orden
+      })
+      .subscribe({
+        next: () => {
+          this.moviendo.set(false);
+          this.recarga.next();
+        },
+        error: (err) => {
+          this.moviendo.set(false);
+          this.error.set(
+            err.error?.error ?? err.message ?? 'No se pudo mover.'
+          );
+        }
+      });
+  }
 
   abrirAlta(): void {
     this.altaTitulo = '';

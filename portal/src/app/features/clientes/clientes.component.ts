@@ -6,16 +6,24 @@ import {
   signal
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Router, RouterLink } from '@angular/router';
-import { catchError, of, startWith, switchMap, tap } from 'rxjs';
+import { RouterLink } from '@angular/router';
+import { catchError, of } from 'rxjs';
 import {
   CRM_CLIENTE_TIPO_LABEL,
-  type CrmCliente
+  type CrmClienteTipo
 } from '../../core/models/crm-nativo.model';
 import { CrmService } from '../../core/sources/gateway/crm.service';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
 import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
+
+const TIPO_CLASE: Record<CrmClienteTipo, string> = {
+  directo: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200',
+  intermediario:
+    'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200',
+  final:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200'
+};
 
 @Component({
   selector: 'pt-clientes',
@@ -28,10 +36,15 @@ import { PageHeaderComponent } from '../../ui/page-header.component';
     PageHeaderComponent
   ],
   template: `
-    <pt-page-header title="Clientes" />
+    <pt-page-header
+      title="Clientes"
+      [subtitle]="
+        clientesFiltrados().length +
+        (clientesFiltrados().length === 1 ? ' cliente' : ' clientes')
+      " />
 
     @if (crm.cargando()) {
-      <div class="loading-message">Cargando...</div>
+      <p class="py-8 text-center text-ink-muted">Cargando…</p>
     } @else if (!crm.tieneAcceso()) {
       <pt-empty-state
         icon="usuario"
@@ -40,16 +53,15 @@ import { PageHeaderComponent } from '../../ui/page-header.component';
     } @else if (error()) {
       <pt-empty-state icon="alerta" title="Error" [hint]="error()!" />
     } @else {
-      <!-- Filtros -->
-      <div class="filtros">
+      <div class="mb-4 flex flex-wrap gap-3">
         <input
-          type="text"
-          class="field"
-          placeholder="Buscar cliente..."
+          type="search"
+          class="field max-w-md flex-1"
+          placeholder="Buscar por nombre, razón social o RFC…"
           [value]="busqueda()"
           (input)="buscar($event)" />
         <select
-          class="field"
+          class="field max-w-xs"
           [value]="filtroTipo()"
           (change)="filtrarTipo($event)">
           <option value="">Todos los tipos</option>
@@ -59,7 +71,6 @@ import { PageHeaderComponent } from '../../ui/page-header.component';
         </select>
       </div>
 
-      <!-- Lista de clientes -->
       @if (clientesFiltrados().length === 0) {
         <pt-empty-state
           icon="crm"
@@ -70,131 +81,39 @@ import { PageHeaderComponent } from '../../ui/page-header.component';
               : 'Aún no hay clientes registrados.'
           " />
       } @else {
-        <div class="lista">
+        <div class="flex flex-col gap-2">
           @for (cliente of clientesFiltrados(); track cliente.id) {
             <a
-              class="card cliente-card"
+              class="card card-pad flex items-center gap-3 transition hover:border-brand/40 hover:shadow-md"
               [routerLink]="['/clientes', cliente.id]">
-              <div class="cliente-info">
-                <span class="cliente-nombre">{{ cliente.nombre }}</span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-semibold text-ink">
+                  {{ cliente.nombre }}
+                </p>
                 @if (cliente.razonSocial) {
-                  <span class="cliente-razon">{{ cliente.razonSocial }}</span>
+                  <p class="truncate text-sm text-ink-muted">
+                    {{ cliente.razonSocial }}
+                  </p>
                 }
               </div>
-              <div class="cliente-meta">
-                <span class="chip chip--{{ cliente.tipo }}">
+              <div
+                class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                <span class="chip" [class]="tipoClase[cliente.tipo]">
                   {{ tipoLabel[cliente.tipo] }}
                 </span>
                 @if (cliente.rfc) {
-                  <span class="cliente-rfc">{{ cliente.rfc }}</span>
+                  <span class="font-mono text-xs text-ink-subtle">{{
+                    cliente.rfc
+                  }}</span>
                 }
               </div>
-              <pt-icon name="siguiente" class="chevron h-4 w-4" />
+              <pt-icon
+                name="siguiente"
+                class="h-4 w-4 shrink-0 text-ink-subtle" />
             </a>
           }
         </div>
       }
-    }
-  `,
-  styles: `
-    :host {
-      display: block;
-      padding: var(--space-4);
-    }
-
-    .loading-message {
-      text-align: center;
-      color: var(--text-secondary);
-      padding: var(--space-8);
-    }
-
-    .filtros {
-      display: flex;
-      gap: var(--space-3);
-      margin-bottom: var(--space-4);
-      flex-wrap: wrap;
-    }
-
-    .filtros input {
-      flex: 1;
-      min-width: 200px;
-    }
-
-    .filtros select {
-      min-width: 150px;
-    }
-
-    .lista {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
-
-    .cliente-card {
-      display: flex;
-      align-items: center;
-      gap: var(--space-3);
-      padding: var(--space-3) var(--space-4);
-      text-decoration: none;
-      color: inherit;
-      transition: background-color 0.15s;
-    }
-
-    .cliente-card:hover {
-      background: var(--surface-hover);
-    }
-
-    .cliente-info {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-1);
-      min-width: 0;
-    }
-
-    .cliente-nombre {
-      font-weight: 500;
-      color: var(--text-primary);
-    }
-
-    .cliente-razon {
-      font-size: 0.875rem;
-      color: var(--text-secondary);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .cliente-meta {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-    }
-
-    .cliente-rfc {
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-    }
-
-    .chip--directo {
-      --chip-bg: var(--accent-blue-bg);
-      --chip-text: var(--accent-blue);
-    }
-
-    .chip--intermediario {
-      --chip-bg: var(--accent-orange-bg);
-      --chip-text: var(--accent-orange);
-    }
-
-    .chip--final {
-      --chip-bg: var(--accent-green-bg);
-      --chip-text: var(--accent-green);
-    }
-
-    .chevron {
-      color: var(--text-tertiary);
-      flex-shrink: 0;
     }
   `
 })
@@ -202,6 +121,7 @@ export class ClientesComponent {
   readonly crm = inject(CrmService);
 
   readonly tipoLabel = CRM_CLIENTE_TIPO_LABEL;
+  readonly tipoClase = TIPO_CLASE;
   readonly tipos = [
     { valor: 'directo', etiqueta: 'Directo' },
     { valor: 'intermediario', etiqueta: 'Intermediario' },
@@ -211,7 +131,6 @@ export class ClientesComponent {
   readonly busqueda = signal('');
   readonly filtroTipo = signal('');
   readonly error = signal<string | null>(null);
-  readonly recargar = signal(0);
 
   private readonly clientes$ = this.crm.obtenerClientes().pipe(
     catchError((err) => {
@@ -224,7 +143,7 @@ export class ClientesComponent {
 
   readonly clientesFiltrados = computed(() => {
     let resultado = this.clientes();
-    const busqueda = this.busqueda().toLowerCase();
+    const busqueda = this.busqueda().toLowerCase().trim();
     const tipo = this.filtroTipo();
 
     if (busqueda) {
@@ -240,7 +159,7 @@ export class ClientesComponent {
       resultado = resultado.filter((c) => c.tipo === tipo);
     }
 
-    return resultado.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    return resultado.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   });
 
   buscar(event: Event): void {

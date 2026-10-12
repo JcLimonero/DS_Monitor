@@ -84,6 +84,12 @@ interface TarjetaLead {
       <pt-empty-state icon="alerta" title="Error" [hint]="error()!" />
     } @else {
       <div class="mb-4 flex flex-wrap gap-3">
+        <input
+          type="search"
+          class="field max-w-md flex-1"
+          placeholder="Buscar lead, cliente o monto…"
+          [value]="busqueda()"
+          (input)="busqueda.set($any($event.target).value)" />
         <select
           class="field max-w-xs"
           [value]="filtroEmpresa()"
@@ -137,9 +143,14 @@ interface TarjetaLead {
               }}</span>
             </header>
             <div class="flex min-h-[120px] flex-1 flex-col gap-2 p-2">
+              @if (col.items.length === 0) {
+                <p class="px-2 py-6 text-center text-xs text-ink-subtle">
+                  Sin leads
+                </p>
+              }
               @for (t of col.items; track t.proyecto.id) {
                 <article
-                  class="card card-pad flex flex-col gap-2"
+                  class="card card-pad flex flex-col gap-2 transition hover:border-brand/40"
                   [class.ring-2]="t.estancado"
                   [class.ring-amber-400]="t.estancado"
                   draggable="true"
@@ -151,7 +162,8 @@ interface TarjetaLead {
                       {{ t.proyecto.nombre }}
                     </a>
                     @if (t.estancado) {
-                      <span class="chip bg-amber-100 text-amber-900"
+                      <span
+                        class="chip bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200"
                         >Estancado</span
                       >
                     }
@@ -222,6 +234,7 @@ export class ComercialComponent {
   readonly filtroEmpresa = signal('');
   readonly filtroCliente = signal('');
   readonly filtroResponsable = signal('');
+  readonly busqueda = signal('');
   readonly error = signal<string | null>(null);
   readonly moviendo = signal(false);
   private readonly recarga = new Subject<void>();
@@ -298,12 +311,13 @@ export class ComercialComponent {
     const d = this.datos();
     const empresas = this.empresas();
     const equipo = this.equipo();
+    const q = this.busqueda().toLowerCase().trim();
     const filtrados = filtrarProyectos(d.proyectos, {
       empresaId: this.filtroEmpresa() || undefined,
       clienteId: this.filtroCliente() || undefined,
       responsableId: this.filtroResponsable() || undefined
     });
-    return filtrados.map((proyecto) => {
+    const tarjetas = filtrados.map((proyecto) => {
       const cliente = d.clientes.find((c) => c.id === proyecto.clienteId);
       const clienteFinal = proyecto.clienteFinalId
         ? d.clientes.find((c) => c.id === proyecto.clienteFinalId)
@@ -327,6 +341,15 @@ export class ComercialComponent {
         responsable
       } satisfies TarjetaLead;
     });
+    if (!q) return tarjetas;
+    return tarjetas.filter(
+      (t) =>
+        t.proyecto.nombre.toLowerCase().includes(q) ||
+        t.cliente?.nombre.toLowerCase().includes(q) ||
+        t.clienteFinal?.nombre.toLowerCase().includes(q) ||
+        t.empresa?.toLowerCase().includes(q) ||
+        t.responsable?.toLowerCase().includes(q)
+    );
   });
 
   readonly estancados = computed(
