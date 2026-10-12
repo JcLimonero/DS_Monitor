@@ -3,7 +3,64 @@ import type { Person, TaskItem, TaskSubtarea } from '../nucleo/contrato.js';
 import { notasDe, type Transcripcion } from '../proveedores/fireflies.js';
 import { acuerdosDeJunta, personaDe } from './acuerdos.js';
 import { huella } from '../proveedores/ia.js';
-import { empresaPorPalabra } from '../datos/empresas.js';
+import {
+  empresaPorPalabra,
+  empresasActivas,
+  type Empresa
+} from '../datos/empresas.js';
+
+/** Quien participa en una junta de Itech Dev aunque el titulo no lo diga. */
+export const CORREO_ITECH = 'climon@itechdev.com.mx';
+
+export function participaItech(participantes: readonly string[]): boolean {
+  return participantes.some((p) => p.trim().toLowerCase() === CORREO_ITECH);
+}
+
+function nombreItech(empresas: readonly Empresa[]): string | undefined {
+  const itech = empresas.find(
+    (e) =>
+      e.activa &&
+      (e.id === 'itech-dev' ||
+        normalizarEmpresa(e.nombre) === 'itech dev' ||
+        normalizarEmpresa(e.nombre) === 'itech')
+  );
+  return itech?.nombre;
+}
+
+function normalizarEmpresa(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Junta de Itech Dev: el correo de Itech o la empresa que sale del texto. */
+export function esJuntaItech(
+  t: Pick<Transcripcion, 'titulo' | 'resumen' | 'temas' | 'participantes'>,
+  empresas?: Empresa[]
+): boolean {
+  if (participaItech(t.participantes)) {
+    return true;
+  }
+  const empresa = empresaDe(
+    {
+      id: '',
+      titulo: t.titulo,
+      fecha: '',
+      participantes: [],
+      resumen: t.resumen,
+      temas: t.temas
+    },
+    empresas
+  );
+  if (!empresa) {
+    return false;
+  }
+  const n = normalizarEmpresa(empresa);
+  return n === 'itech dev' || n === 'itech' || n.startsWith('itech ');
+}
 
 /**
  * De cada junta que termina (Fireflies la transcribe minutos despues) sale
@@ -56,9 +113,16 @@ export function leerAcuerdos(
   return salida;
 }
 
-export function empresaDe(t: Transcripcion): string | undefined {
+export function empresaDe(
+  t: Transcripcion,
+  empresas?: Empresa[]
+): string | undefined {
+  const catalogo = empresas ?? empresasActivas();
+  if (participaItech(t.participantes)) {
+    return nombreItech(catalogo) ?? 'Itech Dev';
+  }
   const texto = `${t.titulo} ${t.resumen ?? ''} ${t.temas?.join(' ') ?? ''}`;
-  return empresaPorPalabra(texto);
+  return empresaPorPalabra(texto, catalogo);
 }
 
 /** Quienes del equipo aparecen por nombre en un texto (acuerdo o etiqueta). */

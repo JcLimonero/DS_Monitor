@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { configuracionRag, type ConfiguracionRagDrive } from '../rag/config.js';
 /**
  * Configuracion del puente, leida del entorno.
  *
@@ -318,6 +319,11 @@ export interface Configuracion {
   microsoftApp?: Omit<ConfiguracionMicrosoft, 'refreshToken' | 'conectadaComo'>;
   ia?: ConfiguracionIa;
   fireflies?: ConfiguracionFireflies;
+  /**
+   * Cuenta de servicio y carpetas del RAG. Sin esto las juntas se resuelven
+   * y quedan en la bandeja, pero no se suben a Drive ni se borran de Fireflies.
+   */
+  ragDrive?: ConfiguracionRagDrive;
   prometheus?: ConfiguracionServidores;
   coolify?: ConfiguracionCoolify;
   cloudflare?: ConfiguracionCloudflare;
@@ -679,6 +685,7 @@ function leer(): Configuracion {
     fireflies: texto('FIREFLIES_API_KEY')
       ? { apiKey: texto('FIREFLIES_API_KEY') as string }
       : undefined,
+    ragDrive: configuracionRag(texto),
     telegram: texto('TELEGRAM_BOT_TOKEN')
       ? {
           token: texto('TELEGRAM_BOT_TOKEN') as string,

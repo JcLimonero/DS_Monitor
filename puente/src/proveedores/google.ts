@@ -1,3 +1,4 @@
+import { createSign } from 'node:crypto';
 import type { ConfiguracionGoogle } from '../config/entorno.js';
 import type { Meeting, MeetingStatus, Person } from '../nucleo/contrato.js';
 import { ErrorProveedor, ErrorReconectarGoogle } from '../nucleo/errores.js';
@@ -522,6 +523,269 @@ export async function textoDeDocumento(
     throw new ErrorProveedor(
       'google',
       `Drive no exportó el documento (${respuesta.status})`
+    );
+  }
+  return respuesta.text();
+}
+
+const MIME_MARKDOWN = 'text/markdown';
+const ALCANCE_DRIVE_COMPLETO = 'https://www.googleapis.com/auth/drive';
+
+export interface CuentaServicioDrive {
+  clientEmail: string;
+  privateKey: string;
+}
+
+const tokensServicio = new Map<string, { token: string; venceEn: number }>();
+
+function b64url(valor: string): string {
+  return Buffer.from(valor).toString('base64url');
+}
+
+/**
+ * Token de una cuenta de servicio. Sirve para escribir en carpetas que ya
+ * existen (el RAG), si esa carpeta se compartio con el correo de la cuenta.
+ * El alcance `drive.file` de Gmail no ve esas carpetas.
+ */
+export async function tokenDeCuentaServicio(
+  cuenta: CuentaServicioDrive
+): Promise<string> {
+  const vigente = tokensServicio.get(cuenta.clientEmail);
+  if (vigente && vigente.venceEn > Date.now() + 60_000) {
+    return vigente.token;
+  }
+  const ahora = Math.floor(Date.now() / 1000);
+  const encabezado = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+  const cuerpo = b64url(
+    JSON.stringify({
+      iss: cuenta.clientEmail,
+      scope: ALCANCE_DRIVE_COMPLETO,
+      aud: 'https://oauth2.googleapis.com/token',
+      iat: ahora,
+      exp: ahora + 3600
+    })
+  );
+  const firma = createSign('RSA-SHA256')
+    .update(`${encabezado}.${cuerpo}`)
+    .sign(cuenta.privateKey)
+    .toString('base64url');
+  const respuesta = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: `${encabezado}.${cuerpo}.${firma}`
+    })
+  });
+  const datos = (await respuesta.json().catch(() => ({}))) as {
+    access_token?: string;
+    expires_in?: number;
+    error?: string;
+  };
+  if (!respuesta.ok || !datos.access_token) {
+    throw new ErrorProveedor(
+      'google',
+      `la cuenta de servicio de Drive no entregó token (${datos.error ?? respuesta.status})`
+    );
+  }
+  tokensServicio.set(cuenta.clientEmail, {
+    token: datos.access_token,
+    venceEn: Date.now() + (datos.expires_in ?? 3600) * 1000
+  });
+  return datos.access_token;
+}
+
+/** Carpeta con ese nombre dentro de otra; si no existe, la crea. */
+export async function carpetaDentroDe(
+  token: string,
+  padreId: string,
+  nombre: string
+): Promise<string> {
+  const q = `mimeType='${MIME_CARPETA}' and name='${escaparConsultaDrive(nombre)}' and '${escaparConsultaDrive(padreId)}' in parents and trashed=false`;
+  const lista = await pedirDrive<{ files?: ArchivoDrive[] }>(
+    token,
+    conParametros(`${DRIVE}/files`, {
+      q,
+      fields: 'files(id,name)',
+      spaces: 'drive',
+      pageSize: '1'
+    })
+  );
+  const existente = lista.files?.[0];
+  if (existente?.id) {
+    return existente.id;
+  }
+  const creada = await pedirDrive<ArchivoDrive>(
+    token,
+    conParametros(`${DRIVE}/files`, { fields: 'id' }),
+    {
+      method: 'POST',
+      contentType: 'application/json',
+      body: JSON.stringify({
+        name: nombre,
+        mimeType: MIME_CARPETA,
+        parents: [padreId]
+      })
+    }
+  );
+  if (!creada.id) {
+    throw new ErrorProveedor('google', 'Drive no devolvió el id de la carpeta');
+  }
+  return creada.id;
+}
+
+/** Sube un Markdown (no lo convierte a Google Doc) y lo marca con el id de Fireflies. */
+export async function subirMarkdown(
+  token: string,
+  carpetaId: string,
+  nombre: string,
+  textoPlano: string,
+  propiedades: Record<string, string> = {}
+): Promise<{ id: string; webViewLink: string }> {
+  const frontera = `ds-monitor-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+  const metadatos = JSON.stringify({
+    name: nombre,
+    mimeType: MIME_MARKDOWN,
+    parents: [carpetaId],
+    appProperties: propiedades
+  });
+  const cuerpo =
+    `--${frontera}\r\ncontent-type: application/json; charset=UTF-8\r\n\r\n${metadatos}\r\n` +
+    `--${frontera}\r\ncontent-type: text/markdown; charset=UTF-8\r\n\r\n${textoPlano}\r\n` +
+    `--${frontera}--`;
+  const creado = await pedirDrive<{ id?: string; webViewLink?: string }>(
+    token,
+    conParametros(`${DRIVE_SUBIDA}/files`, {
+      uploadType: 'multipart',
+      fields: 'id,webViewLink'
+    }),
+    {
+      method: 'POST',
+      contentType: `multipart/related; boundary=${frontera}`,
+      body: cuerpo
+    }
+  );
+  if (!creado.id) {
+    throw new ErrorProveedor('google', 'Drive no devolvió el id del archivo');
+  }
+  return {
+    id: creado.id,
+    webViewLink:
+      creado.webViewLink ?? `https://drive.google.com/file/d/${creado.id}/view`
+  };
+}
+
+/** Reemplaza el texto y, si hace falta, el nombre o la carpeta. */
+export async function actualizarMarkdown(
+  token: string,
+  fileId: string,
+  textoPlano: string,
+  opciones: { nombre?: string; carpetaId?: string; padres?: string[] } = {}
+): Promise<{ id: string; webViewLink: string }> {
+  const subido = await pedirDrive<{ id?: string; webViewLink?: string }>(
+    token,
+    conParametros(`${DRIVE_SUBIDA}/files/${encodeURIComponent(fileId)}`, {
+      uploadType: 'media',
+      fields: 'id,webViewLink'
+    }),
+    {
+      method: 'PATCH',
+      contentType: 'text/markdown; charset=UTF-8',
+      body: textoPlano
+    }
+  );
+  const padres = opciones.padres ?? [];
+  const hayQueMover =
+    !!opciones.carpetaId && !padres.includes(opciones.carpetaId);
+  if (opciones.nombre || hayQueMover) {
+    const quitar = padres.filter((p) => p !== opciones.carpetaId);
+    await pedirDrive<ArchivoDrive>(
+      token,
+      conParametros(`${DRIVE}/files/${encodeURIComponent(fileId)}`, {
+        ...(hayQueMover && opciones.carpetaId
+          ? { addParents: opciones.carpetaId }
+          : {}),
+        ...(quitar.length > 0 ? { removeParents: quitar.join(',') } : {}),
+        fields: 'id,webViewLink,parents'
+      }),
+      {
+        method: 'PATCH',
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...(opciones.nombre ? { name: opciones.nombre } : {}),
+          mimeType: MIME_MARKDOWN
+        })
+      }
+    );
+  }
+  return {
+    id: subido.id ?? fileId,
+    webViewLink:
+      subido.webViewLink ?? `https://drive.google.com/file/d/${fileId}/view`
+  };
+}
+
+/** El archivo con esa propiedad, en cualquier carpeta que esta cuenta pueda ver. */
+export async function archivoPorPropiedad(
+  token: string,
+  clave: string,
+  valor: string
+): Promise<ArchivoDrive | undefined> {
+  const q = `trashed=false and appProperties has { key='${escaparConsultaDrive(clave)}' and value='${escaparConsultaDrive(valor)}' }`;
+  const lista = await pedirDrive<{ files?: ArchivoDrive[] }>(
+    token,
+    conParametros(`${DRIVE}/files`, {
+      q,
+      fields: `files(${CAMPOS_ARCHIVO})`,
+      spaces: 'drive',
+      pageSize: '1'
+    })
+  );
+  return lista.files?.[0];
+}
+
+/** Archivo por nombre dentro de una carpeta (el indice del RAG). */
+export async function archivoPorNombre(
+  token: string,
+  padreId: string,
+  nombre: string
+): Promise<ArchivoDrive | undefined> {
+  const q = `name='${escaparConsultaDrive(nombre)}' and '${escaparConsultaDrive(padreId)}' in parents and trashed=false`;
+  const lista = await pedirDrive<{ files?: ArchivoDrive[] }>(
+    token,
+    conParametros(`${DRIVE}/files`, {
+      q,
+      fields: `files(${CAMPOS_ARCHIVO})`,
+      spaces: 'drive',
+      pageSize: '5'
+    })
+  );
+  const archivos = lista.files ?? [];
+  return (
+    archivos.find((a) => a.mimeType === MIME_MARKDOWN) ??
+    archivos.find((a) => a.mimeType === 'text/plain') ??
+    archivos[0]
+  );
+}
+
+/** Bytes de un archivo que no es Google Doc (Markdown, texto). */
+export async function textoDeArchivo(
+  token: string,
+  id: string
+): Promise<string> {
+  const respuesta = await fetch(
+    conParametros(`${DRIVE}/files/${encodeURIComponent(id)}`, {
+      alt: 'media'
+    }),
+    {
+      headers: { authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(TIEMPO_DRIVE_MS)
+    }
+  );
+  if (!respuesta.ok) {
+    throw new ErrorProveedor(
+      'google',
+      `Drive no entregó el archivo (${respuesta.status})`
     );
   }
   return respuesta.text();

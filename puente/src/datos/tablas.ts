@@ -781,6 +781,7 @@ import type {
   CrmPartida,
   CrmProyecto,
   CrmRiesgo,
+  JuntaRag,
   RolCrm,
   UsuarioCrm
 } from '../nucleo/contrato.js';
@@ -1418,4 +1419,51 @@ export const TABLA_CRM_RIESGOS: DefinicionTabla<CrmRiesgo[]> = {
     sub: {}
   }),
   deFilas: (filas) => filas.map((f) => objeto<CrmRiesgo>(f['datos']))
+};
+
+// --- Juntas del RAG (Fireflies → Drive + busqueda) ----------------------
+
+export const TABLA_JUNTAS_RAG: DefinicionTabla<JuntaRag[]> = {
+  clave: 'juntas-rag',
+  tabla: 'juntas_rag',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS juntas_rag (
+      id text PRIMARY KEY,
+      titulo text NOT NULL,
+      fecha timestamptz,
+      empresa_id text,
+      cliente_id text,
+      proyecto_id text,
+      estado text NOT NULL,
+      es_itech boolean NOT NULL DEFAULT false,
+      drive_file_id text,
+      drive_url text,
+      texto text,
+      actualizado_en timestamptz NOT NULL,
+      datos jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS juntas_rag_estado ON juntas_rag (estado);
+    CREATE INDEX IF NOT EXISTS juntas_rag_proyecto ON juntas_rag (proyecto_id);
+    CREATE INDEX IF NOT EXISTS juntas_rag_cliente ON juntas_rag (cliente_id);
+  `,
+  id: 'id',
+  aFilas: (lista) => ({
+    principal: lista.map((j) => ({
+      id: j.id,
+      titulo: j.titulo,
+      fecha: fecha(j.fecha),
+      empresa_id: j.empresaId ?? null,
+      cliente_id: j.clienteId ?? null,
+      proyecto_id: j.proyectoId ?? null,
+      estado: j.estado,
+      es_itech: j.esItech,
+      drive_file_id: j.driveFileId ?? null,
+      drive_url: j.driveUrl ?? null,
+      texto: j.texto,
+      actualizado_en: j.actualizadoEn,
+      datos: j
+    })),
+    sub: {}
+  }),
+  deFilas: (filas) => filas.map((f) => objeto<JuntaRag>(f['datos']))
 };

@@ -135,10 +135,131 @@
           </label>
         </div>
         <p class="text-xs text-ink-muted sm:basis-full">
-          El borrado en Fireflies es irreversible y también elimina el audio, el
-          video y las analíticas; el Doc guarda título, fecha, participantes,
-          resumen, acuerdos y la conversación.
+          @if (e.rag) {
+            Con el RAG activo, Fireflies solo se borra después de confirmar el
+            Markdown en la carpeta del proyecto. El borrado sigue siendo
+            irreversible.
+          } @else {
+            El borrado en Fireflies es irreversible y también elimina el audio,
+            el video y las analíticas; el Doc guarda título, fecha,
+            participantes, resumen, acuerdos y la conversación.
+          }
         </p>
+      </section>
+    }
+
+    @if (sinAsignar().length > 0) {
+      <section class="card card-pad space-y-4">
+        <div>
+          <h2 class="text-sm font-semibold text-ink">Juntas sin asignar</h2>
+          <p class="mt-1 text-sm text-ink-muted">
+            No se pudieron asociar con confianza a un cliente y un proyecto. Al
+            asignarlas se guardan en Drive. Las de Itech Dev piden el nombre del
+            cliente y del proyecto: sus acuerdos ya están en Pendientes y no se
+            anotan en la bitácora del CRM.
+          </p>
+        </div>
+        <ul class="space-y-4">
+          @for (junta of sinAsignar(); track junta.id) {
+            <li
+              class="space-y-3 border-t border-line pt-4 first:border-0 first:pt-0">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="break-words text-sm font-medium text-ink">
+                    {{ junta.titulo }}
+                  </h3>
+                  @if (junta.esItech) {
+                    <span class="chip bg-surface-muted text-ink-muted">
+                      Itech Dev
+                    </span>
+                  }
+                </div>
+                <p class="mt-1 text-xs text-ink-muted">
+                  {{ junta.fecha | dia }}
+                  @if (junta.participantes.length > 0) {
+                    · {{ junta.participantes.join(", ") }}
+                  }
+                </p>
+                @if (junta.motivo) {
+                  <p class="mt-1 text-sm text-ink-muted">{{ junta.motivo }}</p>
+                }
+              </div>
+              @if (junta.esItech) {
+                <div class="grid gap-2 sm:grid-cols-2">
+                  <label class="block text-sm">
+                    <span class="mb-1 block text-ink-muted">Cliente</span>
+                    <input
+                      class="field w-full"
+                      type="text"
+                      name="cliente-{{ junta.id }}"
+                      [ngModel]="forma(junta.id).clienteNombre"
+                      (ngModelChange)="
+                        poner(junta.id, 'clienteNombre', $event)
+                      " />
+                  </label>
+                  <label class="block text-sm">
+                    <span class="mb-1 block text-ink-muted">Proyecto</span>
+                    <input
+                      class="field w-full"
+                      type="text"
+                      name="proyecto-{{ junta.id }}"
+                      [ngModel]="forma(junta.id).proyectoNombre"
+                      (ngModelChange)="
+                        poner(junta.id, 'proyectoNombre', $event)
+                      " />
+                  </label>
+                </div>
+              } @else {
+                <div class="grid gap-2 sm:grid-cols-2">
+                  <label class="block text-sm">
+                    <span class="mb-1 block text-ink-muted">Cliente</span>
+                    <select
+                      class="field w-full"
+                      name="cliente-{{ junta.id }}"
+                      [ngModel]="forma(junta.id).clienteId"
+                      (ngModelChange)="poner(junta.id, 'clienteId', $event)">
+                      <option value="">Elegir cliente</option>
+                      @for (cliente of clientes(); track cliente.id) {
+                        <option [value]="cliente.id">
+                          {{ cliente.nombre }}
+                        </option>
+                      }
+                    </select>
+                  </label>
+                  <label class="block text-sm">
+                    <span class="mb-1 block text-ink-muted">Proyecto</span>
+                    <select
+                      class="field w-full"
+                      name="proyecto-{{ junta.id }}"
+                      [ngModel]="forma(junta.id).proyectoId"
+                      (ngModelChange)="poner(junta.id, 'proyectoId', $event)">
+                      <option value="">Elegir proyecto</option>
+                      @for (
+                        proyecto of proyectosDe(forma(junta.id).clienteId);
+                        track proyecto.id
+                      ) {
+                        <option [value]="proyecto.id">
+                          {{ proyecto.nombre }}
+                        </option>
+                      }
+                    </select>
+                  </label>
+                </div>
+              }
+              <button
+                type="button"
+                class="btn btn-primary"
+                [disabled]="!puedeAsignar(junta)"
+                (click)="asignar(junta)">
+                {{
+                  asignando() === junta.id
+                    ? "Archivando…"
+                    : "Asignar y archivar"
+                }}
+              </button>
+            </li>
+          }
+        </ul>
       </section>
     }
 

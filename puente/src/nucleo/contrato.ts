@@ -227,6 +227,50 @@ export interface LlamadaArchivada {
   borradaDeFireflies: boolean;
 }
 
+/** Junta de Fireflies guardada para el RAG: en Drive y en la base. */
+export type JuntaRagEstado = 'sin_asignar' | 'archivada';
+
+/**
+ * Transcripcion ligada a un cliente y un proyecto (o en la bandeja, si no
+ * se pudo resolver). El texto es el Markdown que se sube a Drive.
+ */
+export interface JuntaRag {
+  /** Id de la transcripcion en Fireflies. */
+  id: string;
+  titulo: string;
+  /** Cuando fue la junta (ISO). */
+  fecha: string;
+  duracionMin?: number;
+  participantes: string[];
+  resumen?: string;
+  /** Markdown completo, para busquedas. */
+  texto: string;
+  empresaId?: string;
+  empresaNombre?: string;
+  clienteId?: string;
+  clienteNombre?: string;
+  proyectoId?: string;
+  proyectoNombre?: string;
+  driveFileId?: string;
+  driveUrl?: string;
+  firefliesUrl?: string;
+  estado: JuntaRagEstado;
+  /**
+   * Junta de Itech Dev. Se archiva en su carpeta y genera el pendiente
+   * `fireflies-{id}`, pero no entra al CRM nativo.
+   */
+  esItech: boolean;
+  /** Por que quedo sin asignar, o el ultimo problema al archivar. */
+  motivo?: string;
+  /** Huella del Markdown: si cambia, se actualiza el archivo. */
+  huella?: string;
+  archivadaEn?: string;
+  /** El archivo de Drive ya se comprobo. */
+  driveConfirmado: boolean;
+  borradaDeFireflies: boolean;
+  actualizadoEn: string;
+}
+
 // --- Juntas ---
 
 export type MeetingStatus = 'confirmada' | 'tentativa' | 'cancelada';

@@ -23,6 +23,7 @@ type _LlamadaArchivada = Igual<
   Portal.LlamadaArchivada,
   Puente.LlamadaArchivada
 >;
+type _JuntaRag = Igual<Portal.JuntaRag, Puente.JuntaRag>;
 type _TaskComment = Igual<Portal.TaskComment, Puente.TaskComment>;
 type _TaskEvent = Igual<Portal.TaskEvent, Puente.TaskEvent>;
 type _TaskUnread = Igual<Portal.TaskUnread, Puente.TaskUnread>;
@@ -93,6 +94,7 @@ const comprobado: [
   _Empresa,
   _Proveedor,
   _LlamadaArchivada,
+  _JuntaRag,
   _TaskComment,
   _TaskEvent,
   _TaskUnread,
@@ -132,6 +134,7 @@ const comprobado: [
   _RolCrm,
   _UsuarioCrm
 ] = [
+  true,
   true,
   true,
   true,

@@ -262,22 +262,26 @@ export function emparejar(
   if (mismoRato.length === 0) {
     return undefined;
   }
-  const norm = (s: string) =>
-    s
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
-  const objetivo = norm(junta.title);
+  const objetivo = normalizarTexto(junta.title);
   return (
-    mismoRato.find((t) => norm(t.titulo) === objetivo) ??
+    mismoRato.find((t) => normalizarTexto(t.titulo) === objetivo) ??
     mismoRato.find(
       (t) =>
-        norm(t.titulo).includes(objetivo) || objetivo.includes(norm(t.titulo))
+        normalizarTexto(t.titulo).includes(objetivo) ||
+        objetivo.includes(normalizarTexto(t.titulo))
     ) ??
     (mismoRato.length === 1 ? mismoRato[0] : undefined)
   );
+}
+
+/** Minusculas, sin acentos ni signos: la misma norma con la que se empareja. */
+export function normalizarTexto(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
 }
 
 /** Lo que se le da al modelo como notas de la junta. */
