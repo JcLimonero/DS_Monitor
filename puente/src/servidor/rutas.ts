@@ -63,6 +63,7 @@ import {
   TABLA_CRM_AVANCES,
   TABLA_CRM_HITOS,
   TABLA_CRM_RIESGOS,
+  TABLA_JUNTAS_RAG,
   TABLA_ROLES_CRM,
   TABLA_USUARIOS_CRM,
   type Aviso
@@ -136,6 +137,7 @@ import type {
   CrmRiesgo,
   HostedApp,
   LicenseUsage,
+  JuntaRag,
   LlamadaArchivada,
   ManualLicense,
   Meeting,
@@ -149,6 +151,7 @@ import type {
   VpsStatus
 } from '../nucleo/contrato.js';
 import { registrarRutasCrm, type DatosCrm } from './rutas-crm.js';
+import { registrarJuntasRag } from './rutas-juntas-rag.js';
 import { registrarRutasCrmSeguimiento } from './rutas-crm-seguimiento.js';
 import {
   registrarRutasIngestaCrm,
@@ -612,6 +615,8 @@ export interface Datos {
   llamadasConfig: AlmacenJson<ConfigLlamadas>;
   /** Lo que paso en la ultima corrida de archivado. */
   llamadasEstado: AlmacenJson<EstadoLlamadas>;
+  /** Transcripciones de Fireflies para el RAG, ligadas a cliente y proyecto. */
+  juntasRag: AlmacenTabla<JuntaRag[]>;
   /**
    * Correos de asignacion/seguimiento ya mandados (persona + titulo → cuando),
    * para no repetir el aviso cuando el mismo correo llego a varios buzones.
@@ -834,6 +839,7 @@ export function abrirDatos(persistencia: Persistencia): Datos {
       'llamadas-estado',
       {}
     ),
+    juntasRag: new AlmacenTabla<JuntaRag[]>(persistencia, TABLA_JUNTAS_RAG, []),
     avisosAsignacion: new AlmacenJson<RegistroAvisos>(
       persistencia,
       'avisos-asignacion',
@@ -4838,7 +4844,8 @@ export function construirRutas(
 
   // Cada junta que Fireflies transcribe se vuelve un pendiente padre con
   // subtareas (una por acuerdo), una sola vez por transcripcion. Corre solo
-  // cada 15 min; /fireflies/procesar lo fuerza.
+  // cada 15 min; /fireflies/procesar lo fuerza. Despues se archiva en el RAG.
+  let archivarRagDe: (id: string) => Promise<void> = async () => {};
   const procesarTranscripcion = async (
     id: string,
     ahora = new Date()
@@ -4890,6 +4897,13 @@ export function construirRutas(
         url: '/pendientes',
         etiqueta: `fireflies:${id}`
       });
+    }
+    try {
+      await archivarRagDe(id);
+    } catch (error) {
+      console.warn(
+        `[puente] RAG de la junta "${completa.titulo}": ${(error as Error).message}`
+      );
     }
     return { titulo: completa.titulo, pendientes: agregados, acuerdos };
   };
@@ -5092,7 +5106,9 @@ export function construirRutas(
           exportar: textoDeDocumento
         })
       },
-      borrarDeFireflies: () => datos.llamadasConfig.leer().borrarDeFireflies,
+      borrarDeFireflies: () =>
+        datos.llamadasConfig.leer().borrarDeFireflies &&
+        cfg().ragDrive === undefined,
       llamadas: () => datos.llamadas.leer(),
       guardar: async (lista) => {
         await datos.llamadas.escribir(lista);
@@ -5168,6 +5184,7 @@ export function construirRutas(
     return {
       fireflies: cfg().fireflies !== undefined,
       google: cuenta !== undefined,
+      rag: cfg().ragDrive !== undefined,
       cuenta: cuenta?.google?.conectadaComo ?? cuenta?.usuario,
       carpeta: ajustes.carpetaNombre,
       borrarDeFireflies: ajustes.borrarDeFireflies,
@@ -6180,6 +6197,55 @@ export function construirRutas(
     correosDelDueno: () => [...correosDelDueno()],
     equipo: equipoCompleto
   });
+
+  const juntasRag = registrarJuntasRag({
+    router,
+    datos: {
+      juntasRag: datos.juntasRag,
+      empresas: datos.empresas,
+      crmClientes: datos.crmClientes,
+      crmContactos: datos.crmContactos,
+      crmProyectos: datos.crmProyectos,
+      crmActividades: datos.crmActividades,
+      personales: datos.personales,
+      llamadasConfig: datos.llamadasConfig,
+      rolesCrm: datos.rolesCrm,
+      usuariosCrm: datos.usuariosCrm
+    },
+    cfg,
+    correoDeSesion: (contexto) => acceso.sesionDe(tokenDe(contexto))?.correo,
+    correosDelDueno: () => [...correosDelDueno()],
+    esAdmin: (contexto) => esAdmin(tokenDe(contexto), cfg()),
+    bajar: async (id) => {
+      const fireflies = cfg().fireflies;
+      if (!fireflies) {
+        throw new ErrorConfiguracion(
+          'Falta la API key de Fireflies (Integraciones → Fireflies).'
+        );
+      }
+      return transcripcion(fireflies, id);
+    },
+    borrar: async (id) => {
+      const fireflies = cfg().fireflies;
+      if (!fireflies) {
+        throw new ErrorConfiguracion(
+          'Falta la API key de Fireflies (Integraciones → Fireflies).'
+        );
+      }
+      await borrarTranscripcion(fireflies, id);
+    },
+    listarRecientes: async () => {
+      const fireflies = cfg().fireflies;
+      if (!fireflies) {
+        return [];
+      }
+      return transcripcionesRecientes(fireflies, 3, 20);
+    },
+    programables
+  });
+  archivarRagDe = async (id) => {
+    await juntasRag.archivar(id);
+  };
 
   registrarRutasCrmSeguimiento({
     router,

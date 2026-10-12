@@ -8,9 +8,11 @@ import { borrarTranscripcion, esSinPermisoDeBorrado } from './fireflies.js';
 import {
   archivoDeDrive,
   carpetaDeDrive,
+  carpetaDentroDe,
   documentoPorPropiedad,
   escaparConsultaDrive,
-  subirComoDocumento
+  subirComoDocumento,
+  subirMarkdown
 } from './google.js';
 
 const fetchOriginal = globalThis.fetch;
@@ -144,6 +146,50 @@ describe('Drive', () => {
       q,
       /appProperties has \{ key='firefliesId' and value='ff1' \}/
     );
+  });
+
+  it('carpetaDentroDe busca y crea dentro del padre', async () => {
+    let llamados = simular([json({ files: [{ id: 'hijo' }] })]);
+    assert.equal(await carpetaDentroDe('tok', 'padre', 'Juntas'), 'hijo');
+    const q = new URL(llamados[0]?.url as string).searchParams.get('q');
+    assert.match(q as string, /'padre' in parents/);
+    assert.match(q as string, /name='Juntas'/);
+
+    llamados = simular([json({ files: [] }), json({ id: 'nueva' })]);
+    assert.equal(await carpetaDentroDe('tok', 'padre', '02_Proyecto'), 'nueva');
+    assert.deepEqual(JSON.parse(llamados[1]?.cuerpo as string), {
+      name: '02_Proyecto',
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: ['padre']
+    });
+  });
+
+  it('subirMarkdown manda text/markdown y la propiedad de Fireflies', async () => {
+    const llamados = simular([
+      json({
+        id: 'md1',
+        webViewLink: 'https://drive.google.com/file/d/md1/view'
+      })
+    ]);
+    const r = await subirMarkdown(
+      'tok',
+      'carp',
+      '2026-10-12_junta.md',
+      '# Hola',
+      {
+        firefliesId: 'ff1'
+      }
+    );
+    assert.equal(r.id, 'md1');
+    const meta = JSON.parse(
+      (llamados[0]?.cuerpo as string)
+        .split('\r\n\r\n')[1]
+        ?.split('\r\n')[0] as string
+    );
+    assert.equal(meta.mimeType, 'text/markdown');
+    assert.deepEqual(meta.parents, ['carp']);
+    assert.deepEqual(meta.appProperties, { firefliesId: 'ff1' });
+    assert.match(llamados[0]?.cuerpo as string, /# Hola/);
   });
 });
 
