@@ -15,12 +15,9 @@ import {
   CRM_PROYECTO_ESTADO_LABEL,
   CRM_ACTIVIDAD_TIPO_LABEL,
   CRM_PAGO_ESTATUS_LABEL,
-  type CrmCliente,
-  type CrmContacto,
-  type CrmProyecto,
-  type CrmCotizacion,
-  type CrmPagoProgramado,
-  type CrmActividadCliente
+  type CrmClienteTipo,
+  type CrmCotizacionEstatus,
+  type CrmProyectoEstado
 } from '../../core/models/crm-nativo.model';
 import { CrmService } from '../../core/sources/gateway/crm.service';
 import { EmptyStateComponent } from '../../ui/empty-state.component';
@@ -28,14 +25,42 @@ import { IconComponent } from '../../ui/icon.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 import { MoneyPipe, RelativePipe } from '../../ui/portal.pipes';
 
-interface DatosCliente {
-  cliente: CrmCliente;
-  contactos: CrmContacto[];
-  proyectos: CrmProyecto[];
-  cotizaciones: CrmCotizacion[];
-  pagos: CrmPagoProgramado[];
-  actividades: CrmActividadCliente[];
-}
+const TIPO_CLASE: Record<CrmClienteTipo, string> = {
+  directo: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200',
+  intermediario:
+    'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200',
+  final:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200'
+};
+
+const ESTATUS_COT_CLASE: Record<CrmCotizacionEstatus, string> = {
+  borrador: 'bg-surface-muted text-ink-muted',
+  enviada: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200',
+  aprobada:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200',
+  rechazada: 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200',
+  vencida:
+    'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200',
+  obsoleta: 'bg-surface-muted text-ink-subtle',
+  desconocido: 'bg-surface-muted text-ink-muted'
+};
+
+const ESTADO_CLASE: Record<CrmProyectoEstado, string> = {
+  prospecto: 'bg-surface-muted text-ink-muted',
+  en_cotizacion: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200',
+  aprobado:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200',
+  en_desarrollo:
+    'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-200',
+  en_pruebas:
+    'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200',
+  entregado:
+    'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200',
+  en_soporte: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200',
+  pausado: 'bg-surface-muted text-ink-subtle',
+  cancelado: 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200',
+  por_confirmar: 'bg-surface-muted text-ink-muted'
+};
 
 @Component({
   selector: 'pt-cliente-detalle',
@@ -50,43 +75,60 @@ interface DatosCliente {
     RelativePipe
   ],
   template: `
-    <pt-page-header [title]="datos()?.cliente?.nombre ?? 'Cliente'" />
+    <pt-page-header [title]="datos()?.cliente?.nombre ?? 'Cliente'">
+      <a class="btn" routerLink="/clientes">
+        <pt-icon name="anterior" class="h-4 w-4" />
+        Clientes
+      </a>
+    </pt-page-header>
 
     @if (cargando()) {
-      <div class="loading-message">Cargando...</div>
+      <p class="py-8 text-center text-ink-muted">Cargando…</p>
     } @else if (error()) {
       <pt-empty-state icon="alerta" title="Error" [hint]="error()!" />
     } @else if (datos(); as d) {
-      <div class="detalle">
-        <!-- Info del cliente -->
-        <section class="card seccion">
-          <h3 class="seccion-titulo">Información</h3>
-          <div class="info-grid">
-            <div class="info-item">
-              <span class="info-label">Tipo</span>
-              <span class="chip chip--{{ d.cliente.tipo }}">
+      <div class="flex flex-col gap-4">
+        <section class="card card-pad">
+          <h2 class="mb-3 text-base font-semibold">Información</h2>
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p
+                class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                Tipo
+              </p>
+              <span class="chip mt-1" [class]="tipoClase[d.cliente.tipo]">
                 {{ tipoLabel[d.cliente.tipo] }}
               </span>
             </div>
             @if (d.cliente.razonSocial) {
-              <div class="info-item">
-                <span class="info-label">Razón social</span>
-                <span class="info-valor">{{ d.cliente.razonSocial }}</span>
+              <div>
+                <p
+                  class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Razón social
+                </p>
+                <p class="mt-1 text-ink">{{ d.cliente.razonSocial }}</p>
               </div>
             }
             @if (d.cliente.rfc) {
-              <div class="info-item">
-                <span class="info-label">RFC</span>
-                <span class="info-valor mono">{{ d.cliente.rfc }}</span>
+              <div>
+                <p
+                  class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  RFC
+                </p>
+                <p class="mt-1 font-mono text-ink">{{ d.cliente.rfc }}</p>
               </div>
             }
             @if (d.cliente.driveFolderUrl) {
-              <div class="info-item">
-                <span class="info-label">Carpeta Drive</span>
+              <div>
+                <p
+                  class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Carpeta Drive
+                </p>
                 <a
+                  class="mt-1 inline-flex items-center gap-1 text-info hover:underline"
                   [href]="d.cliente.driveFolderUrl"
                   target="_blank"
-                  class="link">
+                  rel="noopener">
                   <pt-icon name="externo" class="h-4 w-4" />
                   Abrir
                 </a>
@@ -95,37 +137,47 @@ interface DatosCliente {
           </div>
         </section>
 
-        <!-- Contactos -->
-        <section class="card seccion">
-          <h3 class="seccion-titulo">
+        <section class="card card-pad">
+          <h2 class="mb-3 flex items-center gap-2 text-base font-semibold">
             Contactos
-            <span class="badge">{{ d.contactos.length }}</span>
-          </h3>
+            <span class="chip bg-surface-muted text-ink-muted">{{
+              d.contactos.length
+            }}</span>
+          </h2>
           @if (d.contactos.length === 0) {
-            <p class="sin-datos">Sin contactos registrados</p>
+            <p class="text-sm italic text-ink-muted">
+              Sin contactos registrados
+            </p>
           } @else {
-            <div class="lista-items">
+            <div class="divide-y divide-line">
               @for (contacto of d.contactos; track contacto.id) {
-                <div class="contacto-item">
-                  <div class="contacto-info">
-                    <span class="contacto-nombre">
+                <div
+                  class="flex flex-wrap items-start justify-between gap-3 py-3">
+                  <div>
+                    <p class="flex flex-wrap items-center gap-2 font-medium">
                       {{ contacto.nombre }}
                       @if (contacto.esResponsableProyecto) {
-                        <span class="chip chip--small">Responsable</span>
+                        <span class="chip bg-brand-soft text-brand"
+                          >Responsable</span
+                        >
                       }
-                    </span>
+                    </p>
                     @if (contacto.puesto) {
-                      <span class="contacto-puesto">{{ contacto.puesto }}</span>
+                      <p class="text-sm text-ink-muted">
+                        {{ contacto.puesto }}
+                      </p>
                     }
                   </div>
-                  <div class="contacto-datos">
+                  <div class="text-right text-sm">
                     @if (contacto.correo) {
-                      <a [href]="'mailto:' + contacto.correo" class="link">
+                      <a
+                        class="block text-info hover:underline"
+                        [href]="'mailto:' + contacto.correo">
                         {{ contacto.correo }}
                       </a>
                     }
                     @if (contacto.telefono) {
-                      <span class="contacto-tel">{{ contacto.telefono }}</span>
+                      <p class="text-ink-muted">{{ contacto.telefono }}</p>
                     }
                   </div>
                 </div>
@@ -134,40 +186,45 @@ interface DatosCliente {
           }
         </section>
 
-        <!-- Proyectos -->
-        <section class="card seccion">
-          <h3 class="seccion-titulo">
+        <section class="card card-pad">
+          <h2 class="mb-3 flex items-center gap-2 text-base font-semibold">
             Proyectos
-            <span class="badge">{{ d.proyectos.length }}</span>
-          </h3>
+            <span class="chip bg-surface-muted text-ink-muted">{{
+              d.proyectos.length
+            }}</span>
+          </h2>
           @if (d.proyectos.length === 0) {
-            <p class="sin-datos">Sin proyectos</p>
+            <p class="text-sm italic text-ink-muted">Sin proyectos</p>
           } @else {
-            <div class="lista-items">
+            <div class="flex flex-col gap-2">
               @for (proyecto of d.proyectos; track proyecto.id) {
                 <a
-                  class="proyecto-item"
+                  class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-transparent px-3 py-2 transition hover:border-line hover:bg-surface-muted"
                   [routerLink]="['/proyectos', proyecto.id]">
-                  <div class="proyecto-info">
-                    <span class="proyecto-nombre">{{ proyecto.nombre }}</span>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="font-medium text-ink">{{
+                      proyecto.nombre
+                    }}</span>
                     @if (proyecto.estado) {
-                      <span class="chip chip--estado-{{ proyecto.estado }}">
+                      <span class="chip" [class]="estadoClase[proyecto.estado]">
                         {{ estadoLabel[proyecto.estado] }}
                       </span>
                     } @else {
-                      <span class="chip chip--estado-por_confirmar">
-                        Por confirmar
-                      </span>
+                      <span class="chip bg-surface-muted text-ink-muted"
+                        >Por confirmar</span
+                      >
                     }
                   </div>
                   @if (proyecto.avancePct !== undefined) {
-                    <div class="avance">
-                      <div class="avance-barra">
+                    <div class="flex items-center gap-2">
+                      <div
+                        class="h-1.5 w-20 overflow-hidden rounded bg-surface-muted">
                         <div
-                          class="avance-progreso"
+                          class="h-full rounded bg-accent"
                           [style.width.%]="proyecto.avancePct"></div>
                       </div>
-                      <span class="avance-texto"
+                      <span
+                        class="w-9 text-right text-xs tabular-nums text-ink-muted"
                         >{{ proyecto.avancePct }}%</span
                       >
                     </div>
@@ -178,55 +235,65 @@ interface DatosCliente {
           }
         </section>
 
-        <!-- Cotizaciones y cobranza -->
         @if (crm.puedeVerCotizaciones()) {
-          <section class="card seccion">
-            <h3 class="seccion-titulo">
+          <section class="card card-pad">
+            <h2 class="mb-3 flex items-center gap-2 text-base font-semibold">
               Cotizaciones
-              <span class="badge">{{ d.cotizaciones.length }}</span>
-            </h3>
+              <span class="chip bg-surface-muted text-ink-muted">{{
+                d.cotizaciones.length
+              }}</span>
+            </h2>
             @if (d.cotizaciones.length === 0) {
-              <p class="sin-datos">Sin cotizaciones</p>
+              <p class="text-sm italic text-ink-muted">Sin cotizaciones</p>
             } @else {
-              <div class="lista-items">
+              <div class="divide-y divide-line">
                 @for (cot of d.cotizaciones; track cot.id) {
-                  <div class="cotizacion-item">
-                    <div class="cotizacion-info">
-                      <span class="cotizacion-nombre">
+                  <div
+                    class="flex flex-wrap items-center justify-between gap-3 py-3">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="font-medium">
                         {{ cot.nombre }}
                         @if (cot.folio) {
-                          <span class="cotizacion-folio"
+                          <span class="font-normal text-ink-muted"
                             >({{ cot.folio }})</span
                           >
                         }
                       </span>
                       @if (cot.estatus) {
-                        <span class="chip chip--estatus-{{ cot.estatus }}">
+                        <span
+                          class="chip"
+                          [class]="estatusCotClase[cot.estatus]">
                           {{ estatusLabel[cot.estatus] }}
                         </span>
                       }
                     </div>
-                    <div class="cotizacion-monto">
-                      {{ cot.total | moneda: cot.moneda }}
-                    </div>
+                    <span class="font-semibold tabular-nums">{{
+                      cot.total | moneda: cot.moneda
+                    }}</span>
                   </div>
                 }
               </div>
 
-              <!-- Resumen de cobranza -->
               @if (crm.puedeVerCobranza()) {
-                <div class="cobranza-resumen">
-                  <div class="cobranza-item">
-                    <span class="cobranza-label">Pagado</span>
-                    <span class="cobranza-valor pagado">
+                <div
+                  class="mt-4 grid gap-3 border-t border-line pt-3 sm:grid-cols-2">
+                  <div>
+                    <p
+                      class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                      Pagado
+                    </p>
+                    <p class="text-xl font-semibold tabular-nums text-ok">
                       {{ pagado() | moneda }}
-                    </span>
+                    </p>
                   </div>
-                  <div class="cobranza-item">
-                    <span class="cobranza-label">Por cobrar</span>
-                    <span class="cobranza-valor por-cobrar">
+                  <div>
+                    <p
+                      class="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                      Por cobrar
+                    </p>
+                    <p class="text-xl font-semibold tabular-nums text-warn">
                       {{ porCobrar() | moneda }}
-                    </span>
+                    </p>
                   </div>
                 </div>
               }
@@ -234,23 +301,27 @@ interface DatosCliente {
           </section>
         }
 
-        <!-- Actividades recientes -->
-        <section class="card seccion">
-          <h3 class="seccion-titulo">
+        <section class="card card-pad">
+          <h2 class="mb-3 flex items-center gap-2 text-base font-semibold">
             Actividad reciente
-            <span class="badge">{{ d.actividades.length }}</span>
-          </h3>
+            <span class="chip bg-surface-muted text-ink-muted">{{
+              d.actividades.length
+            }}</span>
+          </h2>
           @if (d.actividades.length === 0) {
-            <p class="sin-datos">Sin actividades registradas</p>
+            <p class="text-sm italic text-ink-muted">
+              Sin actividades registradas
+            </p>
           } @else {
-            <div class="lista-items">
+            <div class="divide-y divide-line">
               @for (act of actividadesRecientes(); track act.id) {
-                <div class="actividad-item">
-                  <span class="actividad-tipo">
-                    {{ actividadTipoLabel[act.tipo] }}
-                  </span>
-                  <span class="actividad-resumen">{{ act.resumen }}</span>
-                  <span class="actividad-fecha">{{
+                <div
+                  class="grid grid-cols-[auto_1fr_auto] items-center gap-3 py-3">
+                  <span class="text-xs font-medium uppercase text-ink-subtle">{{
+                    actividadTipoLabel[act.tipo]
+                  }}</span>
+                  <span class="truncate text-ink">{{ act.resumen }}</span>
+                  <span class="shrink-0 text-xs text-ink-muted">{{
                     act.fecha | relativo
                   }}</span>
                 </div>
@@ -259,366 +330,6 @@ interface DatosCliente {
           }
         </section>
       </div>
-    }
-  `,
-  styles: `
-    :host {
-      display: block;
-      padding: var(--space-4);
-    }
-
-    .loading-message {
-      text-align: center;
-      color: var(--text-secondary);
-      padding: var(--space-8);
-    }
-
-    .detalle {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-4);
-    }
-
-    .seccion {
-      padding: var(--space-4);
-    }
-
-    .seccion-titulo {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      margin: 0 0 var(--space-3) 0;
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-
-    .badge {
-      background: var(--surface-secondary);
-      color: var(--text-secondary);
-      font-size: 0.75rem;
-      font-weight: 500;
-      padding: 2px 8px;
-      border-radius: 10px;
-    }
-
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: var(--space-3);
-    }
-
-    .info-item {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-1);
-    }
-
-    .info-label {
-      font-size: 0.75rem;
-      color: var(--text-tertiary);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    .info-valor {
-      color: var(--text-primary);
-    }
-
-    .mono {
-      font-family: var(--font-mono);
-    }
-
-    .link {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-1);
-      color: var(--accent);
-    }
-
-    .sin-datos {
-      color: var(--text-secondary);
-      font-style: italic;
-      margin: 0;
-    }
-
-    .lista-items {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
-
-    .contacto-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: var(--space-3);
-      padding: var(--space-2) 0;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .contacto-item:last-child {
-      border-bottom: none;
-    }
-
-    .contacto-info {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-1);
-    }
-
-    .contacto-nombre {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      font-weight: 500;
-    }
-
-    .contacto-puesto {
-      font-size: 0.875rem;
-      color: var(--text-secondary);
-    }
-
-    .contacto-datos {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: var(--space-1);
-      font-size: 0.875rem;
-    }
-
-    .contacto-tel {
-      color: var(--text-secondary);
-    }
-
-    .proyecto-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: var(--space-3);
-      padding: var(--space-2);
-      border-radius: var(--radius);
-      text-decoration: none;
-      color: inherit;
-      transition: background-color 0.15s;
-    }
-
-    .proyecto-item:hover {
-      background: var(--surface-hover);
-    }
-
-    .proyecto-info {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-    }
-
-    .proyecto-nombre {
-      font-weight: 500;
-    }
-
-    .avance {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-    }
-
-    .avance-barra {
-      width: 80px;
-      height: 6px;
-      background: var(--surface-secondary);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-
-    .avance-progreso {
-      height: 100%;
-      background: var(--accent);
-      border-radius: 3px;
-    }
-
-    .avance-texto {
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      min-width: 36px;
-      text-align: right;
-    }
-
-    .cotizacion-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: var(--space-3);
-      padding: var(--space-2) 0;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .cotizacion-item:last-child {
-      border-bottom: none;
-    }
-
-    .cotizacion-info {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-    }
-
-    .cotizacion-folio {
-      color: var(--text-secondary);
-      font-size: 0.875rem;
-    }
-
-    .cotizacion-monto {
-      font-weight: 600;
-      font-family: var(--font-mono);
-    }
-
-    .cobranza-resumen {
-      display: flex;
-      gap: var(--space-4);
-      margin-top: var(--space-4);
-      padding-top: var(--space-3);
-      border-top: 1px solid var(--border);
-    }
-
-    .cobranza-item {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-1);
-    }
-
-    .cobranza-label {
-      font-size: 0.75rem;
-      color: var(--text-tertiary);
-      text-transform: uppercase;
-    }
-
-    .cobranza-valor {
-      font-size: 1.25rem;
-      font-weight: 600;
-      font-family: var(--font-mono);
-    }
-
-    .cobranza-valor.pagado {
-      color: var(--accent-green);
-    }
-
-    .cobranza-valor.por-cobrar {
-      color: var(--accent-orange);
-    }
-
-    .actividad-item {
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      gap: var(--space-2);
-      padding: var(--space-2) 0;
-      border-bottom: 1px solid var(--border);
-      align-items: center;
-    }
-
-    .actividad-item:last-child {
-      border-bottom: none;
-    }
-
-    .actividad-tipo {
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-    }
-
-    .actividad-resumen {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .actividad-fecha {
-      font-size: 0.75rem;
-      color: var(--text-tertiary);
-    }
-
-    .chip--small {
-      font-size: 0.625rem;
-      padding: 1px 6px;
-    }
-
-    .chip--directo {
-      --chip-bg: var(--accent-blue-bg);
-      --chip-text: var(--accent-blue);
-    }
-    .chip--intermediario {
-      --chip-bg: var(--accent-orange-bg);
-      --chip-text: var(--accent-orange);
-    }
-    .chip--final {
-      --chip-bg: var(--accent-green-bg);
-      --chip-text: var(--accent-green);
-    }
-
-    .chip--estatus-borrador {
-      --chip-bg: var(--surface-secondary);
-      --chip-text: var(--text-secondary);
-    }
-    .chip--estatus-enviada {
-      --chip-bg: var(--accent-blue-bg);
-      --chip-text: var(--accent-blue);
-    }
-    .chip--estatus-aprobada {
-      --chip-bg: var(--accent-green-bg);
-      --chip-text: var(--accent-green);
-    }
-    .chip--estatus-rechazada {
-      --chip-bg: var(--accent-red-bg);
-      --chip-text: var(--accent-red);
-    }
-    .chip--estatus-vencida {
-      --chip-bg: var(--accent-orange-bg);
-      --chip-text: var(--accent-orange);
-    }
-    .chip--estatus-obsoleta {
-      --chip-bg: var(--surface-secondary);
-      --chip-text: var(--text-tertiary);
-    }
-    .chip--estatus-desconocido {
-      --chip-bg: var(--surface-secondary);
-      --chip-text: var(--text-secondary);
-    }
-
-    .chip--estado-prospecto {
-      --chip-bg: var(--surface-secondary);
-      --chip-text: var(--text-secondary);
-    }
-    .chip--estado-en_cotizacion {
-      --chip-bg: var(--accent-blue-bg);
-      --chip-text: var(--accent-blue);
-    }
-    .chip--estado-aprobado {
-      --chip-bg: var(--accent-green-bg);
-      --chip-text: var(--accent-green);
-    }
-    .chip--estado-en_desarrollo {
-      --chip-bg: var(--accent-purple-bg);
-      --chip-text: var(--accent-purple);
-    }
-    .chip--estado-en_pruebas {
-      --chip-bg: var(--accent-orange-bg);
-      --chip-text: var(--accent-orange);
-    }
-    .chip--estado-entregado {
-      --chip-bg: var(--accent-green-bg);
-      --chip-text: var(--accent-green);
-    }
-    .chip--estado-en_soporte {
-      --chip-bg: var(--accent-blue-bg);
-      --chip-text: var(--accent-blue);
-    }
-    .chip--estado-pausado {
-      --chip-bg: var(--surface-secondary);
-      --chip-text: var(--text-tertiary);
-    }
-    .chip--estado-cancelado {
-      --chip-bg: var(--accent-red-bg);
-      --chip-text: var(--accent-red);
     }
   `
 })
@@ -632,6 +343,9 @@ export class ClienteDetalleComponent {
   readonly estatusLabel = CRM_COTIZACION_ESTATUS_LABEL;
   readonly actividadTipoLabel = CRM_ACTIVIDAD_TIPO_LABEL;
   readonly pagoEstatusLabel = CRM_PAGO_ESTATUS_LABEL;
+  readonly tipoClase = TIPO_CLASE;
+  readonly estatusCotClase = ESTATUS_COT_CLASE;
+  readonly estadoClase = ESTADO_CLASE;
 
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
