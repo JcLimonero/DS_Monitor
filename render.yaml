@@ -12,6 +12,9 @@
 # recibido por ingesta. El disco se conserva como respaldo de la época en que
 # todo eran archivos JSON: la primera vez que el puente arranca con la base
 # vacía copia lo que haya ahí.
+#
+# El RAG de juntas crea la extensión `vector` (pgvector, ya disponible en
+# Postgres 16 de Render) al arrancar. Hace falta pgvector 0.7+ por halfvec.
 databases:
   - name: ds-monitor-db
     plan: basic_256mb

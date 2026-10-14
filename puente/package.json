@@ -16,7 +16,8 @@
     "check:contrato": "tsc --noEmit -p tsconfig.contrato.json",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
-    "barrido": "node dist/herramientas/barrido-mail.js"
+    "barrido": "node dist/herramientas/barrido-mail.js",
+    "rag:backfill": "node dist/herramientas/rag-backfill.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

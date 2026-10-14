@@ -152,6 +152,7 @@ import type {
 } from '../nucleo/contrato.js';
 import { registrarRutasCrm, type DatosCrm } from './rutas-crm.js';
 import { registrarJuntasRag } from './rutas-juntas-rag.js';
+import { registrarRagVectorial } from './rutas-rag.js';
 import { registrarRutasCrmSeguimiento } from './rutas-crm-seguimiento.js';
 import {
   registrarRutasIngestaCrm,
@@ -293,6 +294,7 @@ import { AlmacenIngesta } from '../ingesta/almacen.js';
 import {
   registrarRutasIngesta,
   TIPOS_EMISOR,
+  emisorDelToken,
   servirRecibido
 } from '../ingesta/rutas-ingesta.js';
 import type { TipoIngesta } from '../ingesta/modelos.js';
@@ -1184,6 +1186,8 @@ export function construirRutas(
     'telegram',
     'mio'
   ]);
+  // Se llena mas abajo, cuando ya estan los emisores de la aplicacion.
+  let emisoresParaGuardia: () => ClienteIngesta[] = () => cfg().clientesIngesta;
   router.proteger((segmentos, contexto) => {
     const config = cfg();
     if (!config.acceso) {
@@ -1192,6 +1196,20 @@ export function construirRutas(
     const primero = segmentos[0] ?? '';
     if (LIBRES.has(primero)) {
       return;
+    }
+    if (primero === 'rag') {
+      const token = tokenDe(contexto);
+      if (acceso.sesionDe(token) || esAdmin(token, config)) {
+        return;
+      }
+      const emisor = emisorDelToken(token, emisoresParaGuardia());
+      if (emisor?.tipos.includes('rag-consulta')) {
+        return;
+      }
+      throw new ErrorPuente(
+        'Hace falta entrar al portal con tu código de acceso.',
+        401
+      );
     }
     if (segmentos[0] === 'correo' && segmentos[1] === 'oauth') {
       return;
@@ -1501,6 +1519,7 @@ export function construirRutas(
     ...cfg().clientesIngesta,
     ...datos.emisores.leer()
   ];
+  emisoresParaGuardia = todosLosEmisores;
 
   router.get('/emisores/tipos-disponibles', async () => TIPOS_EMISOR);
 
@@ -6246,6 +6265,22 @@ export function construirRutas(
   archivarRagDe = async (id) => {
     await juntasRag.archivar(id);
   };
+
+  registrarRagVectorial({
+    router,
+    persistencia,
+    cfg,
+    emisores: todosLosEmisores,
+    empresas: () => datos.empresas.leer(),
+    clientes: () => datos.crmClientes.leer(),
+    juntas: () => datos.juntasRag.leer(),
+    roles: () => datos.rolesCrm.leer(),
+    usuarios: () => datos.usuariosCrm.leer(),
+    correoDeSesion: (contexto) => acceso.sesionDe(tokenDe(contexto))?.correo,
+    correosDelDueno: () => [...correosDelDueno()],
+    esAdmin: (contexto) => esAdmin(tokenDe(contexto), cfg()),
+    programables
+  });
 
   registrarRutasCrmSeguimiento({
     router,

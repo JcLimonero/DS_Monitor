@@ -59,8 +59,29 @@ export const TIPOS_EMISOR: string[] = [
   ...TIPOS_INGESTA,
   'ejecuciones',
   'crm-nativo',
-  'lectura-tareas'
+  'lectura-tareas',
+  'rag',
+  'rag-consulta'
 ];
+
+/** El emisor de ese bearer, sin exigir un tipo. */
+export function emisorDelToken(
+  token: string,
+  clientes: ClienteIngesta[]
+): ClienteIngesta | undefined {
+  if (!token) {
+    return undefined;
+  }
+  return clientes.find((candidato) => seguroIguales(candidato.token, token));
+}
+
+export function autenticarEmisor(
+  contexto: Contexto,
+  clientes: ClienteIngesta[],
+  tipo: string
+): ClienteIngesta {
+  return autenticar(contexto, clientes, tipo);
+}
 
 function autenticar(
   contexto: Contexto,

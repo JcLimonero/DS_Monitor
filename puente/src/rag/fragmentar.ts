@@ -1,0 +1,516 @@
+import { createHash } from 'node:crypto';
+import { normalizarTexto } from '../proveedores/fireflies.js';
+import {
+  empresaDeRuta,
+  empresaIdDe,
+  type EmpresaCatalogo
+} from './empresas-rag.js';
+
+/** Tope de un trozo de transcripcion y cuanto se repite del anterior. */
+export const TOKENS_FRAGMENTO = 500;
+export const TOKENS_TRASLAPE = 80;
+
+const ZONA = 'America/Mexico_City';
+const MESES = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic'
+];
+
+const SECCIONES_ENTERAS = new Set(['resumen', 'acuerdos', 'pendientes']);
+
+export interface OpcionesFragmento {
+  maxTokens?: number;
+  traslape?: number;
+}
+
+export interface DocumentoFragmentado {
+  id: string;
+  titulo: string;
+  /** ISO, si el markdown trae fecha. */
+  fecha?: string;
+  empresa: string;
+  empresaNombre: string;
+  cliente?: string;
+  proyecto?: string;
+  tipo: string;
+  participantes: string[];
+  frontmatter: Record<string, string>;
+  huella: string;
+  fragmentos: FragmentoTexto[];
+}
+
+export interface FragmentoTexto {
+  orden: number;
+  seccion: string;
+  texto: string;
+  tokens: number;
+}
+
+export interface ContextoFragmento {
+  driveFileId: string;
+  ruta?: string;
+  catalogo?: readonly EmpresaCatalogo[];
+  opciones?: OpcionesFragmento;
+}
+
+/** sha256 del markdown completo: si no cambia, no se vuelven a pedir embeddings. */
+export function huellaDocumento(markdown: string): string {
+  return createHash('sha256').update(markdown).digest('hex');
+}
+
+/** Estimacion barata: el modelo cobra por tokens y 4 caracteres alcanzan para cortar. */
+export function estimarTokens(texto: string): number {
+  const limpio = texto.trim();
+  if (!limpio) {
+    return 0;
+  }
+  return Math.max(1, Math.ceil(limpio.length / 4));
+}
+
+/**
+ * Parte un markdown de junta en fragmentos listos para embeber.
+ *
+ * Resumen, acuerdos y pendientes van enteros. La transcripcion se corta por
+ * turnos de hablante, agrupando hasta ~500 tokens con ~80 de traslape, y
+ * solo se parte un turno si el solo ya no cabe.
+ */
+export function fragmentarMarkdown(
+  markdown: string,
+  ctx: ContextoFragmento
+): DocumentoFragmentado {
+  const texto = markdown.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+  const { frente, cuerpo } = separarFrente(texto);
+  const catalogo = ctx.catalogo ?? [];
+  const empresa =
+    empresaIdDe(frente['empresa'], catalogo) ??
+    empresaDeRuta(ctx.ruta, catalogo);
+  if (!empresa) {
+    throw new Error(
+      'No reconocí la empresa de la junta (frontmatter o ruta de Drive).'
+    );
+  }
+  const titulo =
+    tituloDe(cuerpo) ||
+    frente['titulo'] ||
+    nombreDeArchivo(ctx.ruta) ||
+    'Junta';
+  const cliente = textoONada(frente['cliente']) ?? clienteDeRuta(ctx.ruta);
+  const proyecto = textoONada(frente['proyecto']) ?? proyectoDeRuta(ctx.ruta);
+  const participantes = participantesDe(frente['participantes']);
+  const fecha = fechaDe(frente['fecha']) ?? fechaDeNombre(ctx.ruta);
+  const id = textoONada(frente['id']) ?? ctx.driveFileId;
+  const empresaNombre =
+    textoONada(frente['empresa']) ??
+    catalogo.find((e) => e.id === empresa)?.nombre ??
+    empresa;
+  const cabecera = armarCabecera({
+    empresaNombre,
+    cliente,
+    proyecto,
+    fecha,
+    participantes,
+    titulo
+  });
+  const maxTokens = ctx.opciones?.maxTokens ?? TOKENS_FRAGMENTO;
+  const traslape = ctx.opciones?.traslape ?? TOKENS_TRASLAPE;
+  const secciones = seccionesDe(cuerpo);
+  const piezas: { seccion: string; texto: string }[] = [];
+  for (const seccion of secciones) {
+    if (esMarcadorVacio(seccion.texto)) {
+      continue;
+    }
+    const trozos = SECCIONES_ENTERAS.has(seccion.nombre)
+      ? [seccion.texto.trim()]
+      : agruparTurnos(turnosDe(seccion.texto), maxTokens, traslape);
+    for (const trozo of trozos) {
+      if (!trozo.trim() || esMarcadorVacio(trozo)) {
+        continue;
+      }
+      piezas.push({
+        seccion: seccion.nombre,
+        texto: `${cabecera}\n${trozo.trim()}`
+      });
+    }
+  }
+  return {
+    id,
+    titulo,
+    fecha,
+    empresa,
+    empresaNombre,
+    cliente,
+    proyecto,
+    tipo: tipoDe(frente['tipo'], ctx.ruta),
+    participantes,
+    frontmatter: frente,
+    huella: huellaDocumento(texto),
+    fragmentos: piezas.map((p, orden) => ({
+      orden,
+      seccion: p.seccion,
+      texto: p.texto,
+      tokens: estimarTokens(p.texto)
+    }))
+  };
+}
+
+function separarFrente(markdown: string): {
+  frente: Record<string, string>;
+  cuerpo: string;
+} {
+  const normal = markdown.replace(/^\uFEFF/, '');
+  if (!normal.startsWith('---')) {
+    return { frente: {}, cuerpo: normal };
+  }
+  const fin = normal.indexOf('\n---', 3);
+  if (fin < 0) {
+    return { frente: {}, cuerpo: normal };
+  }
+  const bloque = normal.slice(3, fin).replace(/^\n/, '');
+  const cuerpo = normal.slice(fin + 4).replace(/^\n/, '');
+  const frente: Record<string, string> = {};
+  for (const linea of bloque.split('\n')) {
+    const m = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(linea.trim());
+    if (!m) {
+      continue;
+    }
+    const clave = m[1] ?? '';
+    const valor = (m[2] ?? '').trim().replace(/^["']|["']$/g, '');
+    if (clave && valor) {
+      frente[clave] = valor;
+    }
+  }
+  return { frente, cuerpo };
+}
+
+function tituloDe(cuerpo: string): string | undefined {
+  for (const linea of cuerpo.split('\n')) {
+    const m = /^#\s+(.+)$/.exec(linea.trim());
+    if (m?.[1]) {
+      return m[1].trim();
+    }
+  }
+  return undefined;
+}
+
+function nombreDeArchivo(ruta: string | undefined): string | undefined {
+  const nombre = ruta?.split(/[/\\]+/).pop();
+  if (!nombre) {
+    return undefined;
+  }
+  return nombre
+    .replace(/\.md$/i, '')
+    .replace(/^\d{4}-\d{2}-\d{2}[_-]?/, '')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+}
+
+function textoONada(valor: string | undefined): string | undefined {
+  const limpio = valor?.trim();
+  return limpio ? limpio : undefined;
+}
+
+function participantesDe(valor: string | undefined): string[] {
+  if (!valor?.trim()) {
+    return [];
+  }
+  return valor
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+function proyectoDeRuta(ruta: string | undefined): string | undefined {
+  const antes = segmentosAntesDeJuntas(ruta);
+  const ultimo = antes?.[antes.length - 1];
+  if (!antes || antes.length < 3 || !ultimo) {
+    return undefined;
+  }
+  if (normalizarTexto(ultimo) === '02 proyecto') {
+    return undefined;
+  }
+  return ultimo.trim();
+}
+
+function segmentosAntesDeJuntas(
+  ruta: string | undefined
+): string[] | undefined {
+  if (!ruta) {
+    return undefined;
+  }
+  const partes = ruta.split(/[/\\]+/).filter(Boolean);
+  const indice = partes.findIndex((p) => normalizarTexto(p) === 'empresas');
+  const desde = indice >= 0 ? partes.slice(indice + 1) : partes;
+  const juntas = desde.findIndex((p) => normalizarTexto(p) === 'juntas');
+  if (juntas < 0) {
+    return undefined;
+  }
+  return desde.slice(0, juntas);
+}
+
+function clienteDeRuta(ruta: string | undefined): string | undefined {
+  const antes = segmentosAntesDeJuntas(ruta);
+  const cliente = antes?.[1];
+  if (!cliente || normalizarTexto(cliente) === '02 proyecto') {
+    return undefined;
+  }
+  return cliente.trim();
+}
+
+function fechaDe(valor: string | undefined): string | undefined {
+  if (!valor?.trim()) {
+    return undefined;
+  }
+  const dia = /^(\d{4})-(\d{2})-(\d{2})/.exec(valor.trim());
+  if (dia) {
+    return new Date(
+      Date.UTC(Number(dia[1]), Number(dia[2]) - 1, Number(dia[3]), 18, 0, 0)
+    ).toISOString();
+  }
+  const ms = Date.parse(valor);
+  return Number.isNaN(ms) ? undefined : new Date(ms).toISOString();
+}
+
+function fechaDeNombre(ruta: string | undefined): string | undefined {
+  const nombre = ruta?.split(/[/\\]+/).pop() ?? '';
+  return fechaDe(/^(\d{4}-\d{2}-\d{2})/.exec(nombre)?.[1]);
+}
+
+function tipoDe(frente: string | undefined, ruta: string | undefined): string {
+  const pedido = normalizarTexto(frente ?? '');
+  if (pedido === 'interna' || pedido === 'prospecto' || pedido === 'junta') {
+    return pedido;
+  }
+  const plano = normalizarTexto(ruta ?? '');
+  if (plano.includes('prospecto')) {
+    return 'prospecto';
+  }
+  if (plano.includes('interna')) {
+    return 'interna';
+  }
+  return 'junta';
+}
+
+function armarCabecera(datos: {
+  empresaNombre: string;
+  cliente?: string;
+  proyecto?: string;
+  fecha?: string;
+  participantes: string[];
+  titulo: string;
+}): string {
+  const donde = [datos.empresaNombre, datos.cliente, datos.proyecto]
+    .filter((x): x is string => !!x)
+    .join(' / ');
+  const cuando = datos.fecha ? fechaCorta(datos.fecha) : '';
+  const quienes =
+    datos.participantes.length > 0
+      ? ` — participantes: ${datos.participantes.join(', ')}`
+      : '';
+  const junta = cuando ? `Junta ${cuando}` : datos.titulo;
+  return donde ? `[${donde}] ${junta}${quienes}` : `${junta}${quienes}`;
+}
+
+function fechaCorta(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) {
+    return iso.slice(0, 10);
+  }
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ZONA,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(d);
+  const tomar = (tipo: string) =>
+    partes.find((p) => p.type === tipo)?.value ?? '';
+  const mes = MESES[Number(tomar('month')) - 1] ?? '';
+  return `${tomar('day')}-${mes}-${tomar('year')}`;
+}
+
+interface Seccion {
+  nombre: string;
+  texto: string;
+}
+
+function seccionesDe(cuerpo: string): Seccion[] {
+  const lineas = cuerpo.split('\n');
+  const secciones: Seccion[] = [];
+  let nombre = '';
+  let buffer: string[] = [];
+  const cerrar = () => {
+    const texto = buffer.join('\n').trim();
+    if (nombre && texto) {
+      secciones.push({ nombre, texto });
+    } else if (!nombre && texto && !/^#\s+/.test(texto)) {
+      secciones.push({ nombre: 'transcripcion', texto });
+    }
+    buffer = [];
+  };
+  for (const linea of lineas) {
+    const encabezado = /^##\s+(.+)$/.exec(linea.trim());
+    if (encabezado?.[1]) {
+      cerrar();
+      nombre = seccionDe(encabezado[1]);
+      continue;
+    }
+    buffer.push(linea);
+  }
+  cerrar();
+  return secciones;
+}
+
+function seccionDe(titulo: string): string {
+  const n = normalizarTexto(titulo);
+  if (n.includes('resumen')) {
+    return 'resumen';
+  }
+  if (n.includes('transcrip')) {
+    return 'transcripcion';
+  }
+  if (n.includes('pendiente') && !n.includes('acuerdo')) {
+    return 'pendientes';
+  }
+  if (n.includes('acuerdo')) {
+    return 'acuerdos';
+  }
+  return n.replace(/ /g, '-').slice(0, 40) || 'otro';
+}
+
+function esMarcadorVacio(texto: string): boolean {
+  const plano = normalizarTexto(texto);
+  return (
+    plano === '' ||
+    plano === 'sin acuerdos detectados' ||
+    plano === 'sin conversacion transcrita'
+  );
+}
+
+interface Turno {
+  hablante?: string;
+  texto: string;
+}
+
+function turnosDe(texto: string): Turno[] {
+  const turnos: Turno[] = [];
+  for (const linea of texto.split('\n')) {
+    const limpia = linea.trim();
+    if (!limpia) {
+      continue;
+    }
+    const marca = /^\*\*(.+?):\*\*\s*(.*)$/.exec(limpia);
+    if (marca) {
+      const hablante = (marca[1] ?? '').trim();
+      const frase = (marca[2] ?? '').trim();
+      const ultimo = turnos[turnos.length - 1];
+      if (ultimo?.hablante === hablante) {
+        ultimo.texto = [ultimo.texto, frase].filter(Boolean).join(' ');
+      } else {
+        turnos.push({ hablante, texto: frase });
+      }
+      continue;
+    }
+    const ultimo = turnos[turnos.length - 1];
+    if (ultimo) {
+      ultimo.texto = [ultimo.texto, limpia].filter(Boolean).join(' ');
+    } else {
+      turnos.push({ texto: limpia });
+    }
+  }
+  return turnos.filter((t) => t.texto.trim());
+}
+
+function textoDeTurno(turno: Turno): string {
+  return turno.hablante ? `**${turno.hablante}:** ${turno.texto}` : turno.texto;
+}
+
+function agruparTurnos(
+  turnos: Turno[],
+  maxTokens: number,
+  traslape: number
+): string[] {
+  const piezas = turnos.flatMap((t) => partirSiNoCabe(t, maxTokens, traslape));
+  const grupos: string[][] = [];
+  let actual: string[] = [];
+  let tokens = 0;
+  for (const pieza of piezas) {
+    const costo = estimarTokens(pieza);
+    if (actual.length > 0 && tokens + costo > maxTokens) {
+      const cola = colaDe(actual, traslape);
+      grupos.push(actual);
+      if (
+        sumaTokens(cola) > 0 &&
+        sumaTokens(cola) < sumaTokens(actual) &&
+        sumaTokens(cola) + costo <= maxTokens
+      ) {
+        actual = [...cola];
+        tokens = sumaTokens(actual);
+      } else {
+        actual = [];
+        tokens = 0;
+      }
+    }
+    actual.push(pieza);
+    tokens += costo;
+  }
+  if (actual.length > 0) {
+    grupos.push(actual);
+  }
+  return grupos.map((g) => g.join('\n'));
+}
+
+function partirSiNoCabe(
+  turno: Turno,
+  maxTokens: number,
+  traslape: number
+): string[] {
+  const completo = textoDeTurno(turno);
+  if (estimarTokens(completo) <= maxTokens) {
+    return [completo];
+  }
+  const prefijo = turno.hablante ? `**${turno.hablante}:** ` : '';
+  const cuerpo = turno.texto;
+  const limite = Math.max(prefijo.length + 40, maxTokens * 4 - prefijo.length);
+  const paso = Math.max(40, limite - traslape * 4);
+  const partes: string[] = [];
+  for (let i = 0; i < cuerpo.length; i += paso) {
+    const fin = Math.min(cuerpo.length, i + limite);
+    partes.push(`${prefijo}${cuerpo.slice(i, fin)}`.trim());
+    if (fin >= cuerpo.length) {
+      break;
+    }
+  }
+  return partes;
+}
+
+function colaDe(piezas: string[], traslape: number): string[] {
+  if (traslape <= 0) {
+    return [];
+  }
+  const cola: string[] = [];
+  let tokens = 0;
+  for (let i = piezas.length - 1; i >= 0 && tokens < traslape; i--) {
+    const pieza = piezas[i] ?? '';
+    const costo = estimarTokens(pieza);
+    if (cola.length === 0 && costo > traslape * 2) {
+      const chars = traslape * 4;
+      return [pieza.slice(-chars)];
+    }
+    cola.unshift(pieza);
+    tokens += costo;
+  }
+  return cola;
+}
+
+function sumaTokens(piezas: string[]): number {
+  return piezas.reduce((s, p) => s + estimarTokens(p), 0);
+}

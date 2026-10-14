@@ -18,7 +18,8 @@ Content-Type: application/json
 ```
 
 Tipos: `pendientes`, `juntas`, `monitoreo`, `crm`, `licencias`, `despliegues`,
-`repos`, `equipo`.
+`repos`, `equipo`, `rag`. `rag-consulta` no manda datos: sirve para
+`POST /rag/buscar` y `POST /rag/preguntar`.
 
 **El emisor se identifica por el token, nunca por el cuerpo.** Así nadie puede
 escribir en el buzón de otro cambiando un campo del JSON. Cada token trae de
@@ -1359,3 +1360,60 @@ Todas las rutas devuelven el mismo formato:
 
 Los errores incluyen el índice del registro que falló. Los registros válidos
 se guardan aunque otros fallen.
+
+---
+
+## RAG de juntas — `POST /ingesta/rag`
+
+No usa el sobre de `version` / `datos`. La rutina que sube el Markdown a Drive
+(`fireflies-rag`, fuera de este repo) llama esto después, con un emisor de tipo
+`rag`. El puente parte el archivo, pide embeddings a OpenRouter y hace upsert.
+Si el sha256 no cambió (y el modelo de embeddings es el mismo), responde
+`omitido` y no vuelve a gastar tokens.
+
+Itech Dev se guarda en las mismas tablas (`empresa = itech-dev`). No se escribe
+nada en el CRM.
+
+```
+POST {base}/ingesta/rag
+Authorization: Bearer <token con tipo rag>
+Content-Type: application/json
+```
+
+```json
+{
+  "driveFileId": "1abc",
+  "driveUrl": "https://drive.google.com/file/d/1abc/view",
+  "ruta": "Empresas/Itech Dev/TPI Composites/02_Proyecto/Juntas/2026-10-06_facturacion.md",
+  "markdown": "---\nid: ff-1\nfecha: 2026-10-06\nempresa: Itech Dev\ncliente: TPI Composites\nproyecto: Facturación\nparticipantes: Ana, Luis\n---\n\n# Facturación\n\n## Resumen\n\nSe revisó el timbrado.\n\n## Acuerdos\n\n- Emitir el viernes (Ana)\n\n## Transcripción\n\n**Ana:** Vemos las facturas.\n",
+  "modificadoEn": "2026-10-06T18:00:00.000Z"
+}
+```
+
+| Campo | Obligatorio | Qué hace |
+| --- | --- | --- |
+| `driveFileId` | sí | Id del archivo en Drive. Único. |
+| `markdown` | sí | El .md completo, con frontmatter. |
+| `driveUrl` | no | Liga que se cita en las respuestas. Sin ella se arma con el id. |
+| `ruta` | no | Ruta dentro de Empresas/. Sirve para la empresa si el frontmatter no la trae. |
+| `modificadoEn` | no | `modifiedTime` de Drive, para la reconciliación diaria. |
+
+La empresa sale del frontmatter (`empresa`) o de la ruta. Tiene que ser una
+del catálogo (`dealer-solutions`, `nexusqtech`, `operativai`, `itech-dev`) o
+`limonlabs`. Si no se reconoce, responde 400.
+
+**Respuesta:**
+
+```json
+{ "recibido": true, "id": "ff-1", "omitido": false, "fragmentos": 4, "empresa": "itech-dev" }
+```
+
+Con la misma huella: `"omitido": true` y `fragmentos` en 0 (los ya guardados
+siguen). Hace falta `OPENROUTER_API_KEY` y Postgres con pgvector. Sin base, 503.
+
+La carga de los .md que ya están en Drive es `npm run rag:backfill` en `puente/`
+(antes `npm run build`). Consultar es otra cosa: `POST /rag/buscar` y
+`POST /rag/preguntar` piden sesión, el token de admin, o un emisor
+`rag-consulta`. Sin empresa en el cuerpo, el SQL excluye Itech. Para verla hay
+que mandar `"empresa": "itech-dev"` (o `"incluirItech": true`) y tener permiso.
+Un token cuya sexta columna es solo `itech-dev` no ve el resto.

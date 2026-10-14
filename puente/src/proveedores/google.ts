@@ -768,6 +768,47 @@ export async function archivoPorNombre(
   );
 }
 
+export interface HijoDrive {
+  id: string;
+  name: string;
+  mimeType?: string;
+  modifiedTime?: string;
+  webViewLink?: string;
+}
+
+/** Hijos directos de una carpeta, con paginacion. */
+export async function listarHijosDrive(
+  token: string,
+  padreId: string
+): Promise<HijoDrive[]> {
+  const salida: HijoDrive[] = [];
+  let pageToken: string | undefined;
+  do {
+    const q = `'${escaparConsultaDrive(padreId)}' in parents and trashed=false`;
+    const lista = await pedirDrive<{
+      files?: HijoDrive[];
+      nextPageToken?: string;
+    }>(
+      token,
+      conParametros(`${DRIVE}/files`, {
+        q,
+        fields:
+          'nextPageToken,files(id,name,mimeType,modifiedTime,webViewLink)',
+        spaces: 'drive',
+        pageSize: '100',
+        ...(pageToken ? { pageToken } : {})
+      })
+    );
+    for (const archivo of lista.files ?? []) {
+      if (archivo.id && archivo.name) {
+        salida.push(archivo);
+      }
+    }
+    pageToken = lista.nextPageToken;
+  } while (pageToken);
+  return salida;
+}
+
 /** Bytes de un archivo que no es Google Doc (Markdown, texto). */
 export async function textoDeArchivo(
   token: string,

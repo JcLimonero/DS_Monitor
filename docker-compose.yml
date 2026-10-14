@@ -11,7 +11,8 @@
 #   CORREO_CUENTAS, INGESTA_CLIENTES, ACCESO_* / EMAILJS_*  (ver puente/.env.example)
 services:
   db:
-    image: postgres:16-alpine
+    # pgvector: el RAG de juntas usa halfvec(1536). postgres:16-alpine no trae la extension.
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: ds_monitor
