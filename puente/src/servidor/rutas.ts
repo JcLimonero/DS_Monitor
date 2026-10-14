@@ -181,7 +181,12 @@ import {
   type CambiosPendiente
 } from '../pendientes/anotaciones.js';
 import { registrar, type Registro } from '../pendientes/registro.js';
-import { homologarPendientes, idsDelGrupo } from '../pendientes/homologar.js';
+import {
+  filtrarNuevosSinRepetir,
+  homologarLista,
+  homologarPendientes,
+  idsDelGrupo
+} from '../pendientes/homologar.js';
 import { conRemitente, correoDelRemitente } from '../pendientes/remitente.js';
 import {
   abiertosParaModelo,
@@ -1663,7 +1668,7 @@ export function construirRutas(
   // --- Pendientes personales: se guardan completos en cada cambio ---
 
   router.get('/personales/tasks', async () =>
-    conNotas(await conIa(datos.personales.leer()))
+    conNotas(await conIa(homologarLista(datos.personales.leer())))
   );
 
   router.post('/personales/guardar', async (contexto) => {
@@ -3673,8 +3678,15 @@ export function construirRutas(
   };
 
   router.get('/ops/pendientes/tasks', async () =>
-    conNotas(await conIa(pendientesOps()))
+    conNotas(await conIa(homologarLista(pendientesOps())))
   );
+
+  /** Correo, propios y Ops: para agrupar copias al anotar o borrar. */
+  const todosLosPendientes = (): TaskItem[] => [
+    ...Object.values(datos.registroCorreo.leer()).flat(),
+    ...datos.personales.leer(),
+    ...pendientesOps()
+  ];
 
   // --- Anotar un pendiente: comentario, hecho, asignacion ---
   //
@@ -4084,17 +4096,16 @@ export function construirRutas(
         kind: 'eliminado',
         text: 'Eliminado'
       });
+      const idsPropios = idsDelGrupo(id, datos.personales.leer());
       await datos.personales.escribir(
-        datos.personales.leer().filter((t) => t.id !== id)
+        datos.personales.leer().filter((t) => !idsPropios.includes(t.id))
       );
     }
     nota.actualizadoEn = ahora;
     // Hecho y eliminado aplican a todo el grupo: el mismo correo en otro
-    // buzon y los avisos anteriores del mismo remitente.
-    const grupo = idsDelGrupo(
-      id,
-      Object.values(datos.registroCorreo.leer()).flat()
-    );
+    // buzon, los avisos anteriores del mismo remitente y las copias de
+    // Ops o propios con el mismo titulo y detalle.
+    const grupo = idsDelGrupo(id, todosLosPendientes());
     const conGrupo = { ...todas, [id]: nota };
     for (const otro of grupo.filter((x) => x !== id)) {
       const previa = conGrupo[otro] ?? { comentarios: [], actualizadoEn: '' };
@@ -4714,15 +4725,17 @@ export function construirRutas(
       ).catch(() => [] as TaskItem[]);
       // Lo personal no es del negocio: no entra al resumen ni al correo del
       // equipo.
-      return conNotas([
-        ...aplicarAprendido(
-          conRemitente(correo, await equipoCompleto()),
-          datos.aprendido.leer()
-        ),
-        ...datos.personales.leer().filter((t) => !t.personal),
-        ...pendientesOps(),
-        ...odooTareas
-      ]);
+      return conNotas(
+        homologarLista([
+          ...aplicarAprendido(
+            conRemitente(correo, await equipoCompleto()),
+            datos.aprendido.leer()
+          ),
+          ...datos.personales.leer().filter((t) => !t.personal),
+          ...pendientesOps(),
+          ...odooTareas
+        ])
+      );
     },
     juntas: () => porBuzon<Meeting>('juntas', 'juntas'),
     licencias: async () =>
@@ -5421,15 +5434,21 @@ export function construirRutas(
         tags: ['dictado', 'telegram'],
         updatedAt: ahora
       }));
-      await datos.personales.escribir([
-        ...nuevos.map(conPrioridadPersonal),
-        ...datos.personales.leer()
-      ]);
+      const actuales = datos.personales.leer();
+      const sinRepetir = filtrarNuevosSinRepetir(
+        actuales,
+        nuevos.map(conPrioridadPersonal)
+      );
+      if (sinRepetir.length === 0) {
+        await contestar('Eso ya estaba en pendientes; no lo volví a crear.');
+        return { ok: true };
+      }
+      await datos.personales.escribir([...sinRepetir, ...actuales]);
       const lineas: string[] = [];
-      for (const [i, p] of propuestas.entries()) {
-        const t = nuevos[i] as TaskItem;
+      for (const t of sinRepetir) {
+        const p = propuestas.find((x) => x.titulo.slice(0, 120) === t.title);
         let extra = '';
-        if (p.persona?.email || p.persona?.id) {
+        if (p?.persona?.email || p?.persona?.id) {
           const aviso = await asignarPendiente(
             t.id,
             p.persona.email ?? p.persona.id,
@@ -5443,8 +5462,13 @@ export function construirRutas(
         );
       }
       cache.olvidar();
+      const omitidos = nuevos.length - sinRepetir.length;
       await contestar(
-        `Agregué ${nuevos.length}:\n${lineas.join('\n')}\n\nRevísalos en ${cfg().urlPortal}/pendientes`
+        `Agregué ${sinRepetir.length}:\n${lineas.join('\n')}${
+          omitidos > 0
+            ? `\n${omitidos === 1 ? '1 ya estaba' : `${omitidos} ya estaban`}; no los volví a crear.`
+            : ''
+        }\n\nRevísalos en ${cfg().urlPortal}/pendientes`
       );
     } catch (error) {
       await contestar(`No pude procesarlo: ${(error as Error).message}`);

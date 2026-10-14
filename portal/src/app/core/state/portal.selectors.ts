@@ -30,6 +30,63 @@ export function openTasks(tasks: readonly TaskItem[]): TaskItem[] {
   return tasks.filter(isOpen);
 }
 
+function normalizarClave(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\d+/g, '#')
+    .replace(/[^a-z#]+/g, ' ')
+    .trim();
+}
+
+/** Misma llave que el puente: correo por remitente; el resto por titulo y detalle. */
+function claveDePendiente(t: TaskItem): string {
+  if (t.origin === 'correo') {
+    const de = /^De: (.+)$/m.exec(t.description ?? '')?.[1] ?? '';
+    const correo = /<([^>]+)>/.exec(de)?.[1] ?? de;
+    return `${normalizarClave(t.title)}|${correo.trim().toLowerCase()}`;
+  }
+  return [
+    normalizarClave(t.title),
+    normalizarClave(t.description ?? ''),
+    normalizarClave(t.company ?? ''),
+    (t.dueDate ?? '').slice(0, 10)
+  ].join('|');
+}
+
+/**
+ * Quita copias: primero el mismo id (una fuente listada dos veces), luego el
+ * mismo titulo y detalle que ya vino de otra fuente.
+ */
+export function sinPendientesRepetidos(tasks: readonly TaskItem[]): TaskItem[] {
+  const porId = new Map<string, TaskItem>();
+  for (const t of tasks) {
+    if (!porId.has(t.id)) {
+      porId.set(t.id, t);
+    }
+  }
+  const grupos = new Map<string, TaskItem[]>();
+  const orden: string[] = [];
+  for (const t of porId.values()) {
+    const clave = claveDePendiente(t);
+    if (!grupos.has(clave)) {
+      orden.push(clave);
+      grupos.set(clave, []);
+    }
+    grupos.get(clave)?.push(t);
+  }
+  return orden.map((clave) => {
+    const grupo = grupos.get(clave) ?? [];
+    const abiertos = grupo.filter((t) => t.status !== 'hecho');
+    const candidatos = abiertos.length > 0 ? abiertos : grupo;
+    return [...candidatos].sort(
+      (a, b) =>
+        b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)
+    )[0] as TaskItem;
+  });
+}
+
 export function overdueTasks(
   tasks: readonly TaskItem[],
   now = new Date()
