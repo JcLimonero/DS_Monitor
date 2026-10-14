@@ -1,10 +1,5 @@
 import type { LlamadaArchivada } from '../nucleo/contrato.js';
-import {
-  ErrorBorradoNoPermitido,
-  ErrorProveedor,
-  ErrorReconectarGoogle,
-  describir
-} from '../nucleo/errores.js';
+import { ErrorReconectarGoogle, describir } from '../nucleo/errores.js';
 import type { Transcripcion } from '../proveedores/fireflies.js';
 import {
   ESPERA_SIN_FRASES_HORAS,
@@ -19,12 +14,11 @@ import {
 /**
  * El archivado de llamadas: por cada transcripcion de Fireflies que toca,
  * baja el texto completo, lo sube a Drive como Google Doc, comprueba que
- * quedo, lo anota en la tabla `llamadas` y solo entonces la borra de
- * Fireflies. Si algo falla antes del borrado, la llamada se queda en
- * Fireflies y se reintenta en la siguiente corrida.
+ * quedo y lo anota en la tabla `llamadas`. El puente no borra nada de
+ * Fireflies: eso lo hace una rutina externa despues de guardar en Drive.
  *
  * Todo lo que toca la red entra por `Puertos`, para probar el orden de los
- * pasos (sobre todo "no borrar si la subida fallo") sin Fireflies ni Google.
+ * pasos (sobre todo "no anotar si la subida fallo") sin Fireflies ni Google.
  */
 
 /** Cuantas llamadas como maximo por corrida: acota el tiempo de la peticion. */
@@ -67,14 +61,11 @@ export interface PuertosFireflies {
   listar(saltar: number, limite: number): Promise<Transcripcion[]>;
   /** La transcripcion con la conversacion completa. */
   bajar(id: string): Promise<Transcripcion>;
-  borrar(id: string): Promise<void>;
 }
 
 export interface Puertos {
   fireflies: PuertosFireflies;
   drive: PuertosDrive;
-  /** Interruptor de Llamadas: borrar de Fireflies al archivar. */
-  borrarDeFireflies(): boolean;
   llamadas(): LlamadaArchivada[];
   guardar(lista: LlamadaArchivada[]): Promise<void>;
   procesada(id: string): boolean;
@@ -88,7 +79,7 @@ export interface Puertos {
 export interface ResumenArchivado {
   /** Docs nuevos subidos y verificados. */
   archivadas: number;
-  /** Borradas de Fireflies (incluye reintentos de corridas anteriores). */
+  /** Siempre 0: el puente ya no borra transcripciones de Fireflies. */
   borradas: number;
   /**
    * Cuantas mas quedan por archivar (se hacen en la siguiente corrida). Es un
@@ -104,7 +95,7 @@ export interface OpcionesArchivado {
   /** Archivar solo esta llamada (y sin esperar el reposo). */
   id?: string;
   maximo?: number;
-  /** Subir los Docs pero no borrar nada de Fireflies (ni reintentar borrados). */
+  /** Se ignora: el puente nunca borra de Fireflies. */
   soloArchivar?: boolean;
 }
 
@@ -136,15 +127,6 @@ async function listarPorArchivar(p: Puertos): Promise<Transcripcion[]> {
   return nuevas;
 }
 
-/** Fireflies ya no la tiene (se borro por otro lado). */
-function yaNoExiste(error: unknown): boolean {
-  if (!(error instanceof ErrorProveedor)) {
-    return false;
-  }
-  const causa = error.causa as { codigo?: string } | undefined;
-  return error.estado === 404 || causa?.codigo === 'object_not_found';
-}
-
 function mapaProcesadas(p: Puertos, ts: Transcripcion[]): Record<string, true> {
   const m: Record<string, true> = {};
   for (const t of ts) {
@@ -167,28 +149,6 @@ export async function archivarLlamadas(
   };
   const ahora = p.ahora();
   const maximo = opciones.maximo ?? MAXIMO_POR_CORRIDA;
-  /** Fireflies dijo "no puedes borrar": no se insiste en esta corrida. */
-  let borradoBloqueado = false;
-  /** Las que ya se intentaron borrar en esta corrida: no se repite el intento. */
-  const intentadas = new Set<string>();
-  /** El permiso de Drive falta: nada de lo que sigue puede verificar un Doc. */
-  let sinPermisoDrive = false;
-  const borrar = p.borrarDeFireflies() && !opciones.soloArchivar;
-
-  /** Anota que la llamada ya no esta en Fireflies; un fallo al guardar no tumba la corrida. */
-  const anotarBorrada = async (id: string): Promise<void> => {
-    try {
-      await p.guardar(
-        p
-          .llamadas()
-          .map((l) => (l.id === id ? { ...l, borradaDeFireflies: true } : l))
-      );
-    } catch (error) {
-      marcarError(
-        `"${id}" ya se borró de Fireflies pero no se pudo anotar (se corrige en la próxima corrida): ${describir(error)}`
-      );
-    }
-  };
 
   const marcarError = (mensaje: string, error?: unknown) => {
     resumen.errores.push(mensaje);
@@ -196,27 +156,6 @@ export async function archivarLlamadas(
       resumen.reconectarGoogle = true;
     }
     console.warn(`[puente] llamadas: ${mensaje}`);
-  };
-
-  const borrarYMarcar = async (id: string): Promise<void> => {
-    if (borradoBloqueado || !borrar || intentadas.has(id)) {
-      return;
-    }
-    intentadas.add(id);
-    try {
-      await p.fireflies.borrar(id);
-    } catch (error) {
-      if (error instanceof ErrorBorradoNoPermitido) {
-        borradoBloqueado = true;
-      }
-      marcarError(
-        `no se pudo borrar "${id}" de Fireflies (el Doc ya está en Drive): ${describir(error)}`,
-        error
-      );
-      return;
-    }
-    resumen.borradas++;
-    await anotarBorrada(id);
   };
 
   // 1. Que toca archivar.
@@ -248,8 +187,8 @@ export async function archivarLlamadas(
   const tanda = decisiones.slice(0, maximo);
   resumen.pendientes = Math.max(0, decisiones.length - tanda.length);
 
-  // 2. Archivar cada una; si algo falla antes del borrado, se sigue con la
-  //    siguiente y esta se reintenta en la proxima corrida.
+  // 2. Archivar cada una; si algo falla, se sigue con la siguiente y esta
+  //    se reintenta en la proxima corrida. El puente no borra Fireflies.
   let carpetaId: string | undefined;
   for (const { transcripcion: previa, accion } of tanda) {
     const nombre = `"${previa.titulo}"`;
@@ -261,7 +200,6 @@ export async function archivarLlamadas(
         `no se pudo preparar la carpeta de Drive: ${describir(error)}`,
         error
       );
-      sinPermisoDrive = error instanceof ErrorReconectarGoogle;
       break;
     }
     try {
@@ -282,7 +220,7 @@ export async function archivarLlamadas(
         ahora.getTime() - Date.parse(completa.fecha) <
           ESPERA_SIN_FRASES_HORAS * 3_600_000
       ) {
-        // Fireflies puede seguir transcribiendo: se espera, sin borrar nada.
+        // Fireflies puede seguir transcribiendo: se espera.
         continue;
       }
       const texto = textoDeTranscripcion(completa);
@@ -322,23 +260,14 @@ export async function archivarLlamadas(
       );
       resumen.archivadas++;
 
-      // El Doc ya existe y esta anotado: ahora si se puede soltar la liga de
-      // Fireflies en los pendientes y, despues, borrar la transcripcion.
-      // Si no se pudo, no se borra: el pendiente se quedaria con una liga
-      // muerta. El reintento de borrado de abajo lo vuelve a intentar.
-      let ligaOk = true;
       if (completa.url) {
         try {
           await p.reemplazarLiga(completa.url, doc.url);
         } catch (error) {
-          ligaOk = false;
           marcarError(
-            `${nombre}: no se pudo cambiar la liga en los pendientes, no se borra de Fireflies todavía: ${describir(error)}`
+            `${nombre}: no se pudo cambiar la liga en los pendientes: ${describir(error)}`
           );
         }
-      }
-      if (ligaOk) {
-        await borrarYMarcar(completa.id);
       }
     } catch (error) {
       marcarError(
@@ -346,78 +275,17 @@ export async function archivarLlamadas(
         error
       );
       if (error instanceof ErrorReconectarGoogle) {
-        sinPermisoDrive = true;
         break;
       }
-    }
-  }
-
-  // 3. Reintentar los borrados que quedaron pendientes en corridas anteriores.
-  //    Antes de cada borrado se vuelve a verificar el Doc (puede haberse ido a
-  //    la papelera, borrado, o la cuenta perdido el permiso): el borrado en
-  //    Fireflies es irreversible, asi que nunca se confia en la verificacion
-  //    de una corrida anterior.
-  if (!opciones.id && borrar && !sinPermisoDrive) {
-    const porBorrar = p
-      .llamadas()
-      .filter((x) => !x.borradaDeFireflies && !intentadas.has(x.id));
-    let carpeta = carpetaId;
-    if (porBorrar.length > 0 && carpeta === undefined) {
-      try {
-        carpeta = await p.drive.carpeta();
-      } catch (error) {
-        marcarError(
-          `no se pudo preparar la carpeta de Drive para reintentar borrados: ${describir(error)}`,
-          error
-        );
-      }
-    }
-    const carpetaFija = carpeta;
-    for (const l of carpetaFija === undefined ? [] : porBorrar) {
-      if (borradoBloqueado) {
-        break;
-      }
-      try {
-        let completa: Transcripcion;
-        try {
-          completa = await p.fireflies.bajar(l.id);
-        } catch (error) {
-          if (yaNoExiste(error)) {
-            await anotarBorrada(l.id);
-            continue;
-          }
-          throw error;
-        }
-        await p.drive.verificar(
-          { id: l.docId, url: l.docUrl },
-          carpetaFija as string,
-          textoDeTranscripcion(completa)
-        );
-        // La liga de los pendientes tambien se asegura aqui (es idempotente):
-        // una corrida anterior pudo no alcanzar a cambiarla.
-        if (completa.url) {
-          await p.reemplazarLiga(completa.url, l.docUrl);
-        }
-      } catch (error) {
-        marcarError(
-          `"${l.titulo}": no se borra de Fireflies porque no se pudo verificar el Doc en Drive o cambiar la liga: ${describir(error)}`,
-          error
-        );
-        if (error instanceof ErrorReconectarGoogle) {
-          break;
-        }
-        continue;
-      }
-      await borrarYMarcar(l.id);
     }
   }
   return resumen;
 }
 
 /**
- * Comprueba que el Doc subido quedo bien antes de borrar nada: es un Google
- * Doc, no esta en la papelera, esta en la carpeta y el texto exportado trae el
- * final de la conversacion (la subida no se corto).
+ * Comprueba que el Doc subido quedo bien: es un Google Doc, no esta en la
+ * papelera, esta en la carpeta y el texto exportado trae el final de la
+ * conversacion (la subida no se corto).
  */
 export function verificacionDeDoc(deps: {
   token: () => Promise<string>;

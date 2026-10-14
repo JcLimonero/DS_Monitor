@@ -228,21 +228,35 @@ búsquedas lo excluyen en el SQL salvo que quien pregunta lo pida y pueda verlo.
 - Cada día, después de las 4:00 hora de México, el puente reconcilia Drive contra la base (ediciones, movimientos, borrados).
 - En Coolify la base es `pgvector/pgvector:pg16`. En Render el arranque corre `CREATE EXTENSION vector`.
 
-Variables nuevas: `RAG_EMBEDDINGS_MODELO`, `RAG_BACKFILL_PUENTE`, `RAG_BACKFILL_TOKEN`, y en `INGESTA_CLIENTES` los tipos `rag` y `rag-consulta` (sexta columna = empresas permitidas).
+**Lectura y reconciliación de Drive.** El puente no escribe Markdown nuevo a
+Drive (eso lo hace una rutina externa). Para leer e indexar usa una cuenta de
+servicio (`GOOGLE_DRIVE_CUENTA_SERVICIO`, JSON en una línea) con acceso a la
+carpeta raíz `RAG_DRIVE_RAIZ` y, si hace falta, a las carpetas por empresa
+(`RAG_DRIVE_CARPETA_DEALER`, `RAG_DRIVE_CARPETA_NEXUS`,
+`RAG_DRIVE_CARPETA_OPERATIV`, `RAG_DRIVE_CARPETA_ITECH`). Esas variables las
+leen `configuracionRag` (`src/rag/config.ts`), el programable «rag vectorial»
+y `npm run rag:backfill`. Los ids de carpeta no van en el repositorio.
+
+Otras variables: `RAG_EMBEDDINGS_MODELO`, `RAG_BACKFILL_PUENTE`,
+`RAG_BACKFILL_TOKEN`, y en `INGESTA_CLIENTES` los tipos `rag` y `rag-consulta`
+(sexta columna = empresas permitidas).
 
 ## Llamadas de Fireflies archivadas en Drive
 
 El texto completo de cada llamada que graba Fireflies se guarda como **Google
 Doc** en una carpeta de Drive (por omisión "DS Monitor · Transcripciones", la
-crea la propia aplicación) y, solo después de comprobar que el Doc quedó, se
-**borra de Fireflies** para liberar espacio. El portal las lista en el módulo
-**Llamadas**, con una liga a cada Doc.
+crea la propia aplicación). El portal las lista en el módulo **Llamadas**, con
+una liga a cada Doc. **El puente no borra transcripciones de Fireflies**
+(`deleteTranscript` no se llama): eso lo hace una rutina externa después de
+guardar en Drive. El interruptor del módulo queda apagado y deshabilitado
+(`borrarDeFireflies` siempre es `false`).
 
 El flujo, por cada transcripción (`src/llamadas/servicio.ts`):
 
 1. Si todavía no se procesó y trae acuerdos, primero se procesa (se crea el
-   pendiente de la junta, como hace el programable de juntas); las que tienen
-   menos de 12 horas se esperan para que Fireflies termine su resumen.
+   pendiente de la junta); las que tienen menos de 12 horas se esperan para
+   que Fireflies termine su resumen. El programable «juntas de Fireflies» ya
+   no corre: los pendientes `fireflies-{id}` los crea una rutina externa.
 2. Se baja la conversación completa (sin recortar) y se arma el documento:
    encabezado (título, fecha en es-MX, duración, participantes, resumen y
    acuerdos) y una línea por frase, `[mm:ss] Nombre: frase`.
@@ -252,16 +266,14 @@ El flujo, por cada transcripción (`src/llamadas/servicio.ts`):
    carpeta y su texto exportado trae el final de la conversación.
 5. Se anota en la tabla `llamadas` y las ligas de Fireflies en los pendientes de
    esa junta (y en lo editado a mano) pasan a apuntar al Doc.
-6. Se borra de Fireflies (`deleteTranscript`) y se marca `borradaDeFireflies`.
 
-Si algo falla antes del borrado la llamada se queda en Fireflies y se reintenta
-en la siguiente corrida; los borrados que fallaron también se reintentan. Una
-conversación de más de ~900 mil caracteres no cabe en un Google Doc: se queda en
-Fireflies con un aviso. Corre sola cada 6 horas (programable "llamadas a
-Drive") y se fuerza con `POST /llamadas/archivar` (cuerpo opcional `{ "id" }`;
-hace hasta 15 por corrida y dice cuántas quedan). Rutas de administrador:
-`GET /llamadas`, `GET /llamadas/estado`, `POST /llamadas/config`
-(`borrarDeFireflies`, `carpetaNombre`).
+Si algo falla la llamada se queda en Fireflies y se reintenta en la siguiente
+corrida. Una conversación de más de ~900 mil caracteres no cabe en un Google
+Doc: se queda en Fireflies con un aviso. Corre sola cada 6 horas (programable
+"llamadas a Drive") y se fuerza con `POST /llamadas/archivar` (cuerpo opcional
+`{ "id" }`; hace hasta 15 por corrida y dice cuántas quedan). Rutas de
+administrador: `GET /llamadas`, `GET /llamadas/estado`, `POST /llamadas/config`
+(`carpetaNombre`; `borrarDeFireflies` se ignora).
 
 - **Permiso nuevo de Google.** Se agregó `drive.file` a los permisos del OAuth
   (solo ve lo que la aplicación misma crea, no el resto del Drive). Las cuentas
@@ -270,11 +282,6 @@ hace hasta 15 por corrida y dice cuántas quedan). Rutas de administrador:
   falta el permiso. También hay que tener activada la API de Google Drive en el
   proyecto de Google Cloud de la aplicación. Se usa la primera cuenta de Google
   conectada.
-- **El borrado en Fireflies es irreversible.** Está encendido por omisión; se
-  apaga con el interruptor "Borrar de Fireflies al archivar" del módulo Llamadas
-  (`borrarDeFireflies: false`) y entonces solo se archiva. Si la API key o el
-  plan de Fireflies no permiten borrar, el Doc queda guardado, el error se
-  anota (y se muestra en el portal) y no se insiste en esa corrida.
 
 ## Acceso, equipo y dominios
 

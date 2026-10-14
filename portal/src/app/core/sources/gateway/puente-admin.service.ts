@@ -10,7 +10,6 @@ import {
   Empresa,
   LicenseAdjustment,
   LicenseRenewal,
-  JuntaRag,
   LlamadaArchivada,
   ManualLicense,
   Person,
@@ -658,33 +657,6 @@ export class PuenteAdminService {
       opciones,
       { headers: this.headers() }
     );
-  }
-
-  /** Juntas que no se pudieron asociar a un cliente y un proyecto. */
-  juntasSinAsignar(): Observable<JuntaRag[]> {
-    return this.http.get<JuntaRag[]>(
-      this.url('/juntas-rag?estado=sin_asignar'),
-      { headers: this.headers() }
-    );
-  }
-
-  /** Asigna la junta y la archiva en Drive. Itech usa nombres, no ids de CRM. */
-  asignarJunta(
-    id: string,
-    cuerpo: {
-      clienteId?: string;
-      proyectoId?: string;
-      clienteNombre?: string;
-      proyectoNombre?: string;
-    }
-  ): Observable<{ estado: string; motivo?: string; driveUrl?: string }> {
-    return this.http.post<{
-      estado: string;
-      motivo?: string;
-      driveUrl?: string;
-    }>(this.url(`/juntas-rag/${encodeURIComponent(id)}/asignar`), cuerpo, {
-      headers: this.headers()
-    });
   }
 
   guardarConfigLlamadas(config: {
