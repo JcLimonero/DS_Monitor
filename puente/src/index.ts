@@ -18,6 +18,7 @@ import {
   PersistenciaPostgres,
   copiarPersistencia
 } from './datos/persistencia-postgres.js';
+import { asegurarEsquemaRag } from './rag/esquema.js';
 import { Cache } from './nucleo/cache.js';
 import { programar } from './nucleo/programador.js';
 import type { Programable } from './servidor/rutas-ia.js';
@@ -110,6 +111,13 @@ if (urlBase) {
       }
     }
     persistencia = postgres;
+    try {
+      await asegurarEsquemaRag(postgres.sql);
+    } catch (error) {
+      console.error(
+        `[puente] RAG vectorial: no se pudo preparar pgvector (${error instanceof Error ? error.message : error}). La búsqueda de juntas queda apagada hasta que la extensión vector exista.`
+      );
+    }
   } catch (error) {
     console.error(
       `[puente] no se pudo usar la base de datos (${error instanceof Error ? error.message : error}); se sigue con archivos`

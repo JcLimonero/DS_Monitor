@@ -213,6 +213,23 @@ así que el barrido puede alimentar los ocho buzones hasta que cada uno tenga su
 contraseña en el puente. Un buzón grande (decenas de miles de mensajes) tarda
 varios minutos; conviene programarlo cada hora con `launchd` o `cron`.
 
+## RAG vectorial de juntas
+
+Las juntas que ya viven como Markdown en Drive se indexan en la misma Postgres
+(`rag_documentos` y `rag_fragmentos`, fuera de `AlmacenTabla`). pgvector guarda
+`halfvec(1536)` con índice HNSW; el texto en español va en un `tsvector`. Itech
+Dev está en la misma base, columna `empresa`, y **no entra al CRM**. Las
+búsquedas lo excluyen en el SQL salvo que quien pregunta lo pida y pueda verlo.
+
+- `POST /ingesta/rag` (emisor tipo `rag`): cuerpo `{ driveFileId, driveUrl, ruta, markdown }`. Si el sha256 no cambió, no se reembebe. Ver `INGESTA.md`.
+- `POST /rag/buscar` y `POST /rag/preguntar`: búsqueda híbrida (vector + full-text, fusión RRF) y, en preguntar, respuesta de OpenRouter citando la liga de Drive de cada junta.
+- Modelo de embeddings: `RAG_EMBEDDINGS_MODELO` (omisión `openai/text-embedding-3-small`), con `OPENROUTER_API_KEY`.
+- Carga inicial: `npm run rag:backfill` (recorre Drive y llama al mismo endpoint).
+- Cada día, después de las 4:00 hora de México, el puente reconcilia Drive contra la base (ediciones, movimientos, borrados).
+- En Coolify la base es `pgvector/pgvector:pg16`. En Render el arranque corre `CREATE EXTENSION vector`.
+
+Variables nuevas: `RAG_EMBEDDINGS_MODELO`, `RAG_BACKFILL_PUENTE`, `RAG_BACKFILL_TOKEN`, y en `INGESTA_CLIENTES` los tipos `rag` y `rag-consulta` (sexta columna = empresas permitidas).
+
 ## Llamadas de Fireflies archivadas en Drive
 
 El texto completo de cada llamada que graba Fireflies se guarda como **Google

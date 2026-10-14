@@ -97,6 +97,11 @@ export interface ClienteIngesta {
    * reporta como vencido. 0 significa que nunca vence.
    */
   vigenciaSegundos: number;
+  /**
+   * Empresas que un emisor `rag-consulta` puede leer. Vacio: todas menos
+   * Itech, y no puede pedirla. `itech-dev` sola: solo Itech.
+   */
+  empresas?: string[];
 }
 
 /**
@@ -324,6 +329,11 @@ export interface Configuracion {
    * y quedan en la bandeja, pero no se suben a Drive ni se borran de Fireflies.
    */
   ragDrive?: ConfiguracionRagDrive;
+  /**
+   * Modelo de embeddings del RAG de juntas, via OpenRouter. Por omision
+   * openai/text-embedding-3-small (1536 dimensiones, halfvec).
+   */
+  ragEmbeddingsModelo: string;
   prometheus?: ConfiguracionServidores;
   coolify?: ConfiguracionCoolify;
   cloudflare?: ConfiguracionCloudflare;
@@ -437,16 +447,23 @@ function clientesIngesta(): ClienteIngesta[] {
     .filter(
       (partes) => partes.length >= 3 && partes[0] && partes[1] && partes[2]
     )
-    .map((partes) => ({
-      nombre: partes[0] as string,
-      token: partes[1] as string,
-      tipos: (partes[2] as string)
+    .map((partes) => {
+      const empresas = (partes[5] ?? '')
         .split(',')
-        .map((tipo) => tipo.trim())
-        .filter(Boolean),
-      accountId: partes[3] || (partes[0] as string),
-      vigenciaSegundos: Number(partes[4] ?? '0') || 0
-    }));
+        .map((empresa) => empresa.trim())
+        .filter(Boolean);
+      return {
+        nombre: partes[0] as string,
+        token: partes[1] as string,
+        tipos: (partes[2] as string)
+          .split(',')
+          .map((tipo) => tipo.trim())
+          .filter(Boolean),
+        accountId: partes[3] || (partes[0] as string),
+        vigenciaSegundos: Number(partes[4] ?? '0') || 0,
+        ...(empresas.length > 0 ? { empresas } : {})
+      };
+    });
 }
 
 /**
@@ -686,6 +703,8 @@ function leer(): Configuracion {
       ? { apiKey: texto('FIREFLIES_API_KEY') as string }
       : undefined,
     ragDrive: configuracionRag(texto),
+    ragEmbeddingsModelo:
+      texto('RAG_EMBEDDINGS_MODELO') ?? 'openai/text-embedding-3-small',
     telegram: texto('TELEGRAM_BOT_TOKEN')
       ? {
           token: texto('TELEGRAM_BOT_TOKEN') as string,
