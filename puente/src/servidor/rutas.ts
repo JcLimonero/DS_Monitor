@@ -229,7 +229,6 @@ import type {
   ConfiguracionVercel
 } from '../config/entorno.js';
 import {
-  borrarTranscripcion,
   transcripcion,
   transcripcionesRecientes
 } from '../proveedores/fireflies.js';
@@ -4861,10 +4860,9 @@ export function construirRutas(
       : []
   );
 
-  // Cada junta que Fireflies transcribe se vuelve un pendiente padre con
-  // subtareas (una por acuerdo), una sola vez por transcripcion. Corre solo
-  // cada 15 min; /fireflies/procesar lo fuerza. Despues se archiva en el RAG.
-  let archivarRagDe: (id: string) => Promise<void> = async () => {};
+  // Crea el pendiente padre fireflies-{id} con subtareas. Ya no corre solo:
+  // una rutina externa los crea. Queda POST /fireflies/procesar para forzar
+  // a mano, y Llamadas lo usa si una transcripcion todavia no se proceso.
   const procesarTranscripcion = async (
     id: string,
     ahora = new Date()
@@ -4916,13 +4914,6 @@ export function construirRutas(
         url: '/pendientes',
         etiqueta: `fireflies:${id}`
       });
-    }
-    try {
-      await archivarRagDe(id);
-    } catch (error) {
-      console.warn(
-        `[puente] RAG de la junta "${completa.titulo}": ${(error as Error).message}`
-      );
     }
     return { titulo: completa.titulo, pendientes: agregados, acuerdos };
   };
@@ -5004,40 +4995,11 @@ export function construirRutas(
     return procesarTranscripcion(id);
   });
 
-  programables.push({
-    nombre: 'juntas de Fireflies',
-    cadaMinutos: REVISION_MINUTOS.juntas,
-    correr: async () => {
-      const fireflies = cfg().fireflies;
-      if (!fireflies) {
-        return 'omitida';
-      }
-      const procesadas = datos.firefliesProcesadas.leer();
-      const recientes = await transcripcionesRecientes(fireflies, 3, 20);
-      for (const t of recientes) {
-        if (procesadas[t.id] || !t.acuerdos) {
-          continue;
-        }
-        try {
-          const r = await procesarTranscripcion(t.id);
-          console.log(
-            `[puente] junta "${r.titulo}": ${r.pendientes} pendiente(s), ${r.acuerdos} acuerdos desde Fireflies`
-          );
-        } catch (error) {
-          console.warn(
-            `[puente] Fireflies "${t.titulo}": ${(error as Error).message}`
-          );
-        }
-      }
-      return;
-    }
-  });
-
   // --- Llamadas: el texto de las juntas de Fireflies, guardado en Drive ---
   //
-  // Cada transcripcion ya procesada se sube como Google Doc a una carpeta que
-  // crea la propia aplicacion (permiso `drive.file`), se verifica y, solo
-  // entonces, se borra de Fireflies para liberar espacio.
+  // Cada transcripcion se sube como Google Doc a una carpeta que crea la
+  // propia aplicacion (permiso `drive.file`) y se verifica. El puente no
+  // borra de Fireflies: eso lo hace una rutina externa despues de Drive.
 
   /** El buzon de Google conectado que se usa para Drive. */
   const cuentaDrive = (): ConfiguracionCorreo | undefined => {
@@ -5072,8 +5034,7 @@ export function construirRutas(
       fireflies: {
         listar: (saltar, limite) =>
           transcripcionesRecientes(fireflies, 0, limite, saltar),
-        bajar: (id) => transcripcion(fireflies, id),
-        borrar: (id) => borrarTranscripcion(fireflies, id)
+        bajar: (id) => transcripcion(fireflies, id)
       },
       drive: {
         carpeta: async () => {
@@ -5125,9 +5086,6 @@ export function construirRutas(
           exportar: textoDeDocumento
         })
       },
-      borrarDeFireflies: () =>
-        datos.llamadasConfig.leer().borrarDeFireflies &&
-        cfg().ragDrive === undefined,
       llamadas: () => datos.llamadas.leer(),
       guardar: async (lista) => {
         await datos.llamadas.escribir(lista);
@@ -5206,7 +5164,7 @@ export function construirRutas(
       rag: cfg().ragDrive !== undefined,
       cuenta: cuenta?.google?.conectadaComo ?? cuenta?.usuario,
       carpeta: ajustes.carpetaNombre,
-      borrarDeFireflies: ajustes.borrarDeFireflies,
+      borrarDeFireflies: false,
       enCurso: archivandoLlamadas,
       ultima: datos.llamadasEstado.leer().ultima
     };
@@ -5256,10 +5214,8 @@ export function construirRutas(
         return 'omitida';
       }
       const r = await correrArchivado({});
-      if (r.archivadas > 0 || r.borradas > 0) {
-        console.log(
-          `[puente] llamadas: ${r.archivadas} archivada(s) en Drive, ${r.borradas} borrada(s) de Fireflies`
-        );
+      if (r.archivadas > 0) {
+        console.log(`[puente] llamadas: ${r.archivadas} archivada(s) en Drive`);
       }
       return;
     }
@@ -6217,54 +6173,19 @@ export function construirRutas(
     equipo: equipoCompleto
   });
 
-  const juntasRag = registrarJuntasRag({
+  registrarJuntasRag({
     router,
     datos: {
       juntasRag: datos.juntasRag,
-      empresas: datos.empresas,
-      crmClientes: datos.crmClientes,
-      crmContactos: datos.crmContactos,
       crmProyectos: datos.crmProyectos,
-      crmActividades: datos.crmActividades,
-      personales: datos.personales,
-      llamadasConfig: datos.llamadasConfig,
       rolesCrm: datos.rolesCrm,
       usuariosCrm: datos.usuariosCrm
     },
     cfg,
     correoDeSesion: (contexto) => acceso.sesionDe(tokenDe(contexto))?.correo,
     correosDelDueno: () => [...correosDelDueno()],
-    esAdmin: (contexto) => esAdmin(tokenDe(contexto), cfg()),
-    bajar: async (id) => {
-      const fireflies = cfg().fireflies;
-      if (!fireflies) {
-        throw new ErrorConfiguracion(
-          'Falta la API key de Fireflies (Integraciones → Fireflies).'
-        );
-      }
-      return transcripcion(fireflies, id);
-    },
-    borrar: async (id) => {
-      const fireflies = cfg().fireflies;
-      if (!fireflies) {
-        throw new ErrorConfiguracion(
-          'Falta la API key de Fireflies (Integraciones → Fireflies).'
-        );
-      }
-      await borrarTranscripcion(fireflies, id);
-    },
-    listarRecientes: async () => {
-      const fireflies = cfg().fireflies;
-      if (!fireflies) {
-        return [];
-      }
-      return transcripcionesRecientes(fireflies, 3, 20);
-    },
-    programables
+    esAdmin: (contexto) => esAdmin(tokenDe(contexto), cfg())
   });
-  archivarRagDe = async (id) => {
-    await juntasRag.archivar(id);
-  };
 
   registrarRagVectorial({
     router,

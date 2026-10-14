@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { LlamadaArchivada } from '../nucleo/contrato.js';
-import {
-  ErrorBorradoNoPermitido,
-  ErrorProveedor,
-  ErrorReconectarGoogle
-} from '../nucleo/errores.js';
+import { ErrorProveedor, ErrorReconectarGoogle } from '../nucleo/errores.js';
 import type { Transcripcion } from '../proveedores/fireflies.js';
 import {
   archivarLlamadas,
@@ -39,11 +35,9 @@ function armar(
   remotas: Transcripcion[],
   opciones: {
     procesadas?: string[];
-    borrar?: boolean;
     falla?: Partial<{
       subir: Error;
       verificar: Error;
-      borrar: Error;
       carpeta: Error;
       procesar: Error;
     }>;
@@ -65,12 +59,6 @@ function armar(
           throw new Error('no existe');
         }
         return t;
-      },
-      borrar: async (id) => {
-        b.eventos.push(`borrar:${id}`);
-        if (opciones.falla?.borrar) {
-          throw opciones.falla.borrar;
-        }
       }
     },
     drive: {
@@ -95,7 +83,6 @@ function armar(
         }
       }
     },
-    borrarDeFireflies: () => opciones.borrar ?? true,
     llamadas: () => b.llamadas,
     guardar: async (lista) => {
       b.eventos.push(
@@ -121,26 +108,24 @@ function armar(
 }
 
 describe('archivarLlamadas', () => {
-  it('sube, verifica, anota y solo despues borra de Fireflies', async () => {
+  it('sube, verifica, anota y no borra de Fireflies', async () => {
     const { p, b } = armar([trans('a')], { procesadas: ['a'] });
     const r = await archivarLlamadas(p);
     assert.deepEqual(
       { a: r.archivadas, b: r.borradas, e: r.errores },
-      { a: 1, b: 1, e: [] }
+      { a: 1, b: 0, e: [] }
     );
     assert.deepEqual(b.eventos, [
       'subir:a:2026-09-25 — Junta a',
       'verificar:doc-a',
       'guardar:a=false',
-      'liga',
-      'borrar:a',
-      'guardar:a=true'
+      'liga'
     ]);
     assert.deepEqual(b.ligas, [
       ['https://app.fireflies.ai/view/a', 'https://docs.google.com/d/a']
     ]);
     assert.equal(b.llamadas[0]?.docUrl, 'https://docs.google.com/d/a');
-    assert.equal(b.llamadas[0]?.borradaDeFireflies, true);
+    assert.equal(b.llamadas[0]?.borradaDeFireflies, false);
   });
 
   it('si la subida falla no anota ni borra, y lo dice', async () => {
@@ -189,30 +174,6 @@ describe('archivarLlamadas', () => {
     );
   });
 
-  it('con el interruptor apagado guarda el Doc y no borra', async () => {
-    const { p, b } = armar([trans('a')], { procesadas: ['a'], borrar: false });
-    const r = await archivarLlamadas(p);
-    assert.equal(r.archivadas, 1);
-    assert.equal(r.borradas, 0);
-    assert.ok(!b.eventos.some((e) => e.startsWith('borrar')));
-    assert.equal(b.llamadas[0]?.borradaDeFireflies, false);
-  });
-
-  it('si Fireflies no deja borrar, el Doc queda anotado y no se insiste con las demas', async () => {
-    const { p, b } = armar([trans('a'), trans('b')], {
-      procesadas: ['a', 'b'],
-      falla: {
-        borrar: new ErrorBorradoNoPermitido('require_elevated_privilege')
-      }
-    });
-    const r = await archivarLlamadas(p);
-    assert.equal(r.archivadas, 2);
-    assert.equal(r.borradas, 0);
-    assert.equal(b.eventos.filter((e) => e.startsWith('borrar')).length, 1);
-    assert.ok(r.errores.some((e) => /no permite borrar/.test(e)));
-    assert.ok(b.llamadas.every((l) => !l.borradaDeFireflies));
-  });
-
   const sinBorrar: LlamadaArchivada = {
     id: 'vieja',
     titulo: 'Vieja',
@@ -224,124 +185,25 @@ describe('archivarLlamadas', () => {
     borradaDeFireflies: false
   };
 
-  it('reintenta los borrados pendientes, verificando antes el Doc', async () => {
+  it('una ya archivada no se vuelve a tocar ni se borra de Fireflies', async () => {
     const { p, b } = armar([trans('vieja')], { existentes: [sinBorrar] });
     const r = await archivarLlamadas(p);
     assert.equal(r.archivadas, 0);
-    assert.equal(r.borradas, 1);
-    assert.deepEqual(b.eventos.slice(0, 3), [
-      'verificar:d',
-      'liga',
-      'borrar:vieja'
-    ]);
-    assert.equal(b.llamadas[0]?.borradaDeFireflies, true);
-  });
-
-  for (const [caso, falla] of [
-    [
-      'el Doc está en la papelera',
-      new Error('el Doc está en la papelera de Drive')
-    ],
-    [
-      'el Doc se borró de Drive',
-      new ErrorProveedor('google', 'Drive respondió 404')
-    ],
-    [
-      'el Doc no trae el contenido',
-      new Error('no trae el final de la conversación')
-    ]
-  ] as const) {
-    it(`el reintento no borra de Fireflies si ${caso}`, async () => {
-      const { p, b } = armar([trans('vieja')], {
-        existentes: [sinBorrar],
-        falla: { verificar: falla }
-      });
-      const r = await archivarLlamadas(p);
-      assert.equal(r.borradas, 0);
-      assert.ok(!b.eventos.some((e) => e.startsWith('borrar')));
-      assert.match(r.errores[0] as string, /no se pudo verificar el Doc/);
-      assert.equal(b.llamadas[0]?.borradaDeFireflies, false);
-    });
-  }
-
-  it('el reintento no borra si la cuenta perdió el permiso de Drive', async () => {
-    const { p, b } = armar([trans('vieja')], {
-      existentes: [sinBorrar],
-      falla: { carpeta: new ErrorReconectarGoogle() }
-    });
-    const r = await archivarLlamadas(p);
     assert.equal(r.borradas, 0);
-    assert.ok(!b.eventos.some((e) => e.startsWith('borrar')));
-    assert.equal(r.reconectarGoogle, true);
+    assert.deepEqual(b.eventos, []);
+    assert.equal(b.llamadas[0]?.borradaDeFireflies, false);
   });
 
-  it('si el paso de archivar corta por falta de permiso, tampoco reintenta borrados', async () => {
-    const { p, b } = armar([trans('a'), trans('vieja')], {
-      procesadas: ['a'],
-      existentes: [sinBorrar],
-      falla: { subir: new ErrorReconectarGoogle() }
-    });
-    const r = await archivarLlamadas(p);
-    assert.equal(r.archivadas, 0);
-    assert.equal(r.reconectarGoogle, true);
-    assert.ok(!b.eventos.some((e) => e.startsWith('borrar')));
-    assert.ok(!b.eventos.includes('verificar:d'));
-  });
-
-  it('si la llamada ya no está en Fireflies solo se anota como borrada', async () => {
-    const { p, b } = armar([], { existentes: [sinBorrar] });
-    p.fireflies.bajar = async () => {
-      throw new ErrorProveedor('fireflies', 'not found', 404);
-    };
-    const r = await archivarLlamadas(p);
-    assert.equal(r.borradas, 0);
-    assert.equal(r.errores.length, 0);
-    assert.equal(b.llamadas[0]?.borradaDeFireflies, true);
-    assert.ok(!b.eventos.some((e) => e.startsWith('borrar')));
-  });
-
-  it('con soloArchivar sube los Docs pero no borra ni reintenta borrados', async () => {
-    const { p, b } = armar([trans('a'), trans('vieja')], {
-      procesadas: ['a'],
-      existentes: [sinBorrar]
-    });
-    const r = await archivarLlamadas(p, { soloArchivar: true });
-    assert.equal(r.archivadas, 1);
-    assert.equal(r.borradas, 0);
-    assert.ok(!b.eventos.some((e) => e.startsWith('borrar')));
-    assert.ok(b.llamadas.every((l) => !l.borradaDeFireflies));
-  });
-
-  it('si no se pudo cambiar la liga en los pendientes no borra, y la próxima corrida sí', async () => {
+  it('si no se pudo cambiar la liga, el Doc igual queda archivado y no se borra', async () => {
     const { p, b } = armar([trans('a')], { procesadas: ['a'] });
-    const liga = p.reemplazarLiga;
     p.reemplazarLiga = async () => {
       throw new Error('disco lleno');
     };
-    const r1 = await archivarLlamadas(p);
-    assert.equal(r1.archivadas, 1);
-    assert.equal(r1.borradas, 0);
-    assert.match(r1.errores[0] as string, /no se borra de Fireflies todavía/);
-    assert.ok(!b.eventos.some((e) => e.startsWith('borrar')));
-    p.reemplazarLiga = liga;
-    const r2 = await archivarLlamadas(p);
-    assert.equal(r2.borradas, 1);
-  });
-
-  it('si falla guardar después de borrar, la corrida conserva su resumen', async () => {
-    const { p, b } = armar([trans('a')], { procesadas: ['a'] });
-    const guardar = p.guardar;
-    p.guardar = async (lista) => {
-      if (lista.some((l) => l.borradaDeFireflies)) {
-        throw new Error('sin espacio');
-      }
-      await guardar(lista);
-    };
     const r = await archivarLlamadas(p);
     assert.equal(r.archivadas, 1);
-    assert.equal(r.borradas, 1);
-    assert.ok(r.errores.some((e) => /no se pudo anotar/.test(e)));
-    assert.ok(b.eventos.includes('borrar:a'));
+    assert.equal(r.borradas, 0);
+    assert.match(r.errores[0] as string, /no se pudo cambiar la liga/);
+    assert.equal(b.llamadas[0]?.borradaDeFireflies, false);
   });
 
   it('pagina saltando las ya archivadas para alcanzar las viejas', async () => {
@@ -555,5 +417,16 @@ describe('verificacionDeDoc', () => {
       })(doc, 'c', texto),
       /final de la conversación/
     );
+  });
+});
+
+describe('limpiarConfigLlamadas', () => {
+  it('el interruptor queda apagado aunque manden true', async () => {
+    const { limpiarConfigLlamadas } = await import('./config.js');
+    const r = limpiarConfigLlamadas(
+      { carpetaNombre: 'X', borrarDeFireflies: true },
+      { borrarDeFireflies: true }
+    );
+    assert.equal(r.borrarDeFireflies, false);
   });
 });

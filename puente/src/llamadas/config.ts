@@ -8,7 +8,11 @@ export interface ConfigLlamadas {
   carpetaNombre: string;
   /** Se guarda al crear la carpeta; si desaparece, se vuelve a buscar por nombre. */
   carpetaId?: string;
-  /** Borrar de Fireflies despues de verificar el Doc (irreversible). */
+  /**
+   * Apagado: el puente ya no borra transcripciones. Lo hace una rutina
+   * externa despues de guardarlas en Drive. Se conserva el campo para no
+   * romper el documento guardado.
+   */
   borrarDeFireflies: boolean;
   /** El buzon de Google a usar para Drive; sin valor, el primero conectado. */
   cuenta?: string;
@@ -16,7 +20,7 @@ export interface ConfigLlamadas {
 
 export const CONFIG_LLAMADAS_POR_OMISION: ConfigLlamadas = {
   carpetaNombre: CARPETA_POR_OMISION,
-  borrarDeFireflies: true
+  borrarDeFireflies: false
 };
 
 /** La ultima corrida, para que el portal diga que paso. */
@@ -31,9 +35,8 @@ export function limpiarConfigLlamadas(
 ): ConfigLlamadas {
   const c = (cambios ?? {}) as Record<string, unknown>;
   const salida = { ...CONFIG_LLAMADAS_POR_OMISION, ...actual };
-  if (typeof c['borrarDeFireflies'] === 'boolean') {
-    salida.borrarDeFireflies = c['borrarDeFireflies'];
-  }
+  // El puente no borra Fireflies: un true guardado o mandado no se honra.
+  salida.borrarDeFireflies = false;
   if (typeof c['carpetaNombre'] === 'string' && c['carpetaNombre'].trim()) {
     const nombre = c['carpetaNombre'].trim().slice(0, 120);
     if (nombre !== salida.carpetaNombre) {

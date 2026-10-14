@@ -77,8 +77,7 @@
       <section class="card card-pad text-sm" role="status">
         <p class="font-semibold text-ink">
           {{ plural(r.archivadas, "llamada archivada", "llamadas archivadas") }}
-          en Drive y {{ r.borradas }}
-          {{ r.borradas === 1 ? "borrada" : "borradas" }} de Fireflies.
+          en Drive.
         </p>
         @if (r.pendientes > 0) {
           <p class="mt-1 text-ink-muted">
@@ -113,153 +112,22 @@
         </p>
         <div class="flex flex-col gap-0.5 text-ink">
           <label
-            class="flex min-h-10 cursor-pointer items-center gap-2"
-            title="Borrar es irreversible: la conversación solo queda en Drive.">
+            class="flex min-h-10 items-center gap-2 text-ink-muted"
+            title="El puente ya no borra transcripciones: lo hace la rutina que las guarda en Drive.">
             <input
               type="checkbox"
-              class="h-5 w-5 rounded border-line accent-brand focus:ring-brand"
-              [checked]="e.borrarDeFireflies"
-              [disabled]="guardandoConfig()"
-              (change)="cambiarBorrado($any($event.target).checked)"
+              class="h-5 w-5 rounded border-line accent-brand"
+              [checked]="false"
+              disabled
               name="borrar-de-fireflies" />
             Borrar de Fireflies al archivar
           </label>
-          <label class="flex min-h-10 cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              class="h-5 w-5 rounded border-line accent-brand focus:ring-brand"
-              [checked]="soloArchivar()"
-              (change)="soloArchivar.set($any($event.target).checked)"
-              name="solo-archivar" />
-            Solo archivar, sin borrar (esta vez)
-          </label>
         </div>
         <p class="text-xs text-ink-muted sm:basis-full">
-          @if (e.rag) {
-            Con el RAG activo, Fireflies solo se borra después de confirmar el
-            Markdown en la carpeta del proyecto. El borrado sigue siendo
-            irreversible.
-          } @else {
-            El borrado en Fireflies es irreversible y también elimina el audio,
-            el video y las analíticas; el Doc guarda título, fecha,
-            participantes, resumen, acuerdos y la conversación.
-          }
+          El puente no borra transcripciones de Fireflies. Eso lo hace la rutina
+          que las guarda en Drive. Aquí solo se archiva el Doc (título, fecha,
+          participantes, resumen, acuerdos y la conversación).
         </p>
-      </section>
-    }
-
-    @if (sinAsignar().length > 0) {
-      <section class="card card-pad space-y-4">
-        <div>
-          <h2 class="text-sm font-semibold text-ink">Juntas sin asignar</h2>
-          <p class="mt-1 text-sm text-ink-muted">
-            No se pudieron asociar con confianza a un cliente y un proyecto. Al
-            asignarlas se guardan en Drive. Las de Itech Dev piden el nombre del
-            cliente y del proyecto: sus acuerdos ya están en Pendientes y no se
-            anotan en la bitácora del CRM.
-          </p>
-        </div>
-        <ul class="space-y-4">
-          @for (junta of sinAsignar(); track junta.id) {
-            <li
-              class="space-y-3 border-t border-line pt-4 first:border-0 first:pt-0">
-              <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <h3 class="break-words text-sm font-medium text-ink">
-                    {{ junta.titulo }}
-                  </h3>
-                  @if (junta.esItech) {
-                    <span class="chip bg-surface-muted text-ink-muted">
-                      Itech Dev
-                    </span>
-                  }
-                </div>
-                <p class="mt-1 text-xs text-ink-muted">
-                  {{ junta.fecha | dia }}
-                  @if (junta.participantes.length > 0) {
-                    · {{ junta.participantes.join(", ") }}
-                  }
-                </p>
-                @if (junta.motivo) {
-                  <p class="mt-1 text-sm text-ink-muted">{{ junta.motivo }}</p>
-                }
-              </div>
-              @if (junta.esItech) {
-                <div class="grid gap-2 sm:grid-cols-2">
-                  <label class="block text-sm">
-                    <span class="mb-1 block text-ink-muted">Cliente</span>
-                    <input
-                      class="field w-full"
-                      type="text"
-                      name="cliente-{{ junta.id }}"
-                      [ngModel]="forma(junta.id).clienteNombre"
-                      (ngModelChange)="
-                        poner(junta.id, 'clienteNombre', $event)
-                      " />
-                  </label>
-                  <label class="block text-sm">
-                    <span class="mb-1 block text-ink-muted">Proyecto</span>
-                    <input
-                      class="field w-full"
-                      type="text"
-                      name="proyecto-{{ junta.id }}"
-                      [ngModel]="forma(junta.id).proyectoNombre"
-                      (ngModelChange)="
-                        poner(junta.id, 'proyectoNombre', $event)
-                      " />
-                  </label>
-                </div>
-              } @else {
-                <div class="grid gap-2 sm:grid-cols-2">
-                  <label class="block text-sm">
-                    <span class="mb-1 block text-ink-muted">Cliente</span>
-                    <select
-                      class="field w-full"
-                      name="cliente-{{ junta.id }}"
-                      [ngModel]="forma(junta.id).clienteId"
-                      (ngModelChange)="poner(junta.id, 'clienteId', $event)">
-                      <option value="">Elegir cliente</option>
-                      @for (cliente of clientes(); track cliente.id) {
-                        <option [value]="cliente.id">
-                          {{ cliente.nombre }}
-                        </option>
-                      }
-                    </select>
-                  </label>
-                  <label class="block text-sm">
-                    <span class="mb-1 block text-ink-muted">Proyecto</span>
-                    <select
-                      class="field w-full"
-                      name="proyecto-{{ junta.id }}"
-                      [ngModel]="forma(junta.id).proyectoId"
-                      (ngModelChange)="poner(junta.id, 'proyectoId', $event)">
-                      <option value="">Elegir proyecto</option>
-                      @for (
-                        proyecto of proyectosDe(forma(junta.id).clienteId);
-                        track proyecto.id
-                      ) {
-                        <option [value]="proyecto.id">
-                          {{ proyecto.nombre }}
-                        </option>
-                      }
-                    </select>
-                  </label>
-                </div>
-              }
-              <button
-                type="button"
-                class="btn btn-primary"
-                [disabled]="!puedeAsignar(junta)"
-                (click)="asignar(junta)">
-                {{
-                  asignando() === junta.id
-                    ? "Archivando…"
-                    : "Asignar y archivar"
-                }}
-              </button>
-            </li>
-          }
-        </ul>
       </section>
     }
 
@@ -335,7 +203,7 @@
           <pt-empty-state
             icon="video"
             title="Todavía no hay llamadas archivadas"
-            hint="Aquí quedan las conversaciones archivadas: se guardan en tu Drive y se borran de Fireflies. Las nuevas se archivan solas cada pocas horas; también puedes pulsar “Archivar ahora”." />
+            hint="Aquí quedan las conversaciones archivadas: se guardan en tu Drive. Las nuevas se archivan solas cada pocas horas; también puedes pulsar “Archivar ahora”." />
         }
       </section>
     }
