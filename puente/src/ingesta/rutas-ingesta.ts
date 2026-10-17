@@ -7,7 +7,15 @@ import {
   type PedidoConfirmar,
   type SeguimientoCrm
 } from '../datos/crm-seguimiento.js';
-import type { CrmOpportunity, MonitorTarget } from '../nucleo/contrato.js';
+import type {
+  CrmOpportunity,
+  MonitorTarget,
+  TaskItem
+} from '../nucleo/contrato.js';
+import {
+  homologarLista,
+  reusarIdsPorContenido
+} from '../pendientes/homologar.js';
 import { ErrorPuente } from '../nucleo/errores.js';
 import type { Contexto, Router } from '../servidor/router.js';
 import { AlmacenIngesta, origenValido } from './almacen.js';
@@ -345,7 +353,7 @@ export function registrarRutasIngesta(
         };
       }
 
-      const elementos =
+      let elementos =
         tipo === 'equipo'
           ? normalizarEquipo(datos)
           : tipo === 'pendientes'
@@ -366,6 +374,14 @@ export function registrarRutasIngesta(
                       cliente.accountId
                     )
                   : normalizarRepos(datos, cliente.accountId, ahora);
+
+      if (tipo === 'pendientes') {
+        const lista = homologarLista(elementos as TaskItem[]);
+        const previos =
+          almacen.leer<TaskItem>('pendientes', cliente.nombre)?.elementos ?? [];
+        elementos =
+          modo === 'agregar' ? reusarIdsPorContenido(previos, lista) : lista;
+      }
 
       const resultado = await almacen.guardar(
         tipo,
