@@ -22,6 +22,7 @@ import {
   type DocumentoAGuardar
 } from './almacen-vectorial.js';
 import { asegurarEsquemaRag } from './esquema.js';
+import { estimarTokens } from './fragmentar.js';
 import {
   abrirEsquemaAleatorio,
   urlDePrueba,
@@ -818,6 +819,157 @@ describe(
       const antes = await xmin();
       await e.ingerir(cuerpo);
       assert.deepEqual(await xmin(), antes);
+    });
+
+    // --- Cabecera del texto de los fragmentos --------------------------------
+    //
+    // `texto` empieza con una linea `[Empresa / Cliente / Proyecto] Junta ...`.
+    // Al realinear sin embeber se reescribe esa linea (y con ella el tsv), sin
+    // tocar el cuerpo ni el embedding.
+
+    async function fragmentosDe(driveFileId: string) {
+      return e.esquema.filas(
+        `SELECT f.id::text AS id, f.orden, f.texto, f.tokens, f.embedding::text AS emb
+           FROM rag_fragmentos f JOIN rag_documentos d ON d.id = f.documento_id
+          WHERE d.drive_file_id = $1 ORDER BY f.orden`,
+        [driveFileId]
+      );
+    }
+
+    const cuerpoDe = (texto: unknown) =>
+      String(texto).slice(String(texto).indexOf('\n'));
+    const cabeceraDe = (texto: unknown) =>
+      String(texto).slice(0, String(texto).indexOf('\n'));
+
+    async function coincidencias(consulta: string): Promise<number> {
+      const filas = await e.esquema.filas(
+        `SELECT count(*)::int AS n FROM rag_fragmentos
+          WHERE tsv @@ websearch_to_tsquery('spanish', $1)`,
+        [consulta]
+      );
+      return Number(filas[0]?.['n']);
+    }
+
+    it('al mover un archivo la cabecera del texto cambia, el cuerpo y el embedding no, y la busqueda por texto sigue al nombre nuevo', async () => {
+      const markdown = markdownDe('Con cabecera', 'tungsteno');
+      await e.ingerir({
+        driveFileId: 'drive-cabecera',
+        ruta: 'Empresas/Dealer Solutions/Grupo Cuarzo Boreal/Taller/02_Proyecto/c.md',
+        markdown
+      });
+      const antes = await fragmentosDe('drive-cabecera');
+      assert.ok(antes.length >= 2);
+      for (const f of antes) {
+        assert.match(cabeceraDe(f['texto']), /Cuarzo Boreal/);
+      }
+      assert.ok((await coincidencias('Cuarzo Boreal')) >= 2);
+      assert.equal(await coincidencias('Ambar Austral'), 0);
+
+      const pedidosAntes = e.embeddings();
+      const r = await e.ingerir({
+        driveFileId: 'drive-cabecera',
+        ruta: 'Empresas/Operativ AI/Grupo Ambar Austral/Otro/02_Proyecto/c.md',
+        markdown
+      });
+      assert.equal(r.omitido, true);
+      assert.equal(e.embeddings(), pedidosAntes, 'volvio a pedir embeddings');
+
+      const despues = await fragmentosDe('drive-cabecera');
+      assert.deepEqual(
+        despues.map((f) => f['id']),
+        antes.map((f) => f['id']),
+        'los fragmentos se borraron y se volvieron a insertar'
+      );
+      for (const [i, f] of despues.entries()) {
+        const cabecera = cabeceraDe(f['texto']);
+        assert.match(cabecera, /Grupo Ambar Austral/);
+        assert.match(cabecera, /Otro/);
+        assert.doesNotMatch(cabecera, /Cuarzo Boreal|Dealer Solutions/);
+        assert.equal(cuerpoDe(f['texto']), cuerpoDe(antes[i]?.['texto']));
+        assert.equal(f['emb'], antes[i]?.['emb'], 'cambio el embedding');
+        assert.equal(f['tokens'], estimarTokens(String(f['texto'])));
+      }
+      // El tsv se regenero con el texto nuevo.
+      assert.equal(await coincidencias('Cuarzo Boreal'), 0);
+      assert.ok((await coincidencias('Ambar Austral')) >= 2);
+      // Y lo que devuelve la busqueda ya no trae el nombre viejo.
+      const hallados = (await e.buscar('tok-operativ')).filter(
+        (h) => h.driveFileId === 'drive-cabecera'
+      );
+      assert.ok(hallados.length >= 2);
+      for (const h of hallados) {
+        assert.doesNotMatch(h.texto, /Cuarzo Boreal|Dealer Solutions/);
+      }
+    });
+
+    it('mover a otro cliente de la misma empresa tambien refresca la cabecera', async () => {
+      const markdown = markdownDe('Cabecera de cliente', 'vanadio');
+      await e.ingerir({
+        driveFileId: 'drive-cabecera-cliente',
+        ruta: 'Empresas/Dealer Solutions/Grupo Zafiro Viejo/Taller/02_Proyecto/c.md',
+        markdown
+      });
+      await e.ingerir({
+        driveFileId: 'drive-cabecera-cliente',
+        ruta: 'Empresas/Dealer Solutions/Grupo Zafiro Nuevo/Taller/02_Proyecto/c.md',
+        markdown
+      });
+      for (const f of await fragmentosDe('drive-cabecera-cliente')) {
+        assert.match(cabeceraDe(f['texto']), /Grupo Zafiro Nuevo/);
+        assert.doesNotMatch(cabeceraDe(f['texto']), /Zafiro Viejo/);
+      }
+    });
+
+    it('una cabecera que ya quedo vieja se refresca al reenviar lo mismo, aunque la clase no cambie', async () => {
+      const markdown = markdownDe('Cabecera atrasada', 'niobio');
+      const ruta = `${CLIENTE_B}/02_Proyecto/atrasada.md`;
+      await e.ingerir({ driveFileId: 'drive-atrasada', ruta, markdown });
+      const buena = await fragmentosDe('drive-atrasada');
+      // Lo que dejaria una realineacion hecha antes de que se refrescara el texto.
+      await e.esquema.sql.ejecutar(
+        `UPDATE rag_fragmentos
+            SET texto = '[Empresa Vieja / Cliente Viejo] Junta' || substr(texto, strpos(texto, chr(10)))
+          WHERE documento_id = (SELECT id FROM rag_documentos WHERE drive_file_id = 'drive-atrasada')`
+      );
+      assert.ok((await coincidencias('Cliente Viejo')) >= 2);
+      const pedidosAntes = e.embeddings();
+      const r = await e.ingerir({
+        driveFileId: 'drive-atrasada',
+        ruta,
+        markdown
+      });
+      assert.equal(r.omitido, true);
+      assert.equal(e.embeddings(), pedidosAntes);
+      const despues = await fragmentosDe('drive-atrasada');
+      assert.deepEqual(
+        despues.map((f) => f['texto']),
+        buena.map((f) => f['texto'])
+      );
+      assert.equal(await coincidencias('Cliente Viejo'), 0);
+    });
+
+    it('un fragmento cuyo cuerpo no coincide no se reescribe: su embedding ya no correspondería', async () => {
+      const markdown = markdownDe('Cuerpo distinto', 'cromo');
+      const ruta = `${CLIENTE_B}/02_Proyecto/cuerpo.md`;
+      await e.ingerir({ driveFileId: 'drive-cuerpo', ruta, markdown });
+      const buena = await fragmentosDe('drive-cuerpo');
+      assert.ok(buena.length >= 2);
+      await e.esquema.sql.ejecutar(
+        `UPDATE rag_fragmentos
+            SET texto = '[Vieja] Junta' || substr(texto, strpos(texto, chr(10)))
+                        || CASE WHEN orden = 0 THEN ' cuerpo alterado' ELSE '' END
+          WHERE documento_id = (SELECT id FROM rag_documentos WHERE drive_file_id = 'drive-cuerpo')`
+      );
+      await e.ingerir({ driveFileId: 'drive-cuerpo', ruta, markdown });
+      const despues = await fragmentosDe('drive-cuerpo');
+      // El de cuerpo alterado se queda tal cual; los demas recuperan su cabecera.
+      assert.match(String(despues[0]?.['texto']), /^\[Vieja\] Junta/);
+      assert.match(String(despues[0]?.['texto']), /cuerpo alterado$/);
+      for (const [i, f] of despues.entries()) {
+        if (i > 0) {
+          assert.equal(f['texto'], buena[i]?.['texto']);
+        }
+      }
     });
 
     // Un documento sin fragmentos solo tiene su fila de documento: lo unico que

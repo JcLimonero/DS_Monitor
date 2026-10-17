@@ -82,6 +82,7 @@ interface FilaDocumento {
   empresa?: unknown;
   cliente?: unknown;
   fragmentos_desalineados?: unknown;
+  cabecera_desalineada?: unknown;
 }
 
 type DatosDeSalto = Pick<
@@ -97,12 +98,30 @@ type DatosDeSalto = Pick<
   | 'cliente'
   | 'proyecto'
   | 'sensibilidad'
->;
+> & {
+  /**
+   * El texto que la ingesta acaba de armar para cada fragmento. Si viene, la
+   * cabecera de los fragmentos guardados se refresca (ver saltarSiNoCambio).
+   */
+  fragmentos?: readonly Pick<FragmentoAGuardar, 'orden' | 'texto' | 'tokens'>[];
+};
+
+/**
+ * Cuando el cuerpo de un fragmento es igual y solo cambia su primera linea (la
+ * cabecera `[Empresa / Cliente / Proyecto] Junta ...`, que fragmentar.ts antepone
+ * al cuerpo). Compara desde el primer salto de linea: si el cuerpo difiere (otro
+ * corte de fragmentos, otro algoritmo) no se toca, porque su embedding ya no
+ * correspondería al texto nuevo. Con strpos = 0 (sin salto) compara el texto
+ * entero, que por ser distinto nunca coincide.
+ */
+const MISMO_CUERPO = `substr(f.texto, strpos(f.texto, chr(10)))
+                       = substr(u.texto, strpos(u.texto, chr(10)))`;
 
 /**
  * Columnas del estado guardado de un documento y si algun fragmento suyo no
  * coincide con lo que trae la ingesta. `i` es el primer parametro de la clase:
- * sensibilidad, proyecto, empresa y cliente, en ese orden (ver claseDe).
+ * sensibilidad, proyecto, empresa y cliente, en ese orden (ver claseDe); le
+ * siguen el orden y el texto de los fragmentos nuevos (ver textosDe).
  */
 function columnasDeEstado(i: number): string {
   return `d.id, d.huella, d.modelo_emb, d.ruta, d.drive_url,
@@ -116,7 +135,16 @@ function columnasDeEstado(i: number): string {
                       OR f.proyecto IS DISTINCT FROM $${i + 1}::text
                       OR f.empresa IS DISTINCT FROM $${i + 2}::text
                       OR f.cliente IS DISTINCT FROM $${i + 3}::text)
-            ) AS fragmentos_desalineados`;
+            ) AS fragmentos_desalineados,
+            EXISTS (
+              SELECT 1
+                FROM rag_fragmentos f
+                JOIN unnest($${i + 4}::int[], $${i + 5}::text[])
+                       AS u(orden, texto) ON u.orden = f.orden
+               WHERE f.documento_id = d.id
+                 AND f.texto IS DISTINCT FROM u.texto
+                 AND ${MISMO_CUERPO}
+            ) AS cabecera_desalineada`;
 }
 
 function claseDe(doc: DatosDeSalto): unknown[] {
@@ -128,11 +156,17 @@ function claseDe(doc: DatosDeSalto): unknown[] {
   ];
 }
 
+/** Orden y texto de los fragmentos nuevos, o nada si la ingesta no los trae. */
+function textosDe(doc: DatosDeSalto): unknown[] {
+  const fragmentos = doc.fragmentos ?? [];
+  return [fragmentos.map((f) => f.orden), fragmentos.map((f) => f.texto)];
+}
+
 /** Que hay que escribir para que la fila guardada coincida con la ingesta. */
 function diferencias(
   fila: FilaDocumento,
   doc: DatosDeSalto
-): { ubicacion: boolean; clase: boolean } {
+): { ubicacion: boolean; clase: boolean; cabecera: boolean } {
   const ruta = texto(fila.ruta);
   const url = texto(fila.drive_url);
   const modificado = instante(fila.drive_modificado_en);
@@ -143,6 +177,7 @@ function diferencias(
     !mismoInstante(modificado, doc.modificadoEn);
   return {
     ubicacion: rutaCambia || urlCambia || tiempoCambia,
+    cabecera: fila.cabecera_desalineada === true,
     clase:
       fila.sensibilidad !== doc.sensibilidad ||
       (texto(fila.proyecto) ?? null) !== (doc.proyecto ?? null) ||
@@ -163,9 +198,14 @@ function diferencias(
  * el documento y en TODOS sus fragmentos, en una sola transaccion y sin pedir
  * embeddings. Asi un documento movido de carpeta o de empresa, o uno indexado
  * antes de que existieran esas columnas, se realinea al volver a correr
- * `npm run rag:backfill` o la reconciliacion diaria. El texto de los
- * fragmentos (su cabecera con empresa/cliente/proyecto) no se reescribe: sigue
- * con el nombre anterior hasta que cambie el contenido del archivo.
+ * `npm run rag:backfill` o la reconciliacion diaria.
+ *
+ * Si la ingesta trae el texto nuevo de los fragmentos (`fragmentos`), tambien se
+ * refresca su cabecera (`[Empresa / Cliente / Proyecto] ...`), que repite esos
+ * nombres: solo en los fragmentos cuyo cuerpo es identico, reescribiendo
+ * `texto` y `tokens` (el `tsv` se regenera) y sin tocar el embedding, que se
+ * calculo con la cabecera anterior. Asi el nombre de la empresa o del cliente
+ * anterior no se lee ni se encuentra por texto en el nuevo lugar.
  *
  * Devuelve `undefined` cuando hay que ingerir completo: el documento no
  * existe, cambio su huella o su modelo, o otra ingesta lo reemplazo mientras
@@ -180,7 +220,7 @@ export async function saltarSiNoCambio(
        FROM rag_documentos d
       WHERE d.drive_file_id = $1 OR d.id = $2
       LIMIT 1`,
-    [doc.driveFileId, doc.id, ...claseDe(doc)]
+    [doc.driveFileId, doc.id, ...claseDe(doc), ...textosDe(doc)]
   );
   const previo = previos[0] as FilaDocumento | undefined;
   if (
@@ -190,7 +230,7 @@ export async function saltarSiNoCambio(
   ) {
     const id = String(previo.id);
     const previas = diferencias(previo, doc);
-    if (previas.ubicacion || previas.clase) {
+    if (previas.ubicacion || previas.clase || previas.cabecera) {
       // La lectura de arriba corrio fuera de la transaccion y solo decide si
       // vale la pena abrirla: otra ingesta pudo reemplazar el documento, o
       // moverlo, desde entonces. Se vuelve a tomar la fila con su candado y con
@@ -208,7 +248,7 @@ export async function saltarSiNoCambio(
              FROM rag_documentos d
             WHERE d.id = $1 AND d.huella = $2 AND d.modelo_emb = $3
               FOR UPDATE OF d`,
-          [id, doc.huella, doc.modeloEmb, ...claseDe(doc)]
+          [id, doc.huella, doc.modeloEmb, ...claseDe(doc), ...textosDe(doc)]
         );
         const bloqueada = filas[0] as FilaDocumento | undefined;
         if (!bloqueada) {
@@ -256,6 +296,30 @@ export async function saltarSiNoCambio(
                      OR empresa IS DISTINCT FROM $4::text
                      OR cliente IS DISTINCT FROM $5::text)`,
             [id, ...claseDe(doc)]
+          );
+        }
+        if (doc.fragmentos) {
+          // Se corre siempre que se llega aqui, no segun la lectura de arriba
+          // (ni la del candado, que ve la instantanea anterior a la espera):
+          // la guarda del WHERE deja la sentencia en nada si ya esta al dia.
+          // Reescribe `texto` (y con el `tsv` generado) y `tokens`; el embedding
+          // se queda con el de la cabecera anterior.
+          await ejecutar(
+            `UPDATE rag_fragmentos f
+                SET texto = u.texto,
+                    tokens = u.tokens
+               FROM unnest($2::int[], $3::text[], $4::int[])
+                      AS u(orden, texto, tokens)
+              WHERE f.documento_id = $1
+                AND f.orden = u.orden
+                AND f.texto IS DISTINCT FROM u.texto
+                AND ${MISMO_CUERPO}`,
+            [
+              id,
+              doc.fragmentos.map((f) => f.orden),
+              doc.fragmentos.map((f) => f.texto),
+              doc.fragmentos.map((f) => f.tokens)
+            ]
           );
         }
         return true;

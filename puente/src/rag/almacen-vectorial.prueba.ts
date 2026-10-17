@@ -29,6 +29,10 @@ class SqlFalsa implements Sql {
   doc?: Fila;
   fragmentosGuardados: FragmentoFalso[] = [];
   busqueda: Fila[] = [];
+  /** Lo que diria la base: algun fragmento tiene la cabecera vieja. */
+  cabeceraDesalineada = false;
+  /** Parametros de cada UPDATE que reescribe el texto de los fragmentos. */
+  cabecerasEscritas: unknown[][] = [];
   /** Simula a otra ingesta que reemplaza el documento antes de que se tome el candado. */
   alTomarElCandado?: () => void;
   private dentro = false;
@@ -98,6 +102,14 @@ class SqlFalsa implements Sql {
       }
       return [];
     }
+    if (
+      texto.includes('UPDATE rag_fragmentos') &&
+      texto.includes('SET texto')
+    ) {
+      this.cabecerasEscritas.push(parametros);
+      this.cabeceraDesalineada = false;
+      return [];
+    }
     if (texto.includes('UPDATE rag_fragmentos')) {
       this.fragmentosGuardados = this.fragmentosGuardados.map(() => ({
         sensibilidad: parametros[1],
@@ -127,6 +139,7 @@ class SqlFalsa implements Sql {
   ): Fila {
     return {
       ...this.doc,
+      cabecera_desalineada: this.cabeceraDesalineada,
       fragmentos_desalineados: this.fragmentosGuardados.some(
         (f) =>
           f.sensibilidad !== sensibilidad ||
@@ -319,11 +332,59 @@ describe('almacen vectorial', () => {
       { ...ALINEADO, sensibilidad: 'costos' }
     ]);
     const escrituras = sql.consultas.filter((c) => !/^\s*SELECT/.test(c.texto));
-    assert.equal(escrituras.length, 3);
+    // Ruta, clase del documento, clase de los fragmentos y su cabecera.
+    assert.equal(escrituras.length, 4);
     assert.ok(escrituras.every((c) => c.enTransaccion));
     const textos = escrituras.map((c) => c.texto).join('\n');
     assert.doesNotMatch(textos, /INSERT|DELETE|embedding/);
     assert.match(textos, /UPDATE rag_fragmentos/);
+  });
+
+  it('con la cabecera vieja y todo lo demas igual, solo reescribe el texto de los fragmentos', async () => {
+    const sql = new SqlFalsa();
+    const doc = documento();
+    await guardarDocumento(sql, doc);
+    sql.consultas.length = 0;
+    sql.cabeceraDesalineada = true;
+    const nuevo: typeof doc = {
+      ...doc,
+      fragmentos: [
+        {
+          ...doc.fragmentos[0]!,
+          texto: '[Otra / Cliente] cabecera\ncuerpo',
+          tokens: 7
+        }
+      ]
+    };
+    const salto = await saltarSiNoCambio(sql, nuevo);
+    assert.equal(salto?.omitido, true);
+    const escrituras = sql.consultas.filter((c) => !/^\s*SELECT/.test(c.texto));
+    assert.equal(escrituras.length, 1);
+    assert.ok(escrituras.every((c) => c.enTransaccion));
+    assert.match(escrituras[0]?.texto ?? '', /SET texto = u\.texto/);
+    assert.doesNotMatch(escrituras[0]?.texto ?? '', /embedding|INSERT|DELETE/);
+    // Solo se reescriben cuerpos identicos: la guarda compara desde el salto de linea.
+    assert.match(escrituras[0]?.texto ?? '', /strpos\(f\.texto, chr\(10\)\)/);
+    assert.deepEqual(sql.cabecerasEscritas, [
+      [sql.doc?.['id'], [0], ['[Otra / Cliente] cabecera\ncuerpo'], [7]]
+    ]);
+  });
+
+  it('sin el texto nuevo de los fragmentos no toca el texto guardado', async () => {
+    const sql = new SqlFalsa();
+    const doc = documento();
+    await guardarDocumento(sql, doc);
+    sql.consultas.length = 0;
+    const { fragmentos: _fragmentos, ...sinTextos } = doc;
+    const movido = {
+      ...sinTextos,
+      ruta: 'Empresas/Itech Dev/Cliente/02_Proyecto/Juntas/otra.md'
+    };
+    await saltarSiNoCambio(sql, movido);
+    assert.deepEqual(sql.cabecerasEscritas, []);
+    const lectura = sql.consultas[0];
+    // Los arreglos de orden y texto van vacios: la base no compara nada.
+    assert.deepEqual(lectura?.parametros.slice(-2), [[], []]);
   });
 
   it('reclasifica cuando el proyecto cambia o un fragmento no coincide con su documento', async () => {

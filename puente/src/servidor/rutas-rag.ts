@@ -194,7 +194,8 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
       empresa: doc.empresa,
       cliente: doc.cliente,
       proyecto: doc.proyecto,
-      sensibilidad
+      sensibilidad,
+      fragmentos: doc.fragmentos
     });
     if (salto) {
       return { recibido: true, ...salto };
