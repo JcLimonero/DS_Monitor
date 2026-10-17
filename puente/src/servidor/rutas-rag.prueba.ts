@@ -56,6 +56,8 @@ class SqlFalsa implements Sql {
           cliente: 'Taller Norte',
           proyecto: 'Portal',
           fecha: '2026-10-12T18:00:00.000Z',
+          sensibilidad: 'general',
+          documento_sensibilidad: 'general',
           titulo: 'Revision',
           drive_file_id: 'drive-9',
           drive_url: 'https://drive.google.com/file/d/drive-9/view'
@@ -180,7 +182,8 @@ async function sembrarSesion(
 async function sembrarUsuario(
   datos: Datos,
   correo: string,
-  alcance?: UsuarioCrm['alcance']
+  alcance?: UsuarioCrm['alcance'],
+  roles: string[] = ['comercial']
 ): Promise<void> {
   await datos.usuariosCrm.escribir([
     ...datos.usuariosCrm.leer(),
@@ -188,7 +191,7 @@ async function sembrarUsuario(
       id: correo,
       correo,
       nombre: 'Prueba',
-      roles: ['comercial'],
+      roles,
       ...(alcance ? { alcance } : {}),
       activo: true,
       actualizadoEn: '2026-10-01T00:00:00.000Z'
@@ -556,6 +559,172 @@ describe('rutas del RAG vectorial', () => {
       ]);
       assert.match(consulta.texto, /f\.empresa <> 'itech-dev'/);
     }
+  });
+
+  describe('costos', () => {
+    const LISTA_BLANCA =
+      /f\.sensibilidad = 'general' AND d\.sensibilidad = 'general'/;
+
+    /** Las consultas de fragmentos de la ultima llamada: siempre las dos ramas. */
+    function selectsDe(sql: {
+      consultas: { texto: string; parametros: unknown[] }[];
+    }) {
+      const selects = sql.consultas.filter((c) =>
+        c.texto.includes('FROM rag_fragmentos')
+      );
+      assert.equal(selects.length, 2, 'faltó una de las dos ramas');
+      return selects;
+    }
+
+    async function buscar(
+      router: Awaited<ReturnType<typeof montar>>['router'],
+      token: string,
+      cuerpo: Record<string, unknown> = {}
+    ) {
+      return router.resolver(
+        '/rag/buscar',
+        new URLSearchParams(),
+        'POST',
+        { pregunta: 'que se dijo del portal', ...cuerpo },
+        { authorization: `Bearer ${token}` }
+      );
+    }
+
+    it('el token de admin y el director por sesion ven costos: el SQL no filtra sensibilidad', async () => {
+      const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
+      await sembrarSesion(datos, 'tok-director', 'ana@ejemplo.test');
+      redFalsa();
+      for (const token of ['admin-prueba', 'tok-director']) {
+        sql.consultas.length = 0;
+        await buscar(router, token);
+        for (const consulta of selectsDe(sql)) {
+          assert.doesNotMatch(consulta.texto, /sensibilidad = /, token);
+        }
+      }
+    });
+
+    it('un token de consulta no ve costos, con empresas o sin ellas', async () => {
+      const { router, sql } = await montar();
+      redFalsa();
+      for (const token of ['tok-dealer', 'tok-itech']) {
+        sql.consultas.length = 0;
+        await buscar(router, token);
+        for (const consulta of selectsDe(sql)) {
+          assert.match(consulta.texto, LISTA_BLANCA, token);
+        }
+      }
+      const libre = await montar({
+        INGESTA_CLIENTES: 'libre|tok-libre-consulta|rag-consulta|ops|0'
+      });
+      redFalsa();
+      libre.sql.consultas.length = 0;
+      await buscar(libre.router, 'tok-libre-consulta');
+      for (const consulta of selectsDe(libre.sql)) {
+        assert.match(consulta.texto, LISTA_BLANCA);
+      }
+    });
+
+    it('preguntar tambien filtra por sensibilidad para el token de consulta', async () => {
+      const { router, sql } = await montar();
+      redFalsa();
+      sql.consultas.length = 0;
+      await router.resolver(
+        '/rag/preguntar',
+        new URLSearchParams(),
+        'POST',
+        { pregunta: 'cuanto cuesta el portal' },
+        { authorization: 'Bearer tok-dealer' }
+      );
+      for (const consulta of selectsDe(sql)) {
+        assert.match(consulta.texto, LISTA_BLANCA);
+      }
+    });
+
+    it('un usuario sin el area costos no ve costos aunque tenga cotizaciones, con o sin alcance', async () => {
+      const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
+      await sembrarUsuario(datos, 'comercial@ejemplo.test');
+      await sembrarUsuario(
+        datos,
+        'comercial-dealer@ejemplo.test',
+        { empresas: ['dealer-solutions'] },
+        ['comercial']
+      );
+      await sembrarSesion(datos, 'tok-comercial', 'comercial@ejemplo.test');
+      await sembrarSesion(
+        datos,
+        'tok-comercial-dealer',
+        'comercial-dealer@ejemplo.test'
+      );
+      redFalsa();
+      for (const token of ['tok-comercial', 'tok-comercial-dealer']) {
+        sql.consultas.length = 0;
+        await buscar(router, token);
+        for (const consulta of selectsDe(sql)) {
+          assert.match(consulta.texto, LISTA_BLANCA, token);
+        }
+      }
+    });
+
+    it('un usuario con el area costos en lectura la recupera, sin salirse de su alcance', async () => {
+      const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
+      await sembrarUsuario(datos, 'finanzas@ejemplo.test', undefined, [
+        'finanzas'
+      ]);
+      await sembrarUsuario(
+        datos,
+        'finanzas-dealer@ejemplo.test',
+        { empresas: ['dealer-solutions'] },
+        ['finanzas']
+      );
+      await sembrarSesion(datos, 'tok-finanzas', 'finanzas@ejemplo.test');
+      await sembrarSesion(
+        datos,
+        'tok-finanzas-dealer',
+        'finanzas-dealer@ejemplo.test'
+      );
+      redFalsa();
+      sql.consultas.length = 0;
+      await buscar(router, 'tok-finanzas');
+      for (const consulta of selectsDe(sql)) {
+        assert.doesNotMatch(consulta.texto, /sensibilidad = /);
+      }
+      sql.consultas.length = 0;
+      await buscar(router, 'tok-finanzas-dealer');
+      for (const consulta of selectsDe(sql)) {
+        assert.doesNotMatch(consulta.texto, /sensibilidad = /);
+        assert.deepEqual(consulta.parametros[0], ['dealer-solutions']);
+        assert.match(consulta.texto, /f\.empresa <> 'itech-dev'/);
+      }
+    });
+
+    it('ningun campo de la peticion concede costos', async () => {
+      const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
+      await sembrarUsuario(datos, 'comercial@ejemplo.test');
+      await sembrarSesion(datos, 'tok-comercial', 'comercial@ejemplo.test');
+      redFalsa();
+      const intentos = [
+        { incluirCostos: true },
+        { costos: true },
+        { puedeCostos: true },
+        { sensibilidad: 'costos' },
+        { sensibilidad: ['general', 'costos'] },
+        { permisos: { costos: 'lectura' } },
+        { incluirItech: false, director: true }
+      ];
+      for (const token of ['tok-dealer', 'tok-comercial']) {
+        for (const intento of intentos) {
+          sql.consultas.length = 0;
+          await buscar(router, token, intento);
+          for (const consulta of selectsDe(sql)) {
+            assert.match(
+              consulta.texto,
+              LISTA_BLANCA,
+              `${token} ${JSON.stringify(intento)}`
+            );
+          }
+        }
+      }
+    });
   });
 
   it('un emisor de consulta sin empresas sigue viendo todas menos Itech, como hoy', async () => {

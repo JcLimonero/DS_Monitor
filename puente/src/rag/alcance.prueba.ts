@@ -2,11 +2,20 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { ErrorPuente } from '../nucleo/errores.js';
 import { EMPRESA_ITECH } from './empresas-rag.js';
-import { resolverEmpresas, sqlEmpresas, type ActorRag } from './alcance.js';
+import {
+  resolverEmpresas,
+  sqlEmpresas,
+  sqlSensibilidad,
+  type ActorRag
+} from './alcance.js';
 import { fusionarRrf } from './hibrida.js';
 import { clienteMencionado } from './menciones.js';
 
-const director: ActorRag = { director: true, puedeItech: true };
+const director: ActorRag = {
+  director: true,
+  puedeItech: true,
+  puedeCostos: true
+};
 
 describe('alcance del RAG: Itech no se mezcla', () => {
   it('nombrar a Itech en la lista es pedirla; sin eso el SQL la quita', () => {
@@ -37,7 +46,8 @@ describe('alcance del RAG: Itech no se mezcla', () => {
     const actor: ActorRag = {
       director: false,
       tope: ['dealer-solutions'],
-      puedeItech: false
+      puedeItech: false,
+      puedeCostos: false
     };
     assert.throws(
       () => resolverEmpresas({ empresa: 'itech-dev' }, actor),
@@ -61,7 +71,12 @@ describe('alcance del RAG: Itech no se mezcla', () => {
   it('un token que solo es Itech consulta Itech aunque no lo escriba', () => {
     const clausula = resolverEmpresas(
       {},
-      { director: false, tope: ['itech-dev'], puedeItech: true }
+      {
+        director: false,
+        tope: ['itech-dev'],
+        puedeItech: true,
+        puedeCostos: false
+      }
     );
     assert.equal(clausula.excluyeItech, false);
     assert.deepEqual(clausula.empresas, ['itech-dev']);
@@ -73,7 +88,8 @@ describe('alcance del RAG: Itech no se mezcla', () => {
       {
         director: false,
         tope: ['dealer-solutions', 'itech-dev'],
-        puedeItech: true
+        puedeItech: true,
+        puedeCostos: false
       }
     );
     assert.equal(clausula.excluyeItech, true);
@@ -85,6 +101,76 @@ describe('alcance del RAG: Itech no se mezcla', () => {
     assert.deepEqual(clausula.empresas, ['nexusqtech']);
     const operativ = resolverEmpresas({ empresa: 'operativ-ai' }, director);
     assert.deepEqual(operativ.empresas, ['operativai']);
+  });
+});
+
+describe('alcance del RAG: costos', () => {
+  const sinCostos: ActorRag = { ...director, puedeCostos: false };
+
+  it('la clausula copia el permiso del actor y nada mas', () => {
+    assert.equal(resolverEmpresas({}, director).incluyeCostos, true);
+    assert.equal(resolverEmpresas({}, sinCostos).incluyeCostos, false);
+    const acotado: ActorRag = {
+      director: false,
+      tope: ['dealer-solutions'],
+      puedeItech: false,
+      puedeCostos: true
+    };
+    for (const pedido of [
+      {},
+      { empresa: 'dealer-solutions' },
+      { empresas: ['dealer-solutions'] }
+    ]) {
+      assert.equal(resolverEmpresas(pedido, acotado).incluyeCostos, true);
+      assert.equal(
+        resolverEmpresas(pedido, { ...acotado, puedeCostos: false })
+          .incluyeCostos,
+        false
+      );
+    }
+    assert.equal(
+      resolverEmpresas({ empresa: 'itech-dev' }, director).incluyeCostos,
+      true
+    );
+    assert.equal(
+      resolverEmpresas({ empresa: 'itech-dev' }, sinCostos).incluyeCostos,
+      false
+    );
+  });
+
+  it('la peticion no puede pedir costos: ningun campo extra cambia la clausula', () => {
+    const extra = {
+      pregunta: 'precios',
+      incluirCostos: true,
+      costos: true,
+      puedeCostos: true,
+      sensibilidad: 'costos'
+    } as unknown as Parameters<typeof resolverEmpresas>[0];
+    assert.equal(resolverEmpresas(extra, sinCostos).incluyeCostos, false);
+  });
+
+  it('sin permiso el SQL es una lista blanca en fragmento y documento, sin parametros', () => {
+    for (const incluyeCostos of [false, undefined, null, 'true', 1]) {
+      const sql = sqlSensibilidad({
+        incluyeCostos: incluyeCostos as unknown as boolean
+      });
+      assert.equal(
+        sql,
+        "AND f.sensibilidad = 'general' AND d.sensibilidad = 'general'"
+      );
+      assert.doesNotMatch(sql, /\$\d/);
+    }
+  });
+
+  it('con permiso no agrega condicion', () => {
+    assert.equal(sqlSensibilidad({ incluyeCostos: true }), '');
+  });
+
+  it('usa los alias que se le pasan', () => {
+    assert.equal(
+      sqlSensibilidad({ incluyeCostos: false }, 'frag', 'doc'),
+      "AND frag.sensibilidad = 'general' AND doc.sensibilidad = 'general'"
+    );
   });
 });
 

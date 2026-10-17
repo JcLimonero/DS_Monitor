@@ -1469,3 +1469,16 @@ entonces lo anterior cuenta como `costos`. Consultar es otra cosa: `POST /rag/bu
 `rag-consulta`. Sin empresa en el cuerpo, el SQL excluye Itech. Para verla hay
 que mandar `"empresa": "itech-dev"` (o `"incluirItech": true`) y tener permiso.
 Un token cuya sexta columna es solo `itech-dev` no ve el resto.
+
+Los documentos `costos` solo los recupera quien tiene permiso de costos; el
+resto ve únicamente los `general`. El filtro va en el `WHERE` de las dos ramas de
+la búsqueda (vectorial y de texto) y la petición no puede ampliarlo: ningún campo
+del cuerpo concede costos. Tienen costos el token de admin, el director y quien
+tenga el área `costos` en lectura (rol Finanzas; el área `cotizaciones` no lo
+concede). Los emisores `rag-consulta` no tienen costos. Un fragmento sin
+clasificar cuenta como `costos`. Si `rag:backfill` o la
+reconciliación diaria encuentra un archivo con la misma huella pero otra ruta,
+realinea `empresa`, `cliente`, `proyecto` y sensibilidad de su documento y de
+todos sus fragmentos sin volver a embeber (el frontmatter manda sobre la ruta,
+como en la primera ingesta). Al arrancar, el puente avisa en el log si hay
+fragmentos indexados y ninguno es `general`: falta correr `rag:backfill`.

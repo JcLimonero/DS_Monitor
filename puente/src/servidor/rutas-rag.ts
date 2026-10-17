@@ -186,6 +186,7 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
         `https://drive.google.com/file/d/${cuerpo.driveFileId}/view`,
       modificadoEn: cuerpo.modificadoEn,
       empresa: doc.empresa,
+      cliente: doc.cliente,
       proyecto: doc.proyecto,
       sensibilidad
     });
@@ -276,15 +277,18 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
           403
         );
       }
+      // Los tokens de consulta no ven costos. Como concederlo a un token
+      // concreto (ADR-0001, paso b) todavia no esta decidido.
       return {
         director: false,
         ...(empresas.length > 0 ? { tope: empresas } : {}),
-        puedeItech: empresas.includes(EMPRESA_ITECH)
+        puedeItech: empresas.includes(EMPRESA_ITECH),
+        puedeCostos: false
       };
     }
     const correo = deps.correoDeSesion(contexto);
     if (!correo && deps.esAdmin(contexto)) {
-      return { director: true, puedeItech: true };
+      return { director: true, puedeItech: true, puedeCostos: true };
     }
     if (!correo) {
       throw new ErrorPuente('Se requiere sesión para consultar el RAG.', 401);
@@ -310,8 +314,12 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
         403
       );
     }
+    // Costos: el director, o quien tenga el area `costos` en lectura (la misma
+    // regla con la que el CRM oculta importes: ocultarCostos en roles-permisos).
+    // El area `cotizaciones` no lo concede.
+    const puedeCostos = director || tienePermiso(permisos, 'costos', 'lectura');
     if (director || !usuario.alcance) {
-      return { director, puedeItech: true };
+      return { director, puedeItech: true, puedeCostos };
     }
     if (!usuario.alcance.empresas?.length) {
       throw new ErrorPuente(
@@ -326,7 +334,8 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
     return {
       director: false,
       tope,
-      puedeItech: tope.includes(EMPRESA_ITECH)
+      puedeItech: tope.includes(EMPRESA_ITECH),
+      puedeCostos
     };
   };
 

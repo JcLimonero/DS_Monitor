@@ -1,6 +1,11 @@
 import type { Sql } from '../datos/persistencia.js';
 import { literalHalfvec } from '../proveedores/embeddings.js';
-import { sqlEmpresas, type ClausulaEmpresa } from './alcance.js';
+import { ErrorPuente } from '../nucleo/errores.js';
+import {
+  sqlEmpresas,
+  sqlSensibilidad,
+  type ClausulaEmpresa
+} from './alcance.js';
 import type { Sensibilidad } from './clasificar.js';
 import { fusionarRrf } from './hibrida.js';
 
@@ -74,6 +79,8 @@ interface FilaDocumento {
   drive_modificado_en?: unknown;
   sensibilidad?: unknown;
   proyecto?: unknown;
+  empresa?: unknown;
+  cliente?: unknown;
   fragmentos_desalineados?: unknown;
 }
 
@@ -81,12 +88,15 @@ interface FilaDocumento {
  * Si la huella y el modelo siguen igual, no hay que volver a embeber.
  * Actualiza ruta y liga cuando el archivo se movio en Drive. No toca el CRM.
  *
- * Aunque el contenido no cambie, la sensibilidad y el proyecto se vuelven a
- * calcular de la ruta y el texto: si difieren de lo guardado (o algun
- * fragmento no coincide con su documento), se corrigen en el documento y en
- * TODOS sus fragmentos, en una sola transaccion y sin pedir embeddings. Asi
- * un documento movido de carpeta, o uno indexado antes de que existieran
- * esas columnas, se reclasifica volviendo a correr `npm run rag:backfill`.
+ * Aunque el contenido no cambie, la sensibilidad, el proyecto, la empresa y el
+ * cliente se vuelven a calcular de la ruta y el texto (con la misma
+ * precedencia de la ingesta: frontmatter primero, luego ruta): si difieren de
+ * lo guardado (o algun fragmento no coincide con su documento), se corrigen en
+ * el documento y en TODOS sus fragmentos, en una sola transaccion y sin pedir
+ * embeddings. Asi un documento movido de carpeta o de empresa, o uno indexado
+ * antes de que existieran esas columnas, se realinea al volver a correr
+ * `npm run rag:backfill` o la reconciliacion diaria. El texto de los
+ * fragmentos (su cabecera con empresa/cliente/proyecto) no se reescribe.
  *
  * Devuelve `undefined` cuando hay que ingerir completo: el documento no
  * existe, cambio su huella o su modelo, o otra ingesta lo reemplazo mientras
@@ -104,24 +114,35 @@ export async function saltarSiNoCambio(
     | 'driveUrl'
     | 'modificadoEn'
     | 'empresa'
+    | 'cliente'
     | 'proyecto'
     | 'sensibilidad'
   >
 ): Promise<ResultadoGuardado | undefined> {
   const previos = await sql.ejecutar(
     `SELECT d.id, d.huella, d.modelo_emb, d.ruta, d.drive_url,
-            d.drive_modificado_en, d.sensibilidad, d.proyecto,
+            d.drive_modificado_en, d.sensibilidad, d.proyecto, d.empresa,
+            d.cliente,
             EXISTS (
               SELECT 1
                 FROM rag_fragmentos f
                WHERE f.documento_id = d.id
                  AND (f.sensibilidad IS DISTINCT FROM $3::text
-                      OR f.proyecto IS DISTINCT FROM $4::text)
+                      OR f.proyecto IS DISTINCT FROM $4::text
+                      OR f.empresa IS DISTINCT FROM $5::text
+                      OR f.cliente IS DISTINCT FROM $6::text)
             ) AS fragmentos_desalineados
        FROM rag_documentos d
       WHERE d.drive_file_id = $1 OR d.id = $2
       LIMIT 1`,
-    [doc.driveFileId, doc.id, doc.sensibilidad, doc.proyecto ?? null]
+    [
+      doc.driveFileId,
+      doc.id,
+      doc.sensibilidad,
+      doc.proyecto ?? null,
+      doc.empresa,
+      doc.cliente ?? null
+    ]
   );
   const previo = previos[0] as FilaDocumento | undefined;
   if (
@@ -141,6 +162,8 @@ export async function saltarSiNoCambio(
     const reclasifica =
       previo.sensibilidad !== doc.sensibilidad ||
       (texto(previo.proyecto) ?? null) !== (doc.proyecto ?? null) ||
+      previo.empresa !== doc.empresa ||
+      (texto(previo.cliente) ?? null) !== (doc.cliente ?? null) ||
       previo.fragmentos_desalineados === true;
     const id = String(previo.id);
     if (rutaCambia || urlCambia || tiempoCambia || reclasifica) {
@@ -182,20 +205,38 @@ export async function saltarSiNoCambio(
             `UPDATE rag_documentos
                 SET sensibilidad = $2,
                     proyecto = $3,
+                    empresa = $4,
+                    cliente = $5,
                     actualizado_en = now()
               WHERE id = $1`,
-            [id, doc.sensibilidad, doc.proyecto ?? null]
+            [
+              id,
+              doc.sensibilidad,
+              doc.proyecto ?? null,
+              doc.empresa,
+              doc.cliente ?? null
+            ]
           );
           // Solo los fragmentos que difieren: cada fila reescrita agrega una
           // entrada en cada indice, el HNSW incluido.
           await ejecutar(
             `UPDATE rag_fragmentos
                 SET sensibilidad = $2,
-                    proyecto = $3
+                    proyecto = $3,
+                    empresa = $4,
+                    cliente = $5
               WHERE documento_id = $1
                 AND (sensibilidad IS DISTINCT FROM $2::text
-                     OR proyecto IS DISTINCT FROM $3::text)`,
-            [id, doc.sensibilidad, doc.proyecto ?? null]
+                     OR proyecto IS DISTINCT FROM $3::text
+                     OR empresa IS DISTINCT FROM $4::text
+                     OR cliente IS DISTINCT FROM $5::text)`,
+            [
+              id,
+              doc.sensibilidad,
+              doc.proyecto ?? null,
+              doc.empresa,
+              doc.cliente ?? null
+            ]
           );
         }
         return true;
@@ -300,7 +341,9 @@ export async function guardarDocumento(
 
 /**
  * Top 40 por coseno y top 40 por texto espanol, fusionados con RRF.
- * El filtro de empresa (y la exclusion de Itech) va en las dos consultas.
+ * El filtro de empresa (y la exclusion de Itech) y el de sensibilidad van en
+ * el WHERE de las dos consultas, antes del ORDER BY ... LIMIT: no hay filtrado
+ * posterior que pueda dejar pasar algo.
  */
 export async function buscarHibrido(
   sql: Sql,
@@ -310,6 +353,7 @@ export async function buscarHibrido(
   k: number
 ): Promise<FragmentoHallado[]> {
   const empresa = sqlEmpresas(filtro.clausula, 1, 'f.empresa');
+  const sensibilidad = sqlSensibilidad(filtro.clausula, 'f', 'd');
   const paramsBase: unknown[] = [
     ...empresa.parametros,
     filtro.cliente ?? null,
@@ -322,6 +366,7 @@ export async function buscarHibrido(
   const donde = `
     WHERE TRUE
       ${empresa.sql}
+      ${sensibilidad}
       AND ($${iCliente}::text IS NULL OR lower(f.cliente) = lower($${iCliente}))
       AND ($${iDesde}::timestamptz IS NULL OR f.fecha >= $${iDesde})
       AND ($${iHasta}::timestamptz IS NULL OR f.fecha <= $${iHasta})`;
@@ -335,6 +380,8 @@ export async function buscarHibrido(
     f.cliente,
     d.proyecto,
     f.fecha,
+    f.sensibilidad AS sensibilidad,
+    d.sensibilidad AS documento_sensibilidad,
     d.titulo,
     d.drive_file_id,
     d.drive_url`;
@@ -364,6 +411,23 @@ export async function buscarHibrido(
     [...paramsBase, pregunta]
   );
 
+  // Red de seguridad, no el filtro (el filtro ya esta en el SQL de arriba):
+  // si una consulta devolvio algo que no es 'general' a quien no tiene costos,
+  // la funcion falla en lugar de entregarlo. Atrapa una regresion del WHERE.
+  if (
+    filtro.clausula.incluyeCostos !== true &&
+    [...porVector, ...porTexto].some(
+      (fila) =>
+        fila['sensibilidad'] !== 'general' ||
+        fila['documento_sensibilidad'] !== 'general'
+    )
+  ) {
+    throw new ErrorPuente(
+      'No se pudo verificar el alcance de la consulta.',
+      500
+    );
+  }
+
   const fusion = fusionarRrf(
     [porVector.map(filaId), porTexto.map(filaId)],
     60
@@ -380,6 +444,34 @@ export async function buscarHibrido(
     const hallado = porId.get(item.id);
     return hallado ? [{ ...hallado, puntuacion: item.puntuacion }] : [];
   });
+}
+
+/**
+ * Avisa en el log si hay fragmentos indexados y ninguno es 'general': señal de
+ * que falta correr `npm run rag:backfill` (el DEFAULT de la columna es
+ * 'costos'). Solo informa: no cambia lo que ve nadie. Nunca lanza.
+ */
+export async function avisarSiFaltaBackfill(
+  sql: Sql,
+  avisar: (mensaje: string) => void = console.warn
+): Promise<void> {
+  try {
+    const filas = await sql.ejecutar(
+      `SELECT EXISTS (SELECT 1 FROM rag_fragmentos) AS hay,
+              EXISTS (
+                SELECT 1 FROM rag_fragmentos WHERE sensibilidad = 'general'
+              ) AS general`
+    );
+    if (filas[0]?.['hay'] === true && filas[0]?.['general'] !== true) {
+      avisar(
+        '[puente] RAG: ningún fragmento está marcado como general, así que todo cuenta como costos y solo lo ve quien tiene permiso de costos. Si la base ya estaba indexada, falta correr npm run rag:backfill.'
+      );
+    }
+  } catch (error) {
+    avisar(
+      `[puente] RAG: no se pudo revisar la clasificación de los fragmentos (${error instanceof Error ? error.message : error}).`
+    );
+  }
 }
 
 export async function idsEnDrive(sql: Sql): Promise<

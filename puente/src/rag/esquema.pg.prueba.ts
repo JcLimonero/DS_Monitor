@@ -37,7 +37,11 @@ import {
 const url = urlDePrueba();
 const OMITIR = url ? false : 'sin TEST_DATABASE_URL: no hay Postgres de prueba';
 
-const director: ActorRag = { director: true, puedeItech: true };
+const director: ActorRag = {
+  director: true,
+  puedeItech: true,
+  puedeCostos: true
+};
 
 async function conEsquema(
   trabajo: (esquema: EsquemaPrueba) => Promise<void>
