@@ -466,4 +466,122 @@ describe('rutas del RAG vectorial', () => {
       'https://drive.google.com/file/d/drive-9/view'
     );
   });
+
+  it('un emisor de consulta cuya unica empresa esta mal escrita no abre el RAG: 403 y ninguna consulta de fragmentos', async () => {
+    const { router, sql } = await montar({
+      INGESTA_CLIENTES: 'errata|tok-errata|rag-consulta|ops|0|dealer-solucions'
+    });
+    redFalsa();
+    sql.consultas.length = 0;
+    for (const ruta of ['/rag/buscar', '/rag/preguntar']) {
+      await assert.rejects(
+        () =>
+          router.resolver(
+            ruta,
+            new URLSearchParams(),
+            'POST',
+            { pregunta: 'que se dijo del portal' },
+            { authorization: 'Bearer tok-errata' }
+          ),
+        (error: unknown) =>
+          error instanceof ErrorPuente &&
+          error.estado === 403 &&
+          error.message ===
+            'Las empresas de este token de consulta no son válidas.'
+      );
+    }
+    assert.equal(
+      sql.consultas.filter((c) => c.texto.includes('FROM rag_fragmentos'))
+        .length,
+      0
+    );
+  });
+
+  it('un emisor de consulta con una empresa valida y otra mal escrita solo consulta la valida', async () => {
+    const { router, sql } = await montar({
+      INGESTA_CLIENTES:
+        'mixto|tok-mixto|rag-consulta|ops|0|dealer-solucions,dealer-solutions'
+    });
+    redFalsa();
+    sql.consultas.length = 0;
+    const busqueda = (await router.resolver(
+      '/rag/buscar',
+      new URLSearchParams(),
+      'POST',
+      { pregunta: 'que se dijo del portal' },
+      { authorization: 'Bearer tok-mixto' }
+    )) as { fragmentos: { driveUrl: string }[] };
+    assert.equal(
+      busqueda.fragmentos[0]?.driveUrl,
+      'https://drive.google.com/file/d/drive-9/view'
+    );
+    const selects = sql.consultas.filter((c) =>
+      c.texto.includes('FROM rag_fragmentos')
+    );
+    assert.ok(selects.length >= 2);
+    for (const consulta of selects) {
+      assert.deepEqual(consulta.parametros[0], ['dealer-solutions']);
+    }
+  });
+
+  it('un emisor de consulta con empresas validas consulta solo esas, sin Itech', async () => {
+    const { router, sql } = await montar({
+      INGESTA_CLIENTES:
+        'valido|tok-valido|rag-consulta|ops|0|dealer-solutions,nexusqtech'
+    });
+    redFalsa();
+    sql.consultas.length = 0;
+    const busqueda = (await router.resolver(
+      '/rag/buscar',
+      new URLSearchParams(),
+      'POST',
+      { pregunta: 'que se dijo del portal' },
+      { authorization: 'Bearer tok-valido' }
+    )) as { fragmentos: { driveUrl: string }[] };
+    assert.equal(
+      busqueda.fragmentos[0]?.driveUrl,
+      'https://drive.google.com/file/d/drive-9/view'
+    );
+    const selects = sql.consultas.filter((c) =>
+      c.texto.includes('FROM rag_fragmentos')
+    );
+    assert.ok(selects.length >= 2);
+    for (const consulta of selects) {
+      assert.deepEqual(consulta.parametros[0], [
+        'dealer-solutions',
+        'nexusqtech'
+      ]);
+      assert.match(consulta.texto, /f\.empresa <> 'itech-dev'/);
+    }
+  });
+
+  it('un emisor de consulta sin empresas sigue viendo todas menos Itech, como hoy', async () => {
+    // Comportamiento vigente, por inventariar: sin empresas el emisor ve todas
+    // menos Itech. Se cierra en un paso posterior, tras inventariar los emisores
+    // en produccion.
+    const { router, sql } = await montar({
+      INGESTA_CLIENTES: 'libre|tok-libre-consulta|rag-consulta|ops|0'
+    });
+    redFalsa();
+    sql.consultas.length = 0;
+    const busqueda = (await router.resolver(
+      '/rag/buscar',
+      new URLSearchParams(),
+      'POST',
+      { pregunta: 'que se dijo del portal' },
+      { authorization: 'Bearer tok-libre-consulta' }
+    )) as { fragmentos: { driveUrl: string }[] };
+    assert.equal(
+      busqueda.fragmentos[0]?.driveUrl,
+      'https://drive.google.com/file/d/drive-9/view'
+    );
+    const selects = sql.consultas.filter((c) =>
+      c.texto.includes('FROM rag_fragmentos')
+    );
+    assert.ok(selects.length >= 2);
+    for (const consulta of selects) {
+      assert.match(consulta.texto, /f\.empresa <> 'itech-dev'/);
+      assert.doesNotMatch(JSON.stringify(consulta.parametros), /itech-dev/);
+    }
+  });
 });
