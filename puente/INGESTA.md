@@ -1418,10 +1418,12 @@ markdown. Es una lista blanca: `general` hay que ganárselo y todo lo demás es
 - Si cualquier segmento de la ruta (carpeta o archivo, sin acentos ni
   mayúsculas) contiene `cotiza`, `cost`, `precio`, `price`, `pricing`,
   `presupuest`, `budget`, `quote`, `tarifa`, `honorario`, `monto`, `pago`,
-  `propuesta econom` o `propuesta comercial`, también es `costos`, aunque
+  `propuesta econom`, `propuesta comercial`, `propuesta`, `oferta` o
+  `inversion`, también es `costos`, aunque
   cuelgue de una carpeta general (`02_Proyecto/COTIZACION_x.md`). Son
   subcadenas: un cliente o carpeta llamado «Costa Rica» o «Montoya» queda en
-  `costos`.
+  `costos`, y también una propuesta técnica (`propuesta_tecnica.md`) hasta que
+  se marque `sensibilidad: general`.
 - Si el texto del documento (frontmatter incluido) trae una cifra de dinero, es
   `costos`: `$` seguido de un dígito (`$1,200`, `$ 1200`), las palabras `MXN`,
   `USD`, `EUR` e `IVA` (`+IVA`), o un número seguido de `pesos`, `dólares` o
