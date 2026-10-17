@@ -102,14 +102,22 @@ async function archivosFisicos(
   );
 }
 
-/** Espera a que una escritura sobre el documento quede detenida por un candado de fila. */
+/**
+ * Espera a que una escritura sobre el documento quede detenida por un candado de fila.
+ * pg_stat_activity recorta el texto de la consulta (1024 bytes): la lectura con candado
+ * de saltarSiNoCambio ya es mas larga, asi que tambien se reconoce por su inicio.
+ */
 async function esperarBloqueo(esquema: EsquemaPrueba): Promise<void> {
   for (let intento = 0; intento < 100; intento++) {
     const filas = await esquema.filas(
       `SELECT count(*)::int AS n
          FROM pg_stat_activity
         WHERE wait_event_type = 'Lock'
-          AND (query ILIKE '%FOR UPDATE%' OR query ILIKE 'UPDATE rag_%')
+          AND (
+            query ILIKE '%FOR UPDATE%'
+            OR query ILIKE 'UPDATE rag_%'
+            OR query ILIKE 'SELECT d.id, d.huella%'
+          )
           AND pid <> pg_backend_pid()`
     );
     if (Number(filas[0]?.['n']) > 0) {
