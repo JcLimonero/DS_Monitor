@@ -84,6 +84,74 @@ interface FilaDocumento {
   fragmentos_desalineados?: unknown;
 }
 
+type DatosDeSalto = Pick<
+  DocumentoAGuardar,
+  | 'id'
+  | 'driveFileId'
+  | 'huella'
+  | 'modeloEmb'
+  | 'ruta'
+  | 'driveUrl'
+  | 'modificadoEn'
+  | 'empresa'
+  | 'cliente'
+  | 'proyecto'
+  | 'sensibilidad'
+>;
+
+/**
+ * Columnas del estado guardado de un documento y si algun fragmento suyo no
+ * coincide con lo que trae la ingesta. `i` es el primer parametro de la clase:
+ * sensibilidad, proyecto, empresa y cliente, en ese orden (ver claseDe).
+ */
+function columnasDeEstado(i: number): string {
+  return `d.id, d.huella, d.modelo_emb, d.ruta, d.drive_url,
+            d.drive_modificado_en, d.sensibilidad, d.proyecto, d.empresa,
+            d.cliente,
+            EXISTS (
+              SELECT 1
+                FROM rag_fragmentos f
+               WHERE f.documento_id = d.id
+                 AND (f.sensibilidad IS DISTINCT FROM $${i}::text
+                      OR f.proyecto IS DISTINCT FROM $${i + 1}::text
+                      OR f.empresa IS DISTINCT FROM $${i + 2}::text
+                      OR f.cliente IS DISTINCT FROM $${i + 3}::text)
+            ) AS fragmentos_desalineados`;
+}
+
+function claseDe(doc: DatosDeSalto): unknown[] {
+  return [
+    doc.sensibilidad,
+    doc.proyecto ?? null,
+    doc.empresa,
+    doc.cliente ?? null
+  ];
+}
+
+/** Que hay que escribir para que la fila guardada coincida con la ingesta. */
+function diferencias(
+  fila: FilaDocumento,
+  doc: DatosDeSalto
+): { ubicacion: boolean; clase: boolean } {
+  const ruta = texto(fila.ruta);
+  const url = texto(fila.drive_url);
+  const modificado = instante(fila.drive_modificado_en);
+  const rutaCambia = doc.ruta !== undefined && (ruta ?? '') !== doc.ruta;
+  const urlCambia = doc.driveUrl !== undefined && (url ?? '') !== doc.driveUrl;
+  const tiempoCambia =
+    doc.modificadoEn !== undefined &&
+    !mismoInstante(modificado, doc.modificadoEn);
+  return {
+    ubicacion: rutaCambia || urlCambia || tiempoCambia,
+    clase:
+      fila.sensibilidad !== doc.sensibilidad ||
+      (texto(fila.proyecto) ?? null) !== (doc.proyecto ?? null) ||
+      fila.empresa !== doc.empresa ||
+      (texto(fila.cliente) ?? null) !== (doc.cliente ?? null) ||
+      fila.fragmentos_desalineados === true
+  };
+}
+
 /**
  * Si la huella y el modelo siguen igual, no hay que volver a embeber.
  * Actualiza ruta y liga cuando el archivo se movio en Drive. No toca el CRM.
@@ -96,7 +164,8 @@ interface FilaDocumento {
  * embeddings. Asi un documento movido de carpeta o de empresa, o uno indexado
  * antes de que existieran esas columnas, se realinea al volver a correr
  * `npm run rag:backfill` o la reconciliacion diaria. El texto de los
- * fragmentos (su cabecera con empresa/cliente/proyecto) no se reescribe.
+ * fragmentos (su cabecera con empresa/cliente/proyecto) no se reescribe: sigue
+ * con el nombre anterior hasta que cambie el contenido del archivo.
  *
  * Devuelve `undefined` cuando hay que ingerir completo: el documento no
  * existe, cambio su huella o su modelo, o otra ingesta lo reemplazo mientras
@@ -104,45 +173,14 @@ interface FilaDocumento {
  */
 export async function saltarSiNoCambio(
   sql: Sql,
-  doc: Pick<
-    DocumentoAGuardar,
-    | 'id'
-    | 'driveFileId'
-    | 'huella'
-    | 'modeloEmb'
-    | 'ruta'
-    | 'driveUrl'
-    | 'modificadoEn'
-    | 'empresa'
-    | 'cliente'
-    | 'proyecto'
-    | 'sensibilidad'
-  >
+  doc: DatosDeSalto
 ): Promise<ResultadoGuardado | undefined> {
   const previos = await sql.ejecutar(
-    `SELECT d.id, d.huella, d.modelo_emb, d.ruta, d.drive_url,
-            d.drive_modificado_en, d.sensibilidad, d.proyecto, d.empresa,
-            d.cliente,
-            EXISTS (
-              SELECT 1
-                FROM rag_fragmentos f
-               WHERE f.documento_id = d.id
-                 AND (f.sensibilidad IS DISTINCT FROM $3::text
-                      OR f.proyecto IS DISTINCT FROM $4::text
-                      OR f.empresa IS DISTINCT FROM $5::text
-                      OR f.cliente IS DISTINCT FROM $6::text)
-            ) AS fragmentos_desalineados
+    `SELECT ${columnasDeEstado(3)}
        FROM rag_documentos d
       WHERE d.drive_file_id = $1 OR d.id = $2
       LIMIT 1`,
-    [
-      doc.driveFileId,
-      doc.id,
-      doc.sensibilidad,
-      doc.proyecto ?? null,
-      doc.empresa,
-      doc.cliente ?? null
-    ]
+    [doc.driveFileId, doc.id, ...claseDe(doc)]
   );
   const previo = previos[0] as FilaDocumento | undefined;
   if (
@@ -150,41 +188,34 @@ export async function saltarSiNoCambio(
     previo.huella === doc.huella &&
     previo.modelo_emb === doc.modeloEmb
   ) {
-    const ruta = texto(previo.ruta);
-    const url = texto(previo.drive_url);
-    const modificado = instante(previo.drive_modificado_en);
-    const rutaCambia = doc.ruta !== undefined && (ruta ?? '') !== doc.ruta;
-    const urlCambia =
-      doc.driveUrl !== undefined && (url ?? '') !== doc.driveUrl;
-    const tiempoCambia =
-      doc.modificadoEn !== undefined &&
-      !mismoInstante(modificado, doc.modificadoEn);
-    const reclasifica =
-      previo.sensibilidad !== doc.sensibilidad ||
-      (texto(previo.proyecto) ?? null) !== (doc.proyecto ?? null) ||
-      previo.empresa !== doc.empresa ||
-      (texto(previo.cliente) ?? null) !== (doc.cliente ?? null) ||
-      previo.fragmentos_desalineados === true;
     const id = String(previo.id);
-    if (rutaCambia || urlCambia || tiempoCambia || reclasifica) {
-      // La lectura de arriba corrio fuera de la transaccion: otra ingesta
-      // pudo reemplazar el documento desde entonces. Se vuelve a tomar la
-      // fila con su candado y con la misma huella y modelo; si ya no es esa,
-      // no se toca nada (ni el documento ni los fragmentos del nuevo) y se
-      // sigue con la ingesta completa, para que contenido y clase salgan del
-      // mismo envio. Con la fila bloqueada, un reemplazo concurrente espera.
+    const previas = diferencias(previo, doc);
+    if (previas.ubicacion || previas.clase) {
+      // La lectura de arriba corrio fuera de la transaccion y solo decide si
+      // vale la pena abrirla: otra ingesta pudo reemplazar el documento, o
+      // moverlo, desde entonces. Se vuelve a tomar la fila con su candado y con
+      // la misma huella y modelo; si ya no es esa, no se toca nada (ni el
+      // documento ni los fragmentos del nuevo) y se sigue con la ingesta
+      // completa, para que contenido y clase salgan del mismo envio. Con la
+      // fila bloqueada, un reemplazo concurrente espera, y lo que hay que
+      // escribir se decide AQUI, contra la fila ya bloqueada: ruta, empresa,
+      // cliente, proyecto y sensibilidad salen siempre del mismo envio, nunca
+      // mezclados con los de otra ingesta que termino entre la lectura y el
+      // candado.
       const vigente = await sql.transaccion(async (ejecutar) => {
         const filas = await ejecutar(
-          `SELECT id
-             FROM rag_documentos
-            WHERE id = $1 AND huella = $2 AND modelo_emb = $3
-              FOR UPDATE`,
-          [id, doc.huella, doc.modeloEmb]
+          `SELECT ${columnasDeEstado(4)}
+             FROM rag_documentos d
+            WHERE d.id = $1 AND d.huella = $2 AND d.modelo_emb = $3
+              FOR UPDATE OF d`,
+          [id, doc.huella, doc.modeloEmb, ...claseDe(doc)]
         );
-        if (filas.length === 0) {
+        const bloqueada = filas[0] as FilaDocumento | undefined;
+        if (!bloqueada) {
           return false;
         }
-        if (rutaCambia || urlCambia || tiempoCambia) {
+        const { ubicacion, clase } = diferencias(bloqueada, doc);
+        if (ubicacion) {
           await ejecutar(
             `UPDATE rag_documentos
                 SET ruta = $2,
@@ -200,7 +231,7 @@ export async function saltarSiNoCambio(
             ]
           );
         }
-        if (reclasifica) {
+        if (clase) {
           await ejecutar(
             `UPDATE rag_documentos
                 SET sensibilidad = $2,
@@ -209,13 +240,7 @@ export async function saltarSiNoCambio(
                     cliente = $5,
                     actualizado_en = now()
               WHERE id = $1`,
-            [
-              id,
-              doc.sensibilidad,
-              doc.proyecto ?? null,
-              doc.empresa,
-              doc.cliente ?? null
-            ]
+            [id, ...claseDe(doc)]
           );
           // Solo los fragmentos que difieren: cada fila reescrita agrega una
           // entrada en cada indice, el HNSW incluido.
@@ -230,13 +255,7 @@ export async function saltarSiNoCambio(
                      OR proyecto IS DISTINCT FROM $3::text
                      OR empresa IS DISTINCT FROM $4::text
                      OR cliente IS DISTINCT FROM $5::text)`,
-            [
-              id,
-              doc.sensibilidad,
-              doc.proyecto ?? null,
-              doc.empresa,
-              doc.cliente ?? null
-            ]
+            [id, ...claseDe(doc)]
           );
         }
         return true;

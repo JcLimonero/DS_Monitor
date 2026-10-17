@@ -41,25 +41,23 @@ class SqlFalsa implements Sql {
         this.doc?.['id'] === parametros[0] &&
         this.doc?.['huella'] === parametros[1] &&
         this.doc?.['modelo_emb'] === parametros[2];
-      return vigente ? [{ id: parametros[0] }] : [];
+      return vigente && this.doc
+        ? [
+            this.estado(
+              parametros[3],
+              parametros[4],
+              parametros[5],
+              parametros[6]
+            )
+          ]
+        : [];
     }
     if (texto.includes('FROM rag_documentos') && texto.includes('huella')) {
       if (!this.doc) {
         return [];
       }
       const [, , sensibilidad, proyecto, empresa, cliente] = parametros;
-      return [
-        {
-          ...this.doc,
-          fragmentos_desalineados: this.fragmentosGuardados.some(
-            (f) =>
-              f.sensibilidad !== sensibilidad ||
-              f.proyecto !== proyecto ||
-              f.empresa !== empresa ||
-              f.cliente !== cliente
-          )
-        }
-      ];
+      return [this.estado(sensibilidad, proyecto, empresa, cliente)];
     }
     if (texto.includes('INSERT INTO rag_documentos')) {
       this.doc = {
@@ -118,6 +116,25 @@ class SqlFalsa implements Sql {
       return (parametros[0] as string[]).map((id) => ({ id }));
     }
     return [];
+  }
+
+  /** La fila del documento y si algun fragmento no coincide con la clase pedida. */
+  private estado(
+    sensibilidad: unknown,
+    proyecto: unknown,
+    empresa: unknown,
+    cliente: unknown
+  ): Fila {
+    return {
+      ...this.doc,
+      fragmentos_desalineados: this.fragmentosGuardados.some(
+        (f) =>
+          f.sensibilidad !== sensibilidad ||
+          f.proyecto !== proyecto ||
+          f.empresa !== empresa ||
+          f.cliente !== cliente
+      )
+    };
   }
 
   async transaccion<T>(
@@ -356,7 +373,10 @@ describe('almacen vectorial', () => {
     ]);
     const candado = sql.consultas.find((c) => c.texto.includes('FOR UPDATE'));
     assert.equal(candado?.enTransaccion, true);
-    assert.match(candado?.texto ?? '', /huella = \$2 AND modelo_emb = \$3/);
+    assert.match(
+      candado?.texto ?? '',
+      /d\.huella = \$2 AND d\.modelo_emb = \$3/
+    );
   });
 
   it('el UPDATE de fragmentos solo reescribe los que difieren', async () => {
@@ -404,6 +424,43 @@ describe('almacen vectorial', () => {
     assert.doesNotMatch(textos, /INSERT|DELETE|embedding/);
     const candado = sql.consultas.find((c) => c.texto.includes('FOR UPDATE'));
     assert.equal(candado?.enTransaccion, true);
+  });
+
+  it('si otra ingesta cambio la fila entre la lectura y el candado, se escribe todo lo de esta, no una mezcla', async () => {
+    const sql = new SqlFalsa();
+    const doc = documento();
+    await guardarDocumento(sql, doc);
+    sql.consultas.length = 0;
+    // Esta ingesta solo ve que la ruta cambio. Antes de que tome el candado,
+    // otra ingesta (de otra ruta) deja el documento como costos y en otra empresa.
+    sql.alTomarElCandado = () => {
+      if (sql.doc) {
+        sql.doc['sensibilidad'] = 'costos';
+        sql.doc['empresa'] = 'operativai';
+        sql.doc['cliente'] = 'Otro';
+      }
+      sql.fragmentosGuardados = [
+        {
+          ...ALINEADO,
+          sensibilidad: 'costos',
+          empresa: 'operativai',
+          cliente: 'Otro'
+        }
+      ];
+    };
+    const salto = await saltarSiNoCambio(sql, {
+      ...doc,
+      ruta: 'Empresas/Itech Dev/Cliente/02_Proyecto/Juntas/b.md'
+    });
+    assert.equal(salto?.omitido, true);
+    assert.equal(
+      sql.doc?.['ruta'],
+      'Empresas/Itech Dev/Cliente/02_Proyecto/Juntas/b.md'
+    );
+    assert.equal(sql.doc?.['sensibilidad'], 'general');
+    assert.equal(sql.doc?.['empresa'], 'itech-dev');
+    assert.equal(sql.doc?.['cliente'], 'TPI Composites');
+    assert.deepEqual(sql.fragmentosGuardados, [ALINEADO]);
   });
 
   it('un cliente que desaparece de la ruta tambien se realinea (queda sin cliente)', async () => {

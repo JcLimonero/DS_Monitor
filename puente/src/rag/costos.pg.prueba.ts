@@ -14,7 +14,13 @@ import {
 } from '../servidor/rutas.js';
 import { establecerGanchosRag } from '../servidor/rutas-rag.js';
 import { resolverEmpresas, type ActorRag } from './alcance.js';
-import { avisarSiFaltaBackfill, buscarHibrido } from './almacen-vectorial.js';
+import {
+  avisarSiFaltaBackfill,
+  buscarHibrido,
+  guardarDocumento,
+  saltarSiNoCambio,
+  type DocumentoAGuardar
+} from './almacen-vectorial.js';
 import { asegurarEsquemaRag } from './esquema.js';
 import {
   abrirEsquemaAleatorio,
@@ -812,6 +818,134 @@ describe(
       const antes = await xmin();
       await e.ingerir(cuerpo);
       assert.deepEqual(await xmin(), antes);
+    });
+
+    it('un documento sin fragmentos tambien se realinea al mover el archivo', async () => {
+      const markdown = '# Solo titulo\n';
+      await e.ingerir({
+        driveFileId: 'drive-vacio',
+        ruta: `${CLIENTE_B}/02_Proyecto/vacio.md`,
+        markdown
+      });
+      const previo = await guardado('drive-vacio');
+      assert.equal(previo.doc?.['empresa'], 'dealer-solutions');
+      assert.equal(previo.frags.length, 0);
+      const r = await e.ingerir({
+        driveFileId: 'drive-vacio',
+        ruta: 'Empresas/Operativ AI/Cliente C/Otro/02_Proyecto/vacio.md',
+        markdown
+      });
+      assert.equal(r.omitido, true);
+      const despues = await guardado('drive-vacio');
+      assert.equal(despues.doc?.['empresa'], 'operativai');
+      assert.equal(despues.doc?.['cliente'], 'Cliente C');
+    });
+
+    // Dos ingestas del mismo archivo (misma huella) con rutas distintas, y una
+    // termina entre la lectura y el candado de la otra. Lo que queda guardado
+    // tiene que salir completo de UNA de las dos, no de una mezcla.
+    describe('dos ingestas que se cruzan', () => {
+      const documentoDe = (extra: Partial<DocumentoAGuardar>) =>
+        ({
+          id: 'drive-carrera',
+          driveFileId: 'drive-carrera',
+          driveUrl: 'https://drive.google.com/file/d/drive-carrera/view',
+          ruta: `${CLIENTE_B}/04_Costos/a.md`,
+          titulo: 'Carrera',
+          empresa: 'dealer-solutions',
+          cliente: 'Cliente B',
+          proyecto: 'Taller',
+          sensibilidad: 'costos',
+          participantes: [],
+          frontmatter: {},
+          huella: 'H',
+          modeloEmb: 'modelo',
+          fragmentos: [0, 1, 2].map((orden) => ({
+            orden,
+            seccion: 'resumen',
+            texto: `texto de la carrera ${orden}`,
+            tokens: 3,
+            embedding: vectorDeterminista(`carrera ${orden}`)
+          })),
+          ...extra
+        }) satisfies DocumentoAGuardar;
+
+      /** Corre `otra` completa justo antes de que `sql` tome el candado de fila. */
+      const conOtraAntesDelCandado = (
+        sql: Sql,
+        otra: DocumentoAGuardar
+      ): Sql => {
+        let hecho = false;
+        return {
+          ejecutar: sql.ejecutar,
+          transaccion: async (f) => {
+            if (!hecho) {
+              hecho = true;
+              await saltarSiNoCambio(sql, otra);
+            }
+            return sql.transaccion(f);
+          }
+        };
+      };
+
+      async function estado() {
+        const g = await guardado('drive-carrera');
+        return { doc: g.doc, frags: g.frags };
+      }
+
+      it('la ruta, la clase y la empresa quedan de la misma ingesta (sensibilidad)', async () => {
+        await guardarDocumento(e.esquema.sql, documentoDe({}));
+        // Esta solo ve que la ruta cambia (sigue en costos); la otra la baja a general.
+        const esta = documentoDe({ ruta: `${CLIENTE_B}/04_Costos/b.md` });
+        const otra = documentoDe({
+          ruta: `${CLIENTE_B}/02_Proyecto/b.md`,
+          sensibilidad: 'general'
+        });
+        const r = await saltarSiNoCambio(
+          conOtraAntesDelCandado(e.esquema.sql, otra),
+          esta
+        );
+        assert.equal(r?.omitido, true);
+        const { doc, frags } = await estado();
+        assert.equal(doc?.['ruta'], `${CLIENTE_B}/04_Costos/b.md`);
+        assert.equal(doc?.['sensibilidad'], 'costos');
+        assert.ok(frags.every((f) => f['sensibilidad'] === 'costos'));
+        // Y quien no tiene costos no lo ve.
+        assert.ok(
+          !documentos(await e.buscar('tok-dealer')).includes('drive-carrera')
+        );
+      });
+
+      it('la ruta, la clase y la empresa quedan de la misma ingesta (empresa)', async () => {
+        const base = documentoDe({
+          ruta: `${CLIENTE_B}/02_Proyecto/a.md`,
+          sensibilidad: 'general',
+          huella: 'H2'
+        });
+        await guardarDocumento(e.esquema.sql, base);
+        const esta = { ...base, ruta: `${CLIENTE_B}/02_Proyecto/b.md` };
+        const otra = {
+          ...base,
+          ruta: 'Empresas/Operativ AI/Cliente C/Otro/02_Proyecto/a.md',
+          empresa: 'operativai',
+          cliente: 'Cliente C',
+          proyecto: 'Otro'
+        };
+        const r = await saltarSiNoCambio(
+          conOtraAntesDelCandado(e.esquema.sql, otra),
+          esta
+        );
+        assert.equal(r?.omitido, true);
+        const { doc, frags } = await estado();
+        assert.equal(doc?.['ruta'], esta.ruta);
+        assert.equal(doc?.['empresa'], 'dealer-solutions');
+        assert.equal(doc?.['cliente'], 'Cliente B');
+        assert.ok(frags.every((f) => f['empresa'] === 'dealer-solutions'));
+        assert.ok(frags.every((f) => f['cliente'] === 'Cliente B'));
+        assert.ok(
+          !documentos(await e.buscar('tok-operativ')).includes('drive-carrera')
+        );
+      });
     });
 
     // --- Conflicto entre el frontmatter y la ruta de Drive -------------------

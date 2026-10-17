@@ -138,6 +138,20 @@ describe('alcance del RAG: costos', () => {
     );
   });
 
+  it('solo el booleano true concede costos: cualquier otro valor del actor queda cerrado', () => {
+    for (const valor of ['true', 'false', 'si', 1, {}, [], null, undefined]) {
+      const actor = {
+        ...director,
+        puedeCostos: valor
+      } as unknown as ActorRag;
+      assert.equal(
+        resolverEmpresas({}, actor).incluyeCostos,
+        false,
+        String(valor)
+      );
+    }
+  });
+
   it('la peticion no puede pedir costos: ningun campo extra cambia la clausula', () => {
     const extra = {
       pregunta: 'precios',

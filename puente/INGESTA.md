@@ -1480,5 +1480,7 @@ clasificar cuenta como `costos`. Si `rag:backfill` o la
 reconciliación diaria encuentra un archivo con la misma huella pero otra ruta,
 realinea `empresa`, `cliente`, `proyecto` y sensibilidad de su documento y de
 todos sus fragmentos sin volver a embeber (el frontmatter manda sobre la ruta,
-como en la primera ingesta). Al arrancar, el puente avisa en el log si hay
+como en la primera ingesta); el texto de los fragmentos conserva la cabecera con
+el nombre anterior de empresa, cliente y proyecto hasta que cambie el contenido
+del archivo. Al arrancar, el puente avisa en el log si hay
 fragmentos indexados y ninguno es `general`: falta correr `rag:backfill`.
