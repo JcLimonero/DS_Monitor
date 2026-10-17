@@ -1398,8 +1398,9 @@ Content-Type: application/json
 | `ruta` | no | Ruta dentro de Empresas/. Da la empresa (manda sobre el `empresa:` del frontmatter), el proyecto y la sensibilidad. Sin ella el documento queda como `costos`. |
 | `modificadoEn` | no | `modifiedTime` de Drive, para la reconciliación diaria. |
 
-La empresa sale de la ruta de Drive; el `empresa:` del frontmatter solo vale si
-no hay `ruta` o si la ruta no resuelve a ninguna empresa. Si el frontmatter
+La empresa sale de la ruta de Drive, de su primera carpeta tras `Empresas/` (una
+carpeta de cliente o de proyecto con nombre de empresa no cuenta); el `empresa:`
+del frontmatter solo vale si no hay `ruta` o si esa carpeta no es una empresa. Si el frontmatter
 nombra otra empresa distinta de la de la ruta, se ignora y el puente lo avisa en
 el log (con el id de Drive, sin contenido). Cliente y proyecto siguen al revés:
 frontmatter primero, luego ruta. Tiene que ser una del catálogo

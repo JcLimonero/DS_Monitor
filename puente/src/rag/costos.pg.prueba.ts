@@ -820,26 +820,74 @@ describe(
       assert.deepEqual(await xmin(), antes);
     });
 
-    it('un documento sin fragmentos tambien se realinea al mover el archivo', async () => {
-      const markdown = '# Solo titulo\n';
-      await e.ingerir({
-        driveFileId: 'drive-vacio',
-        ruta: `${CLIENTE_B}/02_Proyecto/vacio.md`,
-        markdown
+    // Un documento sin fragmentos solo tiene su fila de documento: lo unico que
+    // lo realinea es la comparacion de columnas del documento. Cada caso cambia
+    // UNA sola cosa (empresa, cliente, proyecto o sensibilidad).
+    const SIN_FRAGMENTOS: [string, string, Record<string, string>][] = [
+      [
+        'solo la empresa',
+        'Empresas/Operativ AI/Cliente B/Taller/02_Proyecto/vacio.md',
+        {
+          empresa: 'operativai',
+          cliente: 'Cliente B',
+          proyecto: 'Taller',
+          sensibilidad: 'general'
+        }
+      ],
+      [
+        'solo el cliente',
+        'Empresas/Dealer Solutions/Cliente D/Taller/02_Proyecto/vacio.md',
+        {
+          empresa: 'dealer-solutions',
+          cliente: 'Cliente D',
+          proyecto: 'Taller',
+          sensibilidad: 'general'
+        }
+      ],
+      [
+        'solo el proyecto',
+        'Empresas/Dealer Solutions/Cliente B/Otro/02_Proyecto/vacio.md',
+        {
+          empresa: 'dealer-solutions',
+          cliente: 'Cliente B',
+          proyecto: 'Otro',
+          sensibilidad: 'general'
+        }
+      ],
+      [
+        'solo la sensibilidad',
+        'Empresas/Dealer Solutions/Cliente B/Taller/04_Costos/vacio.md',
+        {
+          empresa: 'dealer-solutions',
+          cliente: 'Cliente B',
+          proyecto: 'Taller',
+          sensibilidad: 'costos'
+        }
+      ]
+    ];
+    for (const [cambia, ruta, esperado] of SIN_FRAGMENTOS) {
+      it(`un documento sin fragmentos se realinea al mover el archivo: ${cambia}`, async () => {
+        const driveFileId = `drive-vacio-${cambia.replace(/ /g, '-')}`;
+        const markdown = '# Solo titulo\n';
+        await e.ingerir({
+          driveFileId,
+          ruta: `${CLIENTE_B}/02_Proyecto/vacio.md`,
+          markdown
+        });
+        const previo = await guardado(driveFileId);
+        assert.equal(previo.doc?.['empresa'], 'dealer-solutions');
+        assert.equal(previo.doc?.['cliente'], 'Cliente B');
+        assert.equal(previo.doc?.['proyecto'], 'Taller');
+        assert.equal(previo.doc?.['sensibilidad'], 'general');
+        assert.equal(previo.frags.length, 0);
+        const r = await e.ingerir({ driveFileId, ruta, markdown });
+        assert.equal(r.omitido, true);
+        const despues = await guardado(driveFileId);
+        for (const [columna, valor] of Object.entries(esperado)) {
+          assert.equal(despues.doc?.[columna], valor, columna);
+        }
       });
-      const previo = await guardado('drive-vacio');
-      assert.equal(previo.doc?.['empresa'], 'dealer-solutions');
-      assert.equal(previo.frags.length, 0);
-      const r = await e.ingerir({
-        driveFileId: 'drive-vacio',
-        ruta: 'Empresas/Operativ AI/Cliente C/Otro/02_Proyecto/vacio.md',
-        markdown
-      });
-      assert.equal(r.omitido, true);
-      const despues = await guardado('drive-vacio');
-      assert.equal(despues.doc?.['empresa'], 'operativai');
-      assert.equal(despues.doc?.['cliente'], 'Cliente C');
-    });
+    }
 
     // Dos ingestas del mismo archivo (misma huella) con rutas distintas, y una
     // termina entre la lectura y el candado de la otra. Lo que queda guardado
@@ -1040,6 +1088,37 @@ describe(
         documentos(await e.buscar('tok-ana', { empresa: 'itech-dev' })),
         ['drive-itech-falso']
       );
+    });
+
+    it('una carpeta de cliente con nombre de empresa no saca un archivo de Itech: sin empresa en la primera carpeta vale el frontmatter', async () => {
+      const markdown = markdownDe(
+        'Itech sin clasificar',
+        'sodalita',
+        'empresa: Itech Dev'
+      );
+      const rutas: [string, string][] = [
+        ['drive-itech-pc', 'Empresas/_POR_CLASIFICAR/Operativ/nota.md'],
+        [
+          'drive-itech-hist',
+          'Empresas/_Historico/Cliente X/Nexus/02_Proyecto/a.md'
+        ],
+        ['drive-itech-nuevo', 'Empresas/Grupo Nuevo/Dealer/02_Proyecto/a.md']
+      ];
+      for (const [driveFileId, ruta] of rutas) {
+        const r = await e.ingerir({ driveFileId, ruta, markdown });
+        assert.equal(r.empresa, 'itech-dev', ruta);
+        for (const token of [
+          'tok-dealer',
+          'tok-operativ',
+          'tok-libre',
+          'admin-prueba'
+        ]) {
+          assert.ok(
+            !documentos(await e.buscar(token)).includes(driveFileId),
+            `${token} ${ruta}`
+          );
+        }
+      }
     });
 
     it('y al reves: un archivo de Dealer con empresa: Itech Dev no entra a Itech', async () => {

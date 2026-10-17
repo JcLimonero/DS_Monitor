@@ -312,6 +312,21 @@ describe('la empresa la manda la ruta de Drive', () => {
     assert.equal(doc.empresaDelFrontmatterIgnorada, false);
   });
 
+  it('una carpeta de cliente con nombre de empresa no le gana al frontmatter', () => {
+    for (const [ruta, esperada] of [
+      ['Empresas/_POR_CLASIFICAR/Operativ/nota.md', 'itech-dev'],
+      ['Empresas/_Historico/Cliente X/Nexus/a.md', 'itech-dev'],
+      ['Empresas/Grupo Nuevo/Dealer/02_Proyecto/a.md', 'itech-dev']
+    ] as const) {
+      const doc = fragmentarMarkdown(conFrente('Itech Dev'), {
+        driveFileId: 'drive-c',
+        ruta
+      });
+      assert.equal(doc.empresa, esperada, ruta);
+      assert.equal(doc.empresaDelFrontmatterIgnorada, false, ruta);
+    }
+  });
+
   it('sin ruta vale el frontmatter', () => {
     const doc = fragmentarMarkdown(conFrente('Operativ AI'), {
       driveFileId: 'drive-c'
