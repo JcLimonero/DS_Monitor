@@ -1395,12 +1395,16 @@ Content-Type: application/json
 | `driveFileId` | sí | Id del archivo en Drive. Único. |
 | `markdown` | sí | El .md completo, con frontmatter. |
 | `driveUrl` | no | Liga que se cita en las respuestas. Sin ella se arma con el id. |
-| `ruta` | no | Ruta dentro de Empresas/. Da la empresa (si el frontmatter no la trae), el proyecto y la sensibilidad. Sin ella el documento queda como `costos`. |
+| `ruta` | no | Ruta dentro de Empresas/. Da la empresa (manda sobre el `empresa:` del frontmatter), el proyecto y la sensibilidad. Sin ella el documento queda como `costos`. |
 | `modificadoEn` | no | `modifiedTime` de Drive, para la reconciliación diaria. |
 
-La empresa sale del frontmatter (`empresa`) o de la ruta. Tiene que ser una
-del catálogo (`dealer-solutions`, `nexusqtech`, `operativai`, `itech-dev`) o
-`limonlabs`. Si no se reconoce, responde 400.
+La empresa sale de la ruta de Drive; el `empresa:` del frontmatter solo vale si
+no hay `ruta` o si la ruta no resuelve a ninguna empresa. Si el frontmatter
+nombra otra empresa distinta de la de la ruta, se ignora y el puente lo avisa en
+el log (con el id de Drive, sin contenido). Cliente y proyecto siguen al revés:
+frontmatter primero, luego ruta. Tiene que ser una del catálogo
+(`dealer-solutions`, `nexusqtech`, `operativai`, `itech-dev`) o `limonlabs`. Si
+no se reconoce, responde 400.
 
 **Sensibilidad y proyecto.** El documento y cada uno de sus fragmentos llevan
 una `sensibilidad`, `general` o `costos`, que sale de `ruta` y del texto del
@@ -1479,7 +1483,7 @@ concede). Los emisores `rag-consulta` no tienen costos. Un fragmento sin
 clasificar cuenta como `costos`. Si `rag:backfill` o la
 reconciliación diaria encuentra un archivo con la misma huella pero otra ruta,
 realinea `empresa`, `cliente`, `proyecto` y sensibilidad de su documento y de
-todos sus fragmentos sin volver a embeber (el frontmatter manda sobre la ruta,
+todos sus fragmentos sin volver a embeber (la empresa sale de la ruta,
 como en la primera ingesta); el texto de los fragmentos conserva la cabecera con
 el nombre anterior de empresa, cliente y proyecto hasta que cambie el contenido
 del archivo. Al arrancar, el puente avisa en el log si hay

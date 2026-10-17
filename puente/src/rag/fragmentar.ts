@@ -47,6 +47,11 @@ export interface DocumentoFragmentado {
   fecha?: string;
   empresa: string;
   empresaNombre: string;
+  /**
+   * true si el frontmatter traia un `empresa:` distinto de la empresa de la
+   * ruta de Drive (o que no se reconoce) y se ignoro: manda la ruta.
+   */
+  empresaDelFrontmatterIgnorada: boolean;
   cliente?: string;
   proyecto?: string;
   tipo: string;
@@ -98,9 +103,13 @@ export function fragmentarMarkdown(
   const texto = markdown.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
   const { frente, cuerpo } = separarFrente(texto);
   const catalogo = ctx.catalogo ?? [];
-  const empresa =
-    empresaIdDe(frente['empresa'], catalogo) ??
-    empresaDeRuta(ctx.ruta, catalogo);
+  // La empresa la manda la ruta de Drive (decision de Carlos, 2026-10-17): si de
+  // la ruta sale una empresa conocida, el `empresa:` del frontmatter se ignora.
+  // Sin ruta, o con una ruta que no resuelve a ninguna empresa, vale el
+  // frontmatter. Cliente y proyecto siguen al reves: frontmatter primero.
+  const empresaDeCarpeta = empresaDeRuta(ctx.ruta, catalogo);
+  const empresaDeFrente = empresaIdDe(frente['empresa'], catalogo);
+  const empresa = empresaDeCarpeta ?? empresaDeFrente;
   if (!empresa) {
     throw new Error(
       'No reconocí la empresa de la junta (frontmatter o ruta de Drive).'
@@ -116,8 +125,13 @@ export function fragmentarMarkdown(
   const participantes = participantesDe(frente['participantes']);
   const fecha = fechaDe(frente['fecha']) ?? fechaDeNombre(ctx.ruta);
   const id = textoONada(frente['id']) ?? ctx.driveFileId;
+  const empresaDelFrontmatterIgnorada =
+    !!empresaDeCarpeta &&
+    !!textoONada(frente['empresa']) &&
+    empresaDeFrente !== empresaDeCarpeta;
+  // El nombre de la cabecera sale del frontmatter solo si ese es el que vale.
   const empresaNombre =
-    textoONada(frente['empresa']) ??
+    (empresaDeFrente === empresa ? textoONada(frente['empresa']) : undefined) ??
     catalogo.find((e) => e.id === empresa)?.nombre ??
     empresa;
   const cabecera = armarCabecera({
@@ -155,6 +169,7 @@ export function fragmentarMarkdown(
     fecha,
     empresa,
     empresaNombre,
+    empresaDelFrontmatterIgnorada,
     cliente,
     proyecto,
     tipo: tipoDe(frente['tipo'], ctx.ruta),

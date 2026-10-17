@@ -168,6 +168,12 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
     } catch (error) {
       throw new ErrorPuente(describir(error), 400);
     }
+    if (doc.empresaDelFrontmatterIgnorada) {
+      // Solo el id de Drive y la empresa resuelta: nada del contenido.
+      console.warn(
+        `[puente] RAG ${cuerpo.driveFileId}: el frontmatter nombra otra empresa; se usa la de la ruta de Drive (${doc.empresa}).`
+      );
+    }
     const modelo = deps.cfg().ragEmbeddingsModelo;
     // Lista blanca: solo Juntas, 02_Proyecto y 03_Entregables sin precios son
     // generales. Lo demas, y todo lo que no se pueda comprobar, queda como costos.

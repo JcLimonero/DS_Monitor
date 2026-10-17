@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { after, before, describe, it } from 'node:test';
+import { after, before, describe, it, mock } from 'node:test';
 import { leerConfiguracion } from '../config/entorno.js';
 import { PersistenciaArchivos, type Sql } from '../datos/persistencia.js';
 import type { UsuarioCrm } from '../nucleo/contrato.js';
@@ -950,60 +950,195 @@ describe(
 
     // --- Conflicto entre el frontmatter y la ruta de Drive -------------------
     //
-    // DECISION PENDIENTE DEL DUENO. Hoy el frontmatter `empresa:` manda sobre la
-    // empresa de la ruta (misma precedencia que la ingesta inicial: frontmatter
-    // primero, luego ruta). Estas pruebas documentan ese comportamiento tal
-    // cual esta; no lo aprueban. Consecuencias: un archivo dentro de la carpeta
-    // de una empresa cuyo frontmatter nombra a otra queda en la otra, y mover
-    // el archivo de carpeta NO lo cambia de empresa mientras el frontmatter siga.
-    it('[decision pendiente] con frontmatter empresa distinta de la ruta, manda el frontmatter', async () => {
+    // Decision de Carlos (2026-10-17): para la EMPRESA manda la ruta de Drive.
+    // Sin ruta, o con una ruta que no resuelve a una empresa, vale el
+    // frontmatter. Cliente y proyecto siguen con el frontmatter primero.
+    const RUTA_ITECH = 'Empresas/Itech Dev/Cliente I/Proyecto I/02_Proyecto';
+
+    it('con frontmatter empresa distinta de la ruta, manda la ruta y se avisa sin volcar contenido', async () => {
       const markdown = markdownDe(
         'Conflicto',
         'turquesa',
         'empresa: Operativ AI'
       );
-      const r = await e.ingerir({
-        driveFileId: 'drive-conflicto',
-        ruta: `${CLIENTE_B}/02_Proyecto/conflicto.md`,
-        markdown
-      });
-      assert.equal(r.empresa, 'operativai');
+      const avisos = mock.method(console, 'warn', () => undefined);
+      try {
+        const r = await e.ingerir({
+          driveFileId: 'drive-conflicto',
+          ruta: `${CLIENTE_B}/02_Proyecto/conflicto.md`,
+          markdown
+        });
+        assert.equal(r.empresa, 'dealer-solutions');
+        const textos = avisos.mock.calls.map((c) => c.arguments.join(' '));
+        assert.equal(textos.length, 1);
+        assert.match(textos[0] ?? '', /drive-conflicto/);
+        assert.match(textos[0] ?? '', /frontmatter nombra otra empresa/);
+        assert.doesNotMatch(textos[0] ?? '', /turquesa|Operativ AI|Conflicto/);
+      } finally {
+        avisos.mock.restore();
+      }
+      const { doc, frags } = await guardado('drive-conflicto');
+      assert.equal(doc?.['empresa'], 'dealer-solutions');
+      assert.ok(frags.every((f) => f['empresa'] === 'dealer-solutions'));
+      // Esta en la carpeta de Dealer Solutions: lo ve Dealer, no Operativ AI.
+      assert.ok(
+        documentos(await e.buscar('tok-dealer')).includes('drive-conflicto')
+      );
+      assert.ok(
+        !documentos(await e.buscar('tok-operativ')).includes('drive-conflicto')
+      );
+      // Y la cabecera del texto indexado no lleva la empresa que se ignoro.
+      const textos = await e.esquema.filas(
+        `SELECT f.texto FROM rag_fragmentos f
+           JOIN rag_documentos d ON d.id = f.documento_id
+          WHERE d.drive_file_id = 'drive-conflicto'`
+      );
+      assert.ok(textos.length > 0);
+      assert.ok(textos.every((t) => !/Operativ AI/.test(String(t['texto']))));
+    });
+
+    it('un archivo en la carpeta de Itech Dev con empresa: Dealer Solutions se indexa como Itech y sigue excluido de las busquedas normales', async () => {
+      const markdown = markdownDe(
+        'Falsa Dealer',
+        'basalto',
+        'empresa: Dealer Solutions'
+      );
+      const avisos = mock.method(console, 'warn', () => undefined);
+      try {
+        const r = await e.ingerir({
+          driveFileId: 'drive-itech-falso',
+          ruta: `${RUTA_ITECH}/falsa.md`,
+          markdown
+        });
+        assert.equal(r.empresa, 'itech-dev');
+      } finally {
+        avisos.mock.restore();
+      }
       assert.equal(
-        (await guardado('drive-conflicto')).doc?.['empresa'],
-        'operativai'
+        (await guardado('drive-itech-falso')).doc?.['empresa'],
+        'itech-dev'
       );
-      // Esta en la carpeta de Dealer Solutions pero lo ve Operativ AI, no Dealer.
-      assert.ok(
-        documentos(await e.buscar('tok-operativ')).includes('drive-conflicto')
+      // Ni el token de Dealer, ni el director, ni el de admin lo ven sin pedir Itech.
+      for (const token of [
+        'tok-dealer',
+        'tok-libre',
+        'admin-prueba',
+        'tok-ana'
+      ]) {
+        assert.ok(
+          !documentos(await e.buscar(token)).includes('drive-itech-falso'),
+          token
+        );
+      }
+      // Quien no tiene permiso de Itech no la obtiene aunque la pida.
+      await assert.rejects(
+        () => e.buscar('tok-dealer', { empresa: 'itech-dev' }),
+        (error: unknown) => (error as { estado?: number }).estado === 403
       );
-      assert.ok(
-        !documentos(await e.buscar('tok-dealer')).includes('drive-conflicto')
+      // El director si, pidiendola de forma explicita.
+      assert.deepEqual(
+        documentos(await e.buscar('tok-ana', { empresa: 'itech-dev' })),
+        ['drive-itech-falso']
       );
     });
 
-    it('[decision pendiente] mover un archivo con frontmatter de empresa no lo cambia de empresa', async () => {
+    it('y al reves: un archivo de Dealer con empresa: Itech Dev no entra a Itech', async () => {
       const markdown = markdownDe(
-        'Fijo por frontmatter',
+        'Falsa Itech',
+        'obsidiana2',
+        'empresa: Itech Dev'
+      );
+      const avisos = mock.method(console, 'warn', () => undefined);
+      try {
+        await e.ingerir({
+          driveFileId: 'drive-dealer-falso',
+          ruta: `${CLIENTE_B}/02_Proyecto/falsa.md`,
+          markdown
+        });
+      } finally {
+        avisos.mock.restore();
+      }
+      assert.equal(
+        (await guardado('drive-dealer-falso')).doc?.['empresa'],
+        'dealer-solutions'
+      );
+      assert.deepEqual(
+        documentos(
+          await e.buscar('tok-ana', { empresa: 'itech-dev' })
+        ).includes('drive-dealer-falso'),
+        false
+      );
+      assert.ok(
+        documentos(await e.buscar('tok-dealer')).includes('drive-dealer-falso')
+      );
+    });
+
+    it('un archivo con frontmatter de empresa que se mueve de carpeta se realinea a la empresa de la nueva ruta', async () => {
+      const markdown = markdownDe(
+        'Se mueve con frontmatter',
         'malaquita',
         'empresa: Operativ AI'
       );
-      await e.ingerir({
-        driveFileId: 'drive-fijo',
-        ruta: `${CLIENTE_B}/02_Proyecto/fijo.md`,
-        markdown
-      });
-      const r = await e.ingerir({
-        driveFileId: 'drive-fijo',
-        ruta: 'Empresas/Nexus Q Tech/Cliente E/Otro/02_Proyecto/fijo.md',
-        markdown
-      });
-      assert.equal(r.omitido, true);
+      const avisos = mock.method(console, 'warn', () => undefined);
+      try {
+        await e.ingerir({
+          driveFileId: 'drive-fijo',
+          ruta: `${CLIENTE_B}/02_Proyecto/fijo.md`,
+          markdown
+        });
+        assert.equal(
+          (await guardado('drive-fijo')).doc?.['empresa'],
+          'dealer-solutions'
+        );
+        const pedidosAntes = e.embeddings();
+        const r = await e.ingerir({
+          driveFileId: 'drive-fijo',
+          ruta: 'Empresas/Nexus Q Tech/Cliente E/Otro/02_Proyecto/fijo.md',
+          markdown
+        });
+        assert.equal(r.omitido, true);
+        assert.equal(r.empresa, 'nexusqtech');
+        assert.equal(e.embeddings(), pedidosAntes);
+      } finally {
+        avisos.mock.restore();
+      }
       const { doc, frags } = await guardado('drive-fijo');
-      assert.equal(doc?.['empresa'], 'operativai');
-      assert.ok(frags.every((f) => f['empresa'] === 'operativai'));
-      // El cliente sale de la ruta (no hay `cliente:` en el frontmatter), asi
-      // que ese si se realinea: empresa y cliente pueden quedar de lados distintos.
+      assert.equal(doc?.['empresa'], 'nexusqtech');
       assert.equal(doc?.['cliente'], 'Cliente E');
+      assert.ok(frags.every((f) => f['empresa'] === 'nexusqtech'));
+      assert.ok(
+        !documentos(await e.buscar('tok-dealer')).includes('drive-fijo')
+      );
+    });
+
+    it('sin ruta vale el frontmatter, y con una ruta que no resuelve a una empresa tambien', async () => {
+      const sinRuta = await e.ingerir({
+        driveFileId: 'drive-sin-ruta',
+        markdown: markdownDe('Sin ruta', 'cinabrio', 'empresa: Operativ AI')
+      });
+      assert.equal(sinRuta.empresa, 'operativai');
+      const ruta = await e.ingerir({
+        driveFileId: 'drive-ruta-ajena',
+        ruta: 'Otros/Cliente Suelto/02_Proyecto/ajena.md',
+        markdown: markdownDe('Ruta ajena', 'pirita', 'empresa: Nexus Q Tech')
+      });
+      assert.equal(ruta.empresa, 'nexusqtech');
+    });
+
+    it('cliente y proyecto siguen con el frontmatter primero', async () => {
+      await e.ingerir({
+        driveFileId: 'drive-cliente-frente',
+        ruta: `${CLIENTE_B}/02_Proyecto/cf.md`,
+        markdown: markdownDe(
+          'Cliente del frente',
+          'ocre',
+          'cliente: Cliente Frente\nproyecto: Proyecto Frente'
+        )
+      });
+      const { doc } = await guardado('drive-cliente-frente');
+      assert.equal(doc?.['cliente'], 'Cliente Frente');
+      assert.equal(doc?.['proyecto'], 'Proyecto Frente');
+      assert.equal(doc?.['empresa'], 'dealer-solutions');
     });
   }
 );

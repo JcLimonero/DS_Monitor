@@ -266,3 +266,76 @@ describe('cliente y proyecto deducidos de la ruta de Drive', () => {
     assert.equal(doc.cliente, undefined);
   });
 });
+
+describe('la empresa la manda la ruta de Drive', () => {
+  const conFrente = (empresa: string) =>
+    `---\nempresa: ${empresa}\ncliente: Cliente Frente\nproyecto: Proyecto Frente\n---\n${FICHA}`;
+
+  it('con ruta que resuelve a una empresa, el empresa: del frontmatter se ignora', () => {
+    const doc = fragmentarMarkdown(conFrente('Dealer Solutions'), {
+      driveFileId: 'drive-c',
+      ruta: 'Empresas/Itech Dev/TPI/Portal/02_Proyecto/a.md'
+    });
+    assert.equal(doc.empresa, 'itech-dev');
+    assert.equal(doc.empresaDelFrontmatterIgnorada, true);
+    // La cabecera no lleva el nombre de la empresa que se ignoro.
+    assert.ok(doc.fragmentos.length > 0);
+    assert.doesNotMatch(
+      doc.fragmentos.map((f) => f.texto).join('\n'),
+      /Dealer Solutions/
+    );
+    assert.match(doc.fragmentos[0]?.texto ?? '', /^\[itech-dev \//);
+  });
+
+  it('un empresa: que no se reconoce tambien se ignora cuando la ruta resuelve', () => {
+    const doc = fragmentarMarkdown(conFrente('Empresa Inventada'), {
+      driveFileId: 'drive-c',
+      ruta: 'Empresas/Dealer Solutions/TPI/Portal/02_Proyecto/a.md'
+    });
+    assert.equal(doc.empresa, 'dealer-solutions');
+    assert.equal(doc.empresaDelFrontmatterIgnorada, true);
+  });
+
+  it('si el frontmatter coincide con la ruta no hay conflicto y conserva su nombre', () => {
+    const doc = fragmentarMarkdown(conFrente('Itech Dev'), {
+      driveFileId: 'drive-c',
+      ruta: 'Empresas/Itech Dev/TPI/Portal/02_Proyecto/a.md'
+    });
+    assert.equal(doc.empresa, 'itech-dev');
+    assert.equal(doc.empresaDelFrontmatterIgnorada, false);
+    assert.equal(doc.empresaNombre, 'Itech Dev');
+  });
+
+  it('sin empresa en el frontmatter manda la ruta y no hay conflicto', () => {
+    const doc = deRuta('Empresas/Itech Dev/TPI/Portal/02_Proyecto/a.md');
+    assert.equal(doc.empresa, 'itech-dev');
+    assert.equal(doc.empresaDelFrontmatterIgnorada, false);
+  });
+
+  it('sin ruta vale el frontmatter', () => {
+    const doc = fragmentarMarkdown(conFrente('Operativ AI'), {
+      driveFileId: 'drive-c'
+    });
+    assert.equal(doc.empresa, 'operativai');
+    assert.equal(doc.empresaDelFrontmatterIgnorada, false);
+    assert.equal(doc.empresaNombre, 'Operativ AI');
+  });
+
+  it('con una ruta que no resuelve a ninguna empresa vale el frontmatter', () => {
+    const doc = fragmentarMarkdown(conFrente('Operativ AI'), {
+      driveFileId: 'drive-c',
+      ruta: 'Otros/Cliente Suelto/02_Proyecto/a.md'
+    });
+    assert.equal(doc.empresa, 'operativai');
+    assert.equal(doc.empresaDelFrontmatterIgnorada, false);
+  });
+
+  it('cliente y proyecto siguen con el frontmatter primero, aunque la empresa venga de la ruta', () => {
+    const doc = fragmentarMarkdown(conFrente('Dealer Solutions'), {
+      driveFileId: 'drive-c',
+      ruta: 'Empresas/Itech Dev/TPI/Portal/02_Proyecto/a.md'
+    });
+    assert.equal(doc.cliente, 'Cliente Frente');
+    assert.equal(doc.proyecto, 'Proyecto Frente');
+  });
+});
