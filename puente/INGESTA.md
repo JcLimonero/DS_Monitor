@@ -1408,22 +1408,38 @@ markdown. Es una lista blanca: `general` hay que ganárselo y todo lo demás es
 `costos`.
 
 - Es `general` si alguna carpeta de `ruta` (no el nombre del archivo) es
-  `Juntas`, `02_Proyecto` o `03_Entregables`, o si el archivo declara
-  `sensibilidad: general` una sola vez.
+  `Juntas`, `02_Proyecto` o `03_Entregables` y el documento no trae precios (ver
+  abajo), o si declara `sensibilidad: general` de forma válida.
 - Todo lo demás es `costos`: fichas `CLIENTE.md` y `PROYECTO_*.md` fuera de esas
   carpetas, brand kits, carpetas sin número, y toda ingesta sin `ruta` (por eso
   conviene mandarla siempre).
 - Un segmento `04_Costos` o `01_Cotizaciones` en la ruta fuerza `costos`, y nada
   lo baja, tampoco `sensibilidad: general`.
 - Si cualquier segmento de la ruta (carpeta o archivo, sin acentos ni
-  mayúsculas) contiene `cotiza`, `costo`, `precio`, `presupuest` o
-  `propuesta econom`, también es `costos`, aunque cuelgue de una carpeta
-  general (`02_Proyecto/COTIZACION_x.md`). Solo un `sensibilidad: general`
-  explícito lo anula.
-- La llave `sensibilidad:` se busca en el texto crudo, en las primeras 60 líneas,
-  sin importar si el frontmatter está bien armado. Si aparece más de una vez, o
-  con un valor distinto de `general` (`costos`, vacío, una lista, cualquier
-  otro), es `costos`.
+  mayúsculas) contiene `cotiza`, `cost`, `precio`, `price`, `pricing`,
+  `presupuest`, `budget`, `quote`, `tarifa`, `honorario`, `monto`, `pago`,
+  `propuesta econom` o `propuesta comercial`, también es `costos`, aunque
+  cuelgue de una carpeta general (`02_Proyecto/COTIZACION_x.md`). Son
+  subcadenas: un cliente o carpeta llamado «Costa Rica» o «Montoya» queda en
+  `costos`.
+- Si el texto del documento (frontmatter incluido) trae una cifra de dinero, es
+  `costos`: `$` seguido de un dígito (`$1,200`, `$ 1200`), las palabras `MXN`,
+  `USD`, `EUR` e `IVA` (`+IVA`), o un número seguido de `pesos`, `dólares` o
+  `euros`. Es una heurística conservadora; una junta que solo menciona un
+  monto queda en `costos` hasta que se marque `general`.
+- Un `sensibilidad: general` válido anula la lista blanca, la capa de nombres y
+  la de cifras, nunca las carpetas `04_Costos` y `01_Cotizaciones`. Es válido
+  solo si el archivo empieza en el primer byte (se permite BOM) con una línea
+  `---`, el bloque cierra con otra línea `---`, y dentro hay UNA línea
+  `sensibilidad: general` en la columna 0, sin comentarios ni adornos (comillas
+  solo en pareja). Un `general` en el cuerpo, en un bloque de código o fuera
+  del frontmatter no vale.
+- Al revés, cualquier línea del documento, completo, que parezca
+  `sensibilidad: <valor>` (también `**Sensibilidad:** costos`,
+  `> sensibilidad: costos`, dentro de un bloque de código, con acentos o
+  caracteres invisibles) con un valor distinto de `general`, o la llave
+  repetida en cualquier parte, fuerza `costos`, aunque el frontmatter diga
+  `general`.
 - El `proyecto` sale del frontmatter o de la ruta: el segmento anterior a la
   primera carpeta `Juntas`, `01_Cotizaciones`, `02_Proyecto`, `03_Entregables`
   o `04_Costos`, si hay al menos tres segmentos desde la empresa (Empresa,

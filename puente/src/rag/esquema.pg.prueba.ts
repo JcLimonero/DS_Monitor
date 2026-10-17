@@ -433,7 +433,7 @@ describe('esquema del RAG contra Postgres real', { skip: OMITIR }, () => {
 const RUTA_PROYECTO =
   'Empresas/Dealer Solutions/Grupo Norte/Taller Norte/Portal';
 
-function markdownDe(titulo: string, frontmatter = ''): string {
+function markdownDe(titulo: string, frontmatter = '', extra = ''): string {
   const frente = frontmatter ? `---\n${frontmatter}\n---\n\n` : '';
   return `${frente}# ${titulo}
 
@@ -449,7 +449,7 @@ Resumen de ${titulo}: se acordo el alcance del modulo.
 
 **Ana:** Revisamos ${titulo} con detalle.
 **Luis:** Queda pendiente la fecha de ${titulo}.
-`;
+${extra ? `\n${extra}\n` : ''}`;
 }
 
 describe('ingesta del RAG contra Postgres real', { skip: OMITIR }, () => {
@@ -542,6 +542,8 @@ describe('ingesta del RAG contra Postgres real', { skip: OMITIR }, () => {
     frontmatter?: string;
     /** Texto antes del frontmatter (para que no empiece en el byte 0). */
     antes?: string;
+    /** Texto que se agrega al final del cuerpo. */
+    extra?: string;
     sensibilidad: string;
     proyecto: string | null;
   }[] = [
@@ -656,6 +658,85 @@ describe('ingesta del RAG contra Postgres real', { skip: OMITIR }, () => {
       frontmatter: 'sensibilidad: costos',
       sensibilidad: 'costos',
       proyecto: 'Portal'
+    },
+    {
+      nombre: 'Tarifas.md dentro de 02_Proyecto es costos',
+      ruta: `${RUTA_PROYECTO}/02_Proyecto/Tarifas.md`,
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
+    },
+    {
+      nombre: 'Propuesta_Comercial_v2.md dentro de 03_Entregables es costos',
+      ruta: `${RUTA_PROYECTO}/03_Entregables/Propuesta_Comercial_v2.md`,
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
+    },
+    {
+      nombre: 'una junta que menciona $1,200 es costos',
+      ruta: `${RUTA_PROYECTO}/02_Proyecto/Juntas/2026-10-06_revision.md`,
+      extra: 'Quedo en $1,200 mensuales.',
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
+    },
+    {
+      nombre: 'una junta que menciona +IVA es costos',
+      ruta: `${RUTA_PROYECTO}/Juntas/2026-10-07_revision.md`,
+      extra: 'El total es +IVA.',
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
+    },
+    {
+      nombre: 'una junta que menciona MXN es costos',
+      ruta: `${RUTA_PROYECTO}/Juntas/2026-10-08_revision.md`,
+      extra: 'Son 15000 MXN.',
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
+    },
+    {
+      nombre: 'una junta sin cifras ni palabras de precios es general',
+      ruta: `${RUTA_PROYECTO}/Juntas/2026-10-09_revision.md`,
+      extra: 'Se acordo la fecha de entrega.',
+      sensibilidad: 'general',
+      proyecto: 'Portal'
+    },
+    {
+      nombre: 'sensibilidad: general valido libera una ficha con cifras',
+      ruta: 'Empresas/Dealer Solutions/Grupo Norte/CLIENTE.md',
+      frontmatter: 'sensibilidad: general',
+      extra: 'Presupuesto de $5,000 MXN +IVA.',
+      sensibilidad: 'general',
+      proyecto: null
+    },
+    {
+      nombre: 'general dentro de un bloque de codigo no libera una ficha',
+      ruta: 'Empresas/Dealer Solutions/Grupo Norte/CLIENTE.md',
+      extra: '```yaml\nsensibilidad: general\n```',
+      sensibilidad: 'costos',
+      proyecto: null
+    },
+    {
+      nombre:
+        'general dentro de un bloque de codigo no libera un documento con cifras',
+      ruta: `${RUTA_PROYECTO}/02_Proyecto/plantilla.md`,
+      extra: '```yaml\nsensibilidad: general\n```\n\nTotal $100.',
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
+    },
+    {
+      nombre: '**Sensibilidad:** costos despues de la linea 60 es costos',
+      ruta: `${RUTA_PROYECTO}/02_Proyecto/larga.md`,
+      extra: `${'linea de relleno\n'.repeat(80)}\n**Sensibilidad:** costos`,
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
+    },
+    {
+      nombre:
+        'frontmatter general valido mas sensibilidad: costos en el cuerpo es costos',
+      ruta: `${RUTA_PROYECTO}/02_Proyecto/mixta.md`,
+      frontmatter: 'sensibilidad: general',
+      extra: '> sensibilidad: costos',
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
     }
   ];
 
@@ -665,7 +746,8 @@ describe('ingesta del RAG contra Postgres real', { skip: OMITIR }, () => {
       const respuesta = await ingerir({
         driveFileId,
         markdown:
-          (caso.antes ?? '') + markdownDe(`Caso ${i}`, caso.frontmatter),
+          (caso.antes ?? '') +
+          markdownDe(`Caso ${i}`, caso.frontmatter, caso.extra),
         ...(caso.ruta ? { ruta: caso.ruta } : {})
       });
       assert.equal(respuesta.omitido, false);
@@ -788,12 +870,12 @@ describe('ingesta del RAG contra Postgres real', { skip: OMITIR }, () => {
     );
     const texto = String(fila[0]?.['texto']);
     const clausula = resolverEmpresas(
-      { pregunta: 'alcance del modulo', empresa: 'dealer-solutions' },
+      { pregunta: 'Caso 3 alcance del modulo', empresa: 'dealer-solutions' },
       director
     );
     const hallados = await buscarHibrido(
       esquema.sql,
-      'alcance del modulo',
+      'Caso 3 alcance del modulo',
       vectorDeterminista(texto),
       { clausula },
       5
