@@ -1395,12 +1395,33 @@ Content-Type: application/json
 | `driveFileId` | sí | Id del archivo en Drive. Único. |
 | `markdown` | sí | El .md completo, con frontmatter. |
 | `driveUrl` | no | Liga que se cita en las respuestas. Sin ella se arma con el id. |
-| `ruta` | no | Ruta dentro de Empresas/. Sirve para la empresa si el frontmatter no la trae. |
+| `ruta` | no | Ruta dentro de Empresas/. Da la empresa (si el frontmatter no la trae), el proyecto y la sensibilidad. Sin ella el documento queda como `costos`. |
 | `modificadoEn` | no | `modifiedTime` de Drive, para la reconciliación diaria. |
 
 La empresa sale del frontmatter (`empresa`) o de la ruta. Tiene que ser una
 del catálogo (`dealer-solutions`, `nexusqtech`, `operativai`, `itech-dev`) o
 `limonlabs`. Si no se reconoce, responde 400.
+
+**Sensibilidad y proyecto.** El documento y cada uno de sus fragmentos llevan
+una `sensibilidad`, `general` o `costos`, que sale de `ruta` y del frontmatter
+y siempre falla cerrado:
+
+- Es `costos` si algún segmento de `ruta` es `04_Costos` o `01_Cotizaciones`
+  (sin distinguir mayúsculas; `04 costos` y `04-costos` valen igual), si el
+  frontmatter trae `sensibilidad` con un valor que no sea `general`, o si la
+  ingesta no trae `ruta`. Por eso conviene mandar siempre la ruta.
+- `sensibilidad: general` en el frontmatter no baja un documento que la ruta
+  marca como costos.
+- El `proyecto` sale del frontmatter o de la ruta: el segmento anterior a la
+  primera carpeta `Juntas`, `01_Cotizaciones`, `02_Proyecto`, `03_Entregables`
+  o `04_Costos`, si hay al menos tres segmentos desde la empresa (Empresa,
+  Cliente de facturación, Cliente final, Proyecto). En una ficha
+  `PROYECTO_*.md` fuera de esas carpetas es la carpeta que la contiene;
+  `CLIENTE.md` no lleva proyecto.
+
+Con la misma huella el puente vuelve a calcular las dos cosas y, si cambiaron
+(el archivo se movió de carpeta o cambió la regla), las corrige en el
+documento y en todos sus fragmentos sin volver a embeber.
 
 **Respuesta:**
 
@@ -1412,7 +1433,8 @@ Con la misma huella: `"omitido": true` y `fragmentos` en 0 (los ya guardados
 siguen). Hace falta `OPENROUTER_API_KEY` y Postgres con pgvector. Sin base, 503.
 
 La carga de los .md que ya están en Drive es `npm run rag:backfill` en `puente/`
-(antes `npm run build`). Consultar es otra cosa: `POST /rag/buscar` y
+(antes `npm run build`); volver a correrla reclasifica lo ya indexado. Hasta
+entonces lo anterior cuenta como `costos`. Consultar es otra cosa: `POST /rag/buscar` y
 `POST /rag/preguntar` piden sesión, el token de admin, o un emisor
 `rag-consulta`. Sin empresa en el cuerpo, el SQL excluye Itech. Para verla hay
 que mandar `"empresa": "itech-dev"` (o `"incluirItech": true`) y tener permiso.

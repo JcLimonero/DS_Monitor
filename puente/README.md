@@ -224,7 +224,8 @@ búsquedas lo excluyen en el SQL salvo que quien pregunta lo pida y pueda verlo.
 - `POST /ingesta/rag` (emisor tipo `rag`): cuerpo `{ driveFileId, driveUrl, ruta, markdown }`. Si el sha256 no cambió, no se reembebe. Ver `INGESTA.md`.
 - `POST /rag/buscar` y `POST /rag/preguntar`: búsqueda híbrida (vector + full-text, fusión RRF) y, en preguntar, respuesta de OpenRouter citando la liga de Drive de cada junta.
 - Modelo de embeddings: `RAG_EMBEDDINGS_MODELO` (omisión `openai/text-embedding-3-small`), con `OPENROUTER_API_KEY`.
-- Carga inicial: `npm run rag:backfill` (recorre Drive y llama al mismo endpoint).
+- Carga inicial: `npm run rag:backfill` (recorre Drive y llama al mismo endpoint). Volver a correrla reclasifica lo ya indexado (sensibilidad y proyecto) sin volver a embeber.
+- Sensibilidad: cada documento y fragmento es `general` o `costos`. Es `costos` bajo una carpeta `04_Costos` o `01_Cotizaciones`, con `sensibilidad` distinta de `general` en el frontmatter, o sin `ruta`. Las filas anteriores a la columna quedan como `costos` hasta el backfill. Ver `INGESTA.md` y `migraciones/002-rag-sensibilidad.sql`.
 - Cada día, después de las 4:00 hora de México, el puente reconcilia Drive contra la base (ediciones, movimientos, borrados).
 - En Coolify la base es `pgvector/pgvector:pg16`. En Render el arranque corre `CREATE EXTENSION vector`.
 
@@ -236,6 +237,15 @@ carpeta raíz `RAG_DRIVE_RAIZ` y, si hace falta, a las carpetas por empresa
 `RAG_DRIVE_CARPETA_OPERATIV`, `RAG_DRIVE_CARPETA_ITECH`). Esas variables las
 leen `configuracionRag` (`src/rag/config.ts`), el programable «rag vectorial»
 y `npm run rag:backfill`. Los ids de carpeta no van en el repositorio.
+
+`RAG_DRIVE_EXCLUIR` lista, separada por comas, las carpetas que el recorrido no
+entra (el backfill y la reconciliación diaria). Cada entrada es un nombre
+(`_OBSOLETAS`, en cualquier nivel) o una ruta de dos o más segmentos con `/`
+(`Interno/Arquitectura`, que coincide con el final de la ruta de la carpeta);
+se comparan sin mayúsculas ni acentos y el guion bajo cuenta como espacio. Por
+omisión es `_OBSOLETAS,Interno/Arquitectura`. Si la defines, **reemplaza** esa
+lista (en blanco usa la de omisión; `-` no excluye nada). Lo excluido deja de
+verse, así que la reconciliación diaria borra del índice lo que ya estaba ahí.
 
 Otras variables: `RAG_EMBEDDINGS_MODELO`, `RAG_BACKFILL_PUENTE`,
 `RAG_BACKFILL_TOKEN`, y en `INGESTA_CLIENTES` los tipos `rag` y `rag-consulta`

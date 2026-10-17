@@ -37,7 +37,10 @@ class SqlFalsa implements Sql {
         modelo_emb: parametros[13],
         ruta: parametros[3],
         drive_url: parametros[2],
-        drive_modificado_en: parametros[14]
+        drive_modificado_en: parametros[14],
+        proyecto: parametros[8],
+        sensibilidad: parametros[15],
+        fragmentos_desalineados: false
       };
       return [];
     }

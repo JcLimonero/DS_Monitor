@@ -72,7 +72,7 @@ export async function correrBackfill(args: Argumentos): Promise<{
   const recorrido = await juntarMarkdown(
     raices,
     (id) => listarHijosDrive(tokenDrive, id),
-    { limite: args.limite }
+    { limite: args.limite, excluir: rag.excluir }
   );
   const pedido = args.empresa ? empresaIdDe(args.empresa) : undefined;
   const archivos = args.empresa

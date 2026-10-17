@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { clasificarSensibilidad } from './clasificar.js';
 import { fragmentarMarkdown, huellaDocumento } from './fragmentar.js';
 
 const RUTA =
@@ -160,6 +161,159 @@ _Sin conversación transcrita._
           ruta: 'notas/suelto.md'
         }),
       /empresa/
+    );
+  });
+});
+
+const FICHA = `# Ficha
+
+## Resumen
+
+Datos generales.
+`;
+
+const PROYECTO_RUTA =
+  'Empresas/Dealer Solutions/Grupo Norte/Taller Norte/Portal';
+
+function deRuta(ruta: string, markdown = FICHA) {
+  return fragmentarMarkdown(markdown, { driveFileId: 'drive-r', ruta });
+}
+
+describe('cliente y proyecto deducidos de la ruta de Drive', () => {
+  it('toma el proyecto antes de cualquier carpeta de etapa', () => {
+    for (const ruta of [
+      `${PROYECTO_RUTA}/02_Proyecto/Juntas/2026-10-06_revision.md`,
+      `${PROYECTO_RUTA}/02_Proyecto/alcance.md`,
+      `${PROYECTO_RUTA}/01_Cotizaciones/2026-10/COT-1.md`,
+      `${PROYECTO_RUTA}/03_Entregables/manual.md`,
+      `${PROYECTO_RUTA}/04_Costos/lista.md`,
+      `${PROYECTO_RUTA}/Juntas/2026-10-06_revision.md`
+    ]) {
+      const doc = deRuta(ruta);
+      assert.equal(doc.empresa, 'dealer-solutions', ruta);
+      assert.equal(doc.proyecto, 'Portal', ruta);
+      assert.equal(doc.cliente, 'Grupo Norte', ruta);
+    }
+  });
+
+  it('la primera carpeta de etapa corta el contexto', () => {
+    const doc = deRuta(`${PROYECTO_RUTA}/02_Proyecto/04_Costos/margen.md`);
+    assert.equal(doc.proyecto, 'Portal');
+    const otra = deRuta(`${PROYECTO_RUTA}/04_Costos/02_Proyecto/margen.md`);
+    assert.equal(otra.proyecto, 'Portal');
+  });
+
+  it('compara las etapas con la norma del RAG y acepta rutas con barra invertida', () => {
+    const doc = deRuta(
+      'Empresas\\Dealer Solutions\\Grupo Norte\\Taller Norte\\Portal\\04 costos\\a.md'
+    );
+    assert.equal(doc.proyecto, 'Portal');
+    assert.equal(doc.cliente, 'Grupo Norte');
+  });
+
+  it('sin al menos tres segmentos antes de la etapa no hay proyecto', () => {
+    const doc = deRuta(
+      'Empresas/Itech Dev/TPI Composites/01_Cotizaciones/COT-1.md'
+    );
+    assert.equal(doc.empresa, 'itech-dev');
+    assert.equal(doc.cliente, 'TPI Composites');
+    assert.equal(doc.proyecto, undefined);
+  });
+
+  it('el frontmatter de proyecto y cliente sigue ganando', () => {
+    const doc = deRuta(
+      `${PROYECTO_RUTA}/04_Costos/lista.md`,
+      `---\nproyecto: Otro\ncliente: Otra Razon\n---\n${FICHA}`
+    );
+    assert.equal(doc.proyecto, 'Otro');
+    assert.equal(doc.cliente, 'Otra Razon');
+  });
+
+  it('una ficha PROYECTO_*.md fuera de una etapa toma el proyecto de su carpeta', () => {
+    const doc = deRuta(`${PROYECTO_RUTA}/PROYECTO_Portal.md`);
+    assert.equal(doc.proyecto, 'Portal');
+    assert.equal(doc.cliente, 'Grupo Norte');
+    const minusculas = deRuta(`${PROYECTO_RUTA}/proyecto_portal.MD`);
+    assert.equal(minusculas.proyecto, 'Portal');
+  });
+
+  it('una ficha PROYECTO_*.md poco profunda no inventa proyecto', () => {
+    const doc = deRuta('Empresas/Dealer Solutions/Grupo Norte/PROYECTO_X.md');
+    assert.equal(doc.proyecto, undefined);
+  });
+
+  it('CLIENTE.md no lleva proyecto', () => {
+    const doc = deRuta(
+      'Empresas/Dealer Solutions/Grupo Norte/Taller Norte/CLIENTE.md'
+    );
+    assert.equal(doc.proyecto, undefined);
+  });
+
+  it('otros archivos fuera de una etapa no llevan proyecto', () => {
+    for (const ruta of [
+      `${PROYECTO_RUTA}/notas.md`,
+      'Empresas/Dealer Solutions/Integraciones/Proveedor/Contacto/Nota.md',
+      'Empresas/Dealer Solutions/_Historico/Cliente/Viejo/nota.md'
+    ]) {
+      assert.equal(deRuta(ruta).proyecto, undefined, ruta);
+    }
+  });
+
+  it('sin ruta no hay proyecto ni cliente', () => {
+    const doc = fragmentarMarkdown(`---\nempresa: Itech Dev\n---\n${FICHA}`, {
+      driveFileId: 'drive-r'
+    });
+    assert.equal(doc.proyecto, undefined);
+    assert.equal(doc.cliente, undefined);
+  });
+});
+
+describe('sensibilidad en el frontmatter', () => {
+  const RUTA_GENERAL = `${PROYECTO_RUTA}/02_Proyecto/ficha.md`;
+
+  it('conserva la llave aunque venga con comillas, espacio o en blanco', () => {
+    for (const [linea, esperado] of [
+      ['sensibilidad: costos', 'costos'],
+      ['Sensibilidad : Costos', 'costos'],
+      ['"sensibilidad": costos', 'costos'],
+      ['sensibilidad:', 'costos'],
+      ['sensibilidad: [general]', 'costos'],
+      ['sensibilidad: general', 'general']
+    ] as const) {
+      const doc = deRuta(RUTA_GENERAL, `---\n${linea}\n---\n${FICHA}`);
+      assert.equal(
+        clasificarSensibilidad({
+          ruta: RUTA_GENERAL,
+          frontmatter: doc.frontmatter
+        }),
+        esperado,
+        linea
+      );
+    }
+  });
+
+  it('una lista en varias lineas se lee como "no es general"', () => {
+    const doc = deRuta(
+      RUTA_GENERAL,
+      `---\nsensibilidad:\n  - general\n---\n${FICHA}`
+    );
+    assert.equal(
+      clasificarSensibilidad({
+        ruta: RUTA_GENERAL,
+        frontmatter: doc.frontmatter
+      }),
+      'costos'
+    );
+  });
+
+  it('sin la llave el documento se queda general por su ruta', () => {
+    const doc = deRuta(RUTA_GENERAL);
+    assert.equal(
+      clasificarSensibilidad({
+        ruta: RUTA_GENERAL,
+        frontmatter: doc.frontmatter
+      }),
+      'general'
     );
   });
 });
