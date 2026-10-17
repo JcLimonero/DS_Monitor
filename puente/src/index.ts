@@ -18,6 +18,7 @@ import {
   PersistenciaPostgres,
   copiarPersistencia
 } from './datos/persistencia-postgres.js';
+import { avisarSiFaltaBackfill } from './rag/almacen-vectorial.js';
 import { asegurarEsquemaRag } from './rag/esquema.js';
 import { Cache } from './nucleo/cache.js';
 import { programar } from './nucleo/programador.js';
@@ -113,6 +114,7 @@ if (urlBase) {
     persistencia = postgres;
     try {
       await asegurarEsquemaRag(postgres.sql);
+      await avisarSiFaltaBackfill(postgres.sql);
     } catch (error) {
       console.error(
         `[puente] RAG vectorial: no se pudo preparar pgvector (${error instanceof Error ? error.message : error}). La búsqueda de juntas queda apagada hasta que la extensión vector exista.`

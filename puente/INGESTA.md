@@ -1395,12 +1395,17 @@ Content-Type: application/json
 | `driveFileId` | sí | Id del archivo en Drive. Único. |
 | `markdown` | sí | El .md completo, con frontmatter. |
 | `driveUrl` | no | Liga que se cita en las respuestas. Sin ella se arma con el id. |
-| `ruta` | no | Ruta dentro de Empresas/. Da la empresa (si el frontmatter no la trae), el proyecto y la sensibilidad. Sin ella el documento queda como `costos`. |
+| `ruta` | no | Ruta dentro de Empresas/. Da la empresa (manda sobre el `empresa:` del frontmatter), el proyecto y la sensibilidad. Sin ella el documento queda como `costos`. |
 | `modificadoEn` | no | `modifiedTime` de Drive, para la reconciliación diaria. |
 
-La empresa sale del frontmatter (`empresa`) o de la ruta. Tiene que ser una
-del catálogo (`dealer-solutions`, `nexusqtech`, `operativai`, `itech-dev`) o
-`limonlabs`. Si no se reconoce, responde 400.
+La empresa sale de la ruta de Drive, de su primera carpeta tras `Empresas/` (una
+carpeta de cliente o de proyecto con nombre de empresa no cuenta); el `empresa:`
+del frontmatter solo vale si no hay `ruta` o si esa carpeta no es una empresa. Si el frontmatter
+nombra otra empresa distinta de la de la ruta, se ignora y el puente lo avisa en
+el log (con el id de Drive, sin contenido). Cliente y proyecto siguen al revés:
+frontmatter primero, luego ruta. Tiene que ser una del catálogo
+(`dealer-solutions`, `nexusqtech`, `operativai`, `itech-dev`) o `limonlabs`. Si
+no se reconoce, responde 400.
 
 **Sensibilidad y proyecto.** El documento y cada uno de sus fragmentos llevan
 una `sensibilidad`, `general` o `costos`, que sale de `ruta` y del texto del
@@ -1469,3 +1474,19 @@ entonces lo anterior cuenta como `costos`. Consultar es otra cosa: `POST /rag/bu
 `rag-consulta`. Sin empresa en el cuerpo, el SQL excluye Itech. Para verla hay
 que mandar `"empresa": "itech-dev"` (o `"incluirItech": true`) y tener permiso.
 Un token cuya sexta columna es solo `itech-dev` no ve el resto.
+
+Los documentos `costos` solo los recupera quien tiene permiso de costos; el
+resto ve únicamente los `general`. El filtro va en el `WHERE` de las dos ramas de
+la búsqueda (vectorial y de texto) y la petición no puede ampliarlo: ningún campo
+del cuerpo concede costos. Tienen costos el token de admin, el director y quien
+tenga el área `costos` en lectura (rol Finanzas; el área `cotizaciones` no lo
+concede). Los emisores `rag-consulta` no tienen costos. Un fragmento sin
+clasificar cuenta como `costos`. Si `rag:backfill` o la
+reconciliación diaria encuentra un archivo con la misma huella pero otra ruta,
+realinea `empresa`, `cliente`, `proyecto` y sensibilidad de su documento y de
+todos sus fragmentos sin volver a embeber (la empresa sale de la ruta,
+como en la primera ingesta). También se reescribe la primera línea del texto de
+cada fragmento (`[Empresa / Cliente / Proyecto] Junta ...`), de modo que el nombre
+anterior ni se lee ni se encuentra por texto; solo en los fragmentos cuyo cuerpo
+es idéntico, y sin tocar el embedding, que conserva la cabecera anterior. Al arrancar, el puente avisa en el log si hay
+fragmentos indexados y ninguno es `general`: falta correr `rag:backfill`.

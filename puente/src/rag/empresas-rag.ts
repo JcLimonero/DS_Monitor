@@ -59,8 +59,16 @@ export function empresaIdDe(
 }
 
 /**
- * La empresa de una ruta de Drive. Solo acepta un segmento que sea alias o
- * empresa del catalogo: el nombre del cliente no se promueve a empresa.
+ * La empresa de una ruta de Drive: SOLO el primer segmento despues de
+ * `Empresas/` (o el primero de la ruta, si no trae `Empresas/`), que es la
+ * carpeta de la empresa emisora. Tiene que ser alias o empresa del catalogo.
+ *
+ * No se busca mas abajo: una carpeta de cliente o de proyecto con nombre de
+ * empresa (`Empresas/_POR_CLASIFICAR/Operativ/...`, `Empresas/Grupo Nuevo/Dealer/...`)
+ * no la promueve a empresa. Como la ruta manda sobre el frontmatter, un
+ * recorrido profundo dejaria que un nombre de carpeta saque un documento de su
+ * empresa (Itech incluida). Si la primera carpeta no es una empresa, no hay
+ * empresa de ruta y vale el frontmatter.
  */
 export function empresaDeRuta(
   ruta: string | undefined,
@@ -71,12 +79,6 @@ export function empresaDeRuta(
   }
   const partes = ruta.split(/[/\\]+/).filter(Boolean);
   const indice = partes.findIndex((p) => normalizarTexto(p) === 'empresas');
-  const desde = indice >= 0 ? partes.slice(indice + 1) : partes;
-  for (const parte of desde) {
-    const id = empresaIdDe(parte, catalogo);
-    if (id) {
-      return id;
-    }
-  }
-  return undefined;
+  const primera = partes[indice >= 0 ? indice + 1 : 0];
+  return primera ? empresaIdDe(primera, catalogo) : undefined;
 }
