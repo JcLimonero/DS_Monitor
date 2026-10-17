@@ -10,8 +10,14 @@ import {
   type Sql
 } from '../datos/persistencia.js';
 import { DIM_EMBEDDING } from '../proveedores/embeddings.js';
+import type { UsuarioCrm } from '../nucleo/contrato.js';
 import { ErrorPuente } from '../nucleo/errores.js';
-import { abrirDatos, cargarDatos, construirRutas } from './rutas.js';
+import {
+  abrirDatos,
+  cargarDatos,
+  construirRutas,
+  type Datos
+} from './rutas.js';
 import { establecerGanchosRag } from './rutas-rag.js';
 
 class SqlFalsa implements Sql {
@@ -133,7 +139,58 @@ async function montar(extra: Record<string, string> = {}) {
     datos,
     []
   );
-  return { router, sql };
+  return { router, sql, datos };
+}
+
+const ACCESO_PRENDIDO = {
+  ACCESO_CORREOS: 'ana@ejemplo.test',
+  EMAILJS_SERVICE_ID: 's',
+  EMAILJS_TEMPLATE_ID: 't',
+  EMAILJS_PUBLIC_KEY: 'p',
+  EMAILJS_PRIVATE_KEY: 'k'
+};
+
+/** Sustituye la red del RAG: un vector fijo y una respuesta fija. */
+function redFalsa(): void {
+  establecerGanchosRag({
+    embeddings: async () => [Array.from({ length: DIM_EMBEDDING }, () => 0.2)],
+    redactar: async () => 'Respuesta de prueba.'
+  });
+}
+
+async function sembrarSesion(
+  datos: Datos,
+  token: string,
+  correo: string
+): Promise<void> {
+  await datos.sesiones.escribir([
+    ...datos.sesiones.leer(),
+    {
+      token,
+      correo,
+      creada: '2026-10-01T00:00:00.000Z',
+      vence: '2999-01-01T00:00:00.000Z'
+    }
+  ]);
+}
+
+async function sembrarUsuario(
+  datos: Datos,
+  correo: string,
+  alcance?: UsuarioCrm['alcance']
+): Promise<void> {
+  await datos.usuariosCrm.escribir([
+    ...datos.usuariosCrm.leer(),
+    {
+      id: correo,
+      correo,
+      nombre: 'Prueba',
+      roles: ['comercial'],
+      ...(alcance ? { alcance } : {}),
+      activo: true,
+      actualizadoEn: '2026-10-01T00:00:00.000Z'
+    }
+  ]);
 }
 
 describe('rutas del RAG vectorial', () => {
@@ -267,6 +324,146 @@ describe('rutas del RAG vectorial', () => {
           pregunta: 'hola'
         }),
       (error: unknown) => error instanceof ErrorPuente && error.estado === 401
+    );
+  });
+
+  const sinEmpresas: [string, UsuarioCrm['alcance']][] = [
+    ['proyectos', { proyectos: ['proyecto-1'] }],
+    ['clientes', { clientes: ['cliente-1'] }]
+  ];
+  for (const [campo, alcance] of sinEmpresas) {
+    it(`un alcance solo de ${campo} no abre el RAG: 403 y ninguna consulta de fragmentos`, async () => {
+      const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
+      await sembrarUsuario(datos, 'alcance@ejemplo.test', alcance);
+      await sembrarSesion(datos, 'tok-sin-empresas', 'alcance@ejemplo.test');
+      redFalsa();
+      sql.consultas.length = 0;
+      for (const ruta of ['/rag/buscar', '/rag/preguntar']) {
+        await assert.rejects(
+          () =>
+            router.resolver(
+              ruta,
+              new URLSearchParams(),
+              'POST',
+              { pregunta: 'que se dijo del portal' },
+              { authorization: 'Bearer tok-sin-empresas' }
+            ),
+          (error: unknown) =>
+            error instanceof ErrorPuente &&
+            error.estado === 403 &&
+            /no incluye empresas/.test(error.message)
+        );
+      }
+      assert.equal(
+        sql.consultas.filter((c) => c.texto.includes('FROM rag_fragmentos'))
+          .length,
+        0
+      );
+    });
+  }
+
+  it('un alcance de empresas consulta solo esas, sin Itech', async () => {
+    const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
+    await sembrarUsuario(datos, 'dealer@ejemplo.test', {
+      empresas: ['dealer-solutions']
+    });
+    await sembrarSesion(datos, 'tok-empresa-dealer', 'dealer@ejemplo.test');
+    redFalsa();
+    sql.consultas.length = 0;
+    const busqueda = (await router.resolver(
+      '/rag/buscar',
+      new URLSearchParams(),
+      'POST',
+      { pregunta: 'que se dijo del portal' },
+      { authorization: 'Bearer tok-empresa-dealer' }
+    )) as { fragmentos: { driveUrl: string }[] };
+    assert.equal(
+      busqueda.fragmentos[0]?.driveUrl,
+      'https://drive.google.com/file/d/drive-9/view'
+    );
+    const selects = sql.consultas.filter((c) =>
+      c.texto.includes('FROM rag_fragmentos')
+    );
+    assert.ok(selects.length >= 2);
+    for (const consulta of selects) {
+      assert.deepEqual(consulta.parametros[0], ['dealer-solutions']);
+      assert.match(consulta.texto, /f\.empresa <> 'itech-dev'/);
+    }
+  });
+
+  it('con el acceso apagado, sin sesion ni token no se consulta el RAG', async () => {
+    const { router, sql } = await montar();
+    redFalsa();
+    sql.consultas.length = 0;
+    await assert.rejects(
+      () =>
+        router.resolver('/rag/buscar', new URLSearchParams(), 'POST', {
+          pregunta: 'que se dijo del portal'
+        }),
+      (error: unknown) =>
+        error instanceof ErrorPuente &&
+        error.estado === 401 &&
+        error.message === 'Se requiere sesión para consultar el RAG.'
+    );
+    assert.equal(
+      sql.consultas.filter((c) => c.texto.includes('FROM rag_fragmentos'))
+        .length,
+      0
+    );
+  });
+
+  it('con el acceso apagado, el token de admin y el de consulta siguen entrando', async () => {
+    const { router } = await montar();
+    redFalsa();
+    for (const authorization of ['Bearer admin-prueba', 'Bearer tok-dealer']) {
+      const respuesta = (await router.resolver(
+        '/rag/buscar',
+        new URLSearchParams(),
+        'POST',
+        { pregunta: 'que se dijo del portal' },
+        { authorization }
+      )) as { fragmentos: unknown[] };
+      assert.ok(respuesta.fragmentos.length > 0);
+    }
+  });
+
+  it('el director por sesion no tiene tope y puede pedir Itech', async () => {
+    const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
+    await sembrarSesion(datos, 'tok-director', 'ana@ejemplo.test');
+    redFalsa();
+    sql.consultas.length = 0;
+    const busqueda = (await router.resolver(
+      '/rag/buscar',
+      new URLSearchParams(),
+      'POST',
+      { pregunta: 'facturas', empresa: 'itech-dev' },
+      { authorization: 'Bearer tok-director' }
+    )) as { fragmentos: unknown[] };
+    assert.ok(busqueda.fragmentos.length > 0);
+    const selects = sql.consultas.filter((c) =>
+      c.texto.includes('FROM rag_fragmentos')
+    );
+    assert.ok(selects.length >= 2);
+    for (const consulta of selects) {
+      assert.deepEqual(consulta.parametros[0], ['itech-dev']);
+    }
+  });
+
+  it('un usuario sin alcance definido ve lo que su rol permite, como antes', async () => {
+    const { router, datos } = await montar(ACCESO_PRENDIDO);
+    await sembrarUsuario(datos, 'libre@ejemplo.test');
+    await sembrarSesion(datos, 'tok-libre', 'libre@ejemplo.test');
+    redFalsa();
+    const busqueda = (await router.resolver(
+      '/rag/buscar',
+      new URLSearchParams(),
+      'POST',
+      { pregunta: 'que se dijo del portal' },
+      { authorization: 'Bearer tok-libre' }
+    )) as { fragmentos: { driveUrl: string }[] };
+    assert.equal(
+      busqueda.fragmentos[0]?.driveUrl,
+      'https://drive.google.com/file/d/drive-9/view'
     );
   });
 });
