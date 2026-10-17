@@ -902,6 +902,40 @@ describe(
       }
     });
 
+    it('renombrar un archivo sin cambiar su empresa, cliente ni proyecto no reescribe ningun fragmento', async () => {
+      const markdown = markdownDe('Solo renombrado', 'tantalo');
+      await e.ingerir({
+        driveFileId: 'drive-renombrado',
+        ruta: `${CLIENTE_B}/02_Proyecto/uno.md`,
+        markdown
+      });
+      const xmin = async () =>
+        (
+          await e.esquema.filas(
+            `SELECT f.xmin::text AS xmin FROM rag_fragmentos f
+               JOIN rag_documentos d ON d.id = f.documento_id
+              WHERE d.drive_file_id = 'drive-renombrado' ORDER BY f.orden`
+          )
+        ).map((f) => f['xmin']);
+      const antes = await xmin();
+      assert.ok(antes.length >= 2);
+      const r = await e.ingerir({
+        driveFileId: 'drive-renombrado',
+        ruta: `${CLIENTE_B}/02_Proyecto/dos.md`,
+        markdown
+      });
+      assert.equal(r.omitido, true);
+      assert.equal(
+        (await guardado('drive-renombrado')).doc?.['ruta'],
+        `${CLIENTE_B}/02_Proyecto/dos.md`
+      );
+      assert.deepEqual(
+        await xmin(),
+        antes,
+        'reescribio fragmentos sin necesidad'
+      );
+    });
+
     it('mover a otro cliente de la misma empresa tambien refresca la cabecera', async () => {
       const markdown = markdownDe('Cabecera de cliente', 'vanadio');
       await e.ingerir({
