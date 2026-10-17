@@ -255,10 +255,17 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
     const token = tokenDe(contexto);
     const emisor = emisorDelToken(token, deps.emisores());
     if (emisor?.tipos.includes('rag-consulta')) {
-      const empresas = (emisor.empresas ?? []).flatMap((e) => {
+      const declaradas = emisor.empresas ?? [];
+      const empresas = declaradas.flatMap((e) => {
         const id = empresaIdDe(e, catalogo());
         return id ? [id] : [];
       });
+      if (declaradas.length > 0 && empresas.length === 0) {
+        throw new ErrorPuente(
+          'Las empresas de este token de consulta no son válidas.',
+          403
+        );
+      }
       return {
         director: false,
         ...(empresas.length > 0 ? { tope: empresas } : {}),
