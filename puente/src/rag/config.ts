@@ -16,6 +16,33 @@ export interface ConfiguracionRagDrive {
   cuenta: CuentaServicioDrive;
   raizId?: string;
   carpetas: CarpetaEmpresaRag[];
+  /** Carpetas que el recorrido no entra. Ver `excluir` en juntarMarkdown. */
+  excluir: string[];
+}
+
+/**
+ * Carpetas que el recorrido de Drive no entra si RAG_DRIVE_EXCLUIR no dice
+ * otra cosa: lo obsoleto (en cualquier nivel) y la arquitectura interna.
+ */
+export const EXCLUIR_POR_OMISION: readonly string[] = [
+  '_OBSOLETAS',
+  'Interno/Arquitectura'
+];
+
+/**
+ * RAG_DRIVE_EXCLUIR: lista separada por comas que REEMPLAZA a la de omision
+ * (quien quiera conservar `Interno/Arquitectura` tiene que repetirla).
+ * Sin definir, en blanco, solo espacios o solo comas se usa la de omision:
+ * un .env.example copiado tal cual no debe apagar las exclusiones. Para no
+ * excluir nada hay que escribir una entrada que no nombre ninguna carpeta,
+ * por ejemplo `-`.
+ */
+export function listaExcluir(valor: string | undefined): string[] {
+  const entradas = (valor ?? '')
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean);
+  return entradas.length > 0 ? entradas : [...EXCLUIR_POR_OMISION];
 }
 
 const CARPETAS: { variable: string; empresaId: string }[] = [
@@ -68,7 +95,8 @@ export function configuracionRag(leer: {
   return {
     cuenta,
     raizId: leer('RAG_DRIVE_RAIZ'),
-    carpetas
+    carpetas,
+    excluir: listaExcluir(leer('RAG_DRIVE_EXCLUIR'))
   };
 }
 

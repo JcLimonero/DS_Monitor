@@ -50,6 +50,21 @@ jobs:
     name: "Puente: formato, tipos, contrato y pruebas"
     runs-on: ubuntu-latest
 
+    # Postgres con pgvector para las pruebas del RAG que necesitan una base de
+    # verdad (esquema.pg.prueba.ts). Es desechable: vive solo durante el job.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     defaults:
       run:
         working-directory: puente
@@ -81,3 +96,5 @@ jobs:
 
       - name: Pruebas
         run: npm test
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres

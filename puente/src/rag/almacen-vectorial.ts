@@ -1,6 +1,7 @@
 import type { Sql } from '../datos/persistencia.js';
 import { literalHalfvec } from '../proveedores/embeddings.js';
 import { sqlEmpresas, type ClausulaEmpresa } from './alcance.js';
+import type { Sensibilidad } from './clasificar.js';
 import { fusionarRrf } from './hibrida.js';
 
 const CANDIDATOS = 40;
@@ -23,6 +24,8 @@ export interface DocumentoAGuardar {
   empresa: string;
   cliente?: string;
   proyecto?: string;
+  /** Va al documento y a cada uno de sus fragmentos. Ver clasificarSensibilidad. */
+  sensibilidad: Sensibilidad;
   tipo?: string;
   participantes: string[];
   frontmatter: Record<string, unknown>;
@@ -69,11 +72,25 @@ interface FilaDocumento {
   ruta?: unknown;
   drive_url?: unknown;
   drive_modificado_en?: unknown;
+  sensibilidad?: unknown;
+  proyecto?: unknown;
+  fragmentos_desalineados?: unknown;
 }
 
 /**
  * Si la huella y el modelo siguen igual, no hay que volver a embeber.
  * Actualiza ruta y liga cuando el archivo se movio en Drive. No toca el CRM.
+ *
+ * Aunque el contenido no cambie, la sensibilidad y el proyecto se vuelven a
+ * calcular de la ruta y el texto: si difieren de lo guardado (o algun
+ * fragmento no coincide con su documento), se corrigen en el documento y en
+ * TODOS sus fragmentos, en una sola transaccion y sin pedir embeddings. Asi
+ * un documento movido de carpeta, o uno indexado antes de que existieran
+ * esas columnas, se reclasifica volviendo a correr `npm run rag:backfill`.
+ *
+ * Devuelve `undefined` cuando hay que ingerir completo: el documento no
+ * existe, cambio su huella o su modelo, o otra ingesta lo reemplazo mientras
+ * se decidia (en ese caso no se escribe nada).
  */
 export async function saltarSiNoCambio(
   sql: Sql,
@@ -87,14 +104,24 @@ export async function saltarSiNoCambio(
     | 'driveUrl'
     | 'modificadoEn'
     | 'empresa'
+    | 'proyecto'
+    | 'sensibilidad'
   >
 ): Promise<ResultadoGuardado | undefined> {
   const previos = await sql.ejecutar(
-    `SELECT id, huella, modelo_emb, ruta, drive_url, drive_modificado_en
-       FROM rag_documentos
-      WHERE drive_file_id = $1 OR id = $2
+    `SELECT d.id, d.huella, d.modelo_emb, d.ruta, d.drive_url,
+            d.drive_modificado_en, d.sensibilidad, d.proyecto,
+            EXISTS (
+              SELECT 1
+                FROM rag_fragmentos f
+               WHERE f.documento_id = d.id
+                 AND (f.sensibilidad IS DISTINCT FROM $3::text
+                      OR f.proyecto IS DISTINCT FROM $4::text)
+            ) AS fragmentos_desalineados
+       FROM rag_documentos d
+      WHERE d.drive_file_id = $1 OR d.id = $2
       LIMIT 1`,
-    [doc.driveFileId, doc.id]
+    [doc.driveFileId, doc.id, doc.sensibilidad, doc.proyecto ?? null]
   );
   const previo = previos[0] as FilaDocumento | undefined;
   if (
@@ -111,24 +138,74 @@ export async function saltarSiNoCambio(
     const tiempoCambia =
       doc.modificadoEn !== undefined &&
       !mismoInstante(modificado, doc.modificadoEn);
-    if (rutaCambia || urlCambia || tiempoCambia) {
-      await sql.ejecutar(
-        `UPDATE rag_documentos
-            SET ruta = $2,
-                drive_url = $3,
-                drive_modificado_en = $4,
-                actualizado_en = now()
-          WHERE id = $1`,
-        [
-          String(previo.id),
-          doc.ruta ?? null,
-          doc.driveUrl ?? null,
-          doc.modificadoEn ?? null
-        ]
-      );
+    const reclasifica =
+      previo.sensibilidad !== doc.sensibilidad ||
+      (texto(previo.proyecto) ?? null) !== (doc.proyecto ?? null) ||
+      previo.fragmentos_desalineados === true;
+    const id = String(previo.id);
+    if (rutaCambia || urlCambia || tiempoCambia || reclasifica) {
+      // La lectura de arriba corrio fuera de la transaccion: otra ingesta
+      // pudo reemplazar el documento desde entonces. Se vuelve a tomar la
+      // fila con su candado y con la misma huella y modelo; si ya no es esa,
+      // no se toca nada (ni el documento ni los fragmentos del nuevo) y se
+      // sigue con la ingesta completa, para que contenido y clase salgan del
+      // mismo envio. Con la fila bloqueada, un reemplazo concurrente espera.
+      const vigente = await sql.transaccion(async (ejecutar) => {
+        const filas = await ejecutar(
+          `SELECT id
+             FROM rag_documentos
+            WHERE id = $1 AND huella = $2 AND modelo_emb = $3
+              FOR UPDATE`,
+          [id, doc.huella, doc.modeloEmb]
+        );
+        if (filas.length === 0) {
+          return false;
+        }
+        if (rutaCambia || urlCambia || tiempoCambia) {
+          await ejecutar(
+            `UPDATE rag_documentos
+                SET ruta = $2,
+                    drive_url = $3,
+                    drive_modificado_en = $4,
+                    actualizado_en = now()
+              WHERE id = $1`,
+            [
+              id,
+              doc.ruta ?? null,
+              doc.driveUrl ?? null,
+              doc.modificadoEn ?? null
+            ]
+          );
+        }
+        if (reclasifica) {
+          await ejecutar(
+            `UPDATE rag_documentos
+                SET sensibilidad = $2,
+                    proyecto = $3,
+                    actualizado_en = now()
+              WHERE id = $1`,
+            [id, doc.sensibilidad, doc.proyecto ?? null]
+          );
+          // Solo los fragmentos que difieren: cada fila reescrita agrega una
+          // entrada en cada indice, el HNSW incluido.
+          await ejecutar(
+            `UPDATE rag_fragmentos
+                SET sensibilidad = $2,
+                    proyecto = $3
+              WHERE documento_id = $1
+                AND (sensibilidad IS DISTINCT FROM $2::text
+                     OR proyecto IS DISTINCT FROM $3::text)`,
+            [id, doc.sensibilidad, doc.proyecto ?? null]
+          );
+        }
+        return true;
+      });
+      if (!vigente) {
+        return undefined;
+      }
     }
     return {
-      id: String(previo.id),
+      id,
       omitido: true,
       fragmentos: 0,
       empresa: doc.empresa
@@ -155,11 +232,11 @@ export async function guardarDocumento(
       `INSERT INTO rag_documentos (
           id, drive_file_id, drive_url, ruta, titulo, fecha, empresa, cliente,
           proyecto, tipo, participantes, frontmatter, huella, modelo_emb,
-          drive_modificado_en, actualizado_en
+          drive_modificado_en, actualizado_en, sensibilidad
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8,
           $9, $10, $11::text[], $12::jsonb, $13, $14,
-          $15, now()
+          $15, now(), $16
         )`,
       [
         doc.id,
@@ -176,7 +253,8 @@ export async function guardarDocumento(
         JSON.stringify(doc.frontmatter),
         doc.huella,
         doc.modeloEmb,
-        doc.modificadoEn ?? null
+        doc.modificadoEn ?? null,
+        doc.sensibilidad
       ]
     );
     if (doc.fragmentos.length === 0) {
@@ -184,9 +262,11 @@ export async function guardarDocumento(
     }
     await ejecutar(
       `INSERT INTO rag_fragmentos (
-          documento_id, orden, seccion, empresa, cliente, fecha, texto, tokens, embedding
+          documento_id, orden, seccion, empresa, cliente, fecha, texto, tokens,
+          embedding, sensibilidad, proyecto
         )
-        SELECT $1, u.orden, u.seccion, $2, $3, $4, u.texto, u.tokens, u.embedding::halfvec
+        SELECT $1, u.orden, u.seccion, $2, $3, $4, u.texto, u.tokens,
+               u.embedding::halfvec, $10::text, $11::text
           FROM unnest(
             $5::int[],
             $6::text[],
@@ -203,7 +283,9 @@ export async function guardarDocumento(
         doc.fragmentos.map((f) => f.seccion),
         doc.fragmentos.map((f) => f.texto),
         doc.fragmentos.map((f) => f.tokens),
-        doc.fragmentos.map((f) => literalHalfvec(f.embedding))
+        doc.fragmentos.map((f) => literalHalfvec(f.embedding)),
+        doc.sensibilidad,
+        doc.proyecto ?? null
       ]
     );
   });

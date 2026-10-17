@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { normalizarTexto } from '../proveedores/fireflies.js';
+import { CARPETAS_COSTOS, CARPETAS_GENERALES } from './clasificar.js';
 import {
   empresaDeRuta,
   empresaIdDe,
@@ -27,6 +28,12 @@ const MESES = [
 ];
 
 const SECCIONES_ENTERAS = new Set(['resumen', 'acuerdos', 'pendientes']);
+
+/**
+ * Carpetas de etapa de un proyecto en Drive, normalizadas. Lo que cuelga
+ * antes de la primera de ellas es el contexto (empresa, cliente, proyecto).
+ */
+const CARPETAS_DE_ETAPA = new Set([...CARPETAS_GENERALES, ...CARPETAS_COSTOS]);
 
 export interface OpcionesFragmento {
   maxTokens?: number;
@@ -230,40 +237,43 @@ function participantesDe(valor: string | undefined): string[] {
 }
 
 function proyectoDeRuta(ruta: string | undefined): string | undefined {
-  const antes = segmentosAntesDeJuntas(ruta);
+  const antes = segmentosDeContexto(ruta);
   const ultimo = antes?.[antes.length - 1];
   if (!antes || antes.length < 3 || !ultimo) {
-    return undefined;
-  }
-  if (normalizarTexto(ultimo) === '02 proyecto') {
     return undefined;
   }
   return ultimo.trim();
 }
 
-function segmentosAntesDeJuntas(
-  ruta: string | undefined
-): string[] | undefined {
+/**
+ * Los segmentos de la ruta que van antes de la primera carpeta de etapa
+ * (Juntas, 01_Cotizaciones, 02_Proyecto, 03_Entregables, 04_Costos), contando
+ * desde la empresa: Empresa / Cliente de facturacion / Cliente final /
+ * Proyecto. Sin carpeta de etapa no hay contexto, salvo en una ficha
+ * PROYECTO_*.md: ahi el contexto son las carpetas que la contienen.
+ */
+function segmentosDeContexto(ruta: string | undefined): string[] | undefined {
   if (!ruta) {
     return undefined;
   }
   const partes = ruta.split(/[/\\]+/).filter(Boolean);
   const indice = partes.findIndex((p) => normalizarTexto(p) === 'empresas');
   const desde = indice >= 0 ? partes.slice(indice + 1) : partes;
-  const juntas = desde.findIndex((p) => normalizarTexto(p) === 'juntas');
-  if (juntas < 0) {
-    return undefined;
+  const archivo = desde[desde.length - 1];
+  const carpetas = desde.slice(0, -1);
+  const etapa = carpetas.findIndex((p) =>
+    CARPETAS_DE_ETAPA.has(normalizarTexto(p))
+  );
+  if (etapa >= 0) {
+    return carpetas.slice(0, etapa);
   }
-  return desde.slice(0, juntas);
+  return archivo && /^PROYECTO_.+\.md$/i.test(archivo.trim())
+    ? carpetas
+    : undefined;
 }
 
 function clienteDeRuta(ruta: string | undefined): string | undefined {
-  const antes = segmentosAntesDeJuntas(ruta);
-  const cliente = antes?.[1];
-  if (!cliente || normalizarTexto(cliente) === '02 proyecto') {
-    return undefined;
-  }
-  return cliente.trim();
+  return segmentosDeContexto(ruta)?.[1]?.trim() || undefined;
 }
 
 function fechaDe(valor: string | undefined): string | undefined {

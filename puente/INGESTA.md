@@ -1395,12 +1395,63 @@ Content-Type: application/json
 | `driveFileId` | sí | Id del archivo en Drive. Único. |
 | `markdown` | sí | El .md completo, con frontmatter. |
 | `driveUrl` | no | Liga que se cita en las respuestas. Sin ella se arma con el id. |
-| `ruta` | no | Ruta dentro de Empresas/. Sirve para la empresa si el frontmatter no la trae. |
+| `ruta` | no | Ruta dentro de Empresas/. Da la empresa (si el frontmatter no la trae), el proyecto y la sensibilidad. Sin ella el documento queda como `costos`. |
 | `modificadoEn` | no | `modifiedTime` de Drive, para la reconciliación diaria. |
 
 La empresa sale del frontmatter (`empresa`) o de la ruta. Tiene que ser una
 del catálogo (`dealer-solutions`, `nexusqtech`, `operativai`, `itech-dev`) o
 `limonlabs`. Si no se reconoce, responde 400.
+
+**Sensibilidad y proyecto.** El documento y cada uno de sus fragmentos llevan
+una `sensibilidad`, `general` o `costos`, que sale de `ruta` y del texto del
+markdown. Es una lista blanca: `general` hay que ganárselo y todo lo demás es
+`costos`.
+
+- Es `general` si alguna carpeta de `ruta` (no el nombre del archivo) es
+  `Juntas`, `02_Proyecto` o `03_Entregables` y el documento no trae precios (ver
+  abajo), o si declara `sensibilidad: general` de forma válida.
+- Todo lo demás es `costos`: fichas `CLIENTE.md` y `PROYECTO_*.md` fuera de esas
+  carpetas, brand kits, carpetas sin número, y toda ingesta sin `ruta` (por eso
+  conviene mandarla siempre).
+- Un segmento `04_Costos` o `01_Cotizaciones` en la ruta fuerza `costos`, y nada
+  lo baja, tampoco `sensibilidad: general`.
+- Si cualquier segmento de la ruta (carpeta o archivo, sin acentos ni
+  mayúsculas) contiene `cotiza`, `cost`, `precio`, `price`, `pricing`,
+  `presupuest`, `budget`, `quote`, `tarifa`, `honorario`, `monto`, `pago`,
+  `propuesta econom` o `propuesta comercial`, también es `costos`, aunque
+  cuelgue de una carpeta general (`02_Proyecto/COTIZACION_x.md`). Son
+  subcadenas: un cliente o carpeta llamado «Costa Rica» o «Montoya» queda en
+  `costos`.
+- Si el texto del documento (frontmatter incluido) trae una cifra de dinero, es
+  `costos`: `$` seguido de un dígito (`$1,200`, `$ 1200`), las palabras `MXN`,
+  `USD`, `EUR` e `IVA` (`+IVA`), o un número seguido de `pesos`, `dólares` o
+  `euros`. Es una heurística conservadora; una junta que solo menciona un
+  monto queda en `costos` hasta que se marque `general`.
+- Un `sensibilidad: general` válido anula la lista blanca, la capa de nombres y
+  la de cifras, nunca las carpetas `04_Costos` y `01_Cotizaciones`. Es válido
+  solo si el archivo empieza en el primer byte (se permite BOM) con una línea
+  `---`, el bloque cierra con otra línea `---`, y dentro hay UNA línea
+  `sensibilidad: general` en la columna 0, sin comentarios ni adornos (comillas
+  solo en pareja). Un `general` en el cuerpo, en un bloque de código o fuera
+  del frontmatter no vale.
+- Al revés, cualquier línea del documento, completo, que parezca
+  `sensibilidad: <valor>` (también `**Sensibilidad:** costos`,
+  `> sensibilidad: costos`, dentro de un bloque de código, con acentos o
+  caracteres invisibles) con un valor distinto de `general`, o la llave
+  repetida en cualquier parte, fuerza `costos`, aunque el frontmatter diga
+  `general`.
+- El `proyecto` sale del frontmatter o de la ruta: el segmento anterior a la
+  primera carpeta `Juntas`, `01_Cotizaciones`, `02_Proyecto`, `03_Entregables`
+  o `04_Costos`, si hay al menos tres segmentos desde la empresa (Empresa,
+  Cliente de facturación, Cliente final, Proyecto). En una ficha
+  `PROYECTO_*.md` fuera de esas carpetas es la carpeta que la contiene;
+  `CLIENTE.md` no lleva proyecto.
+
+Con la misma huella el puente vuelve a calcular las dos cosas y, si cambiaron
+(el archivo se movió de carpeta o cambió la regla), las corrige en el
+documento y en todos sus fragmentos sin volver a embeber. Si otra ingesta
+reemplazó el documento mientras tanto, no escribe nada y sigue con la ingesta
+completa.
 
 **Respuesta:**
 
@@ -1412,7 +1463,8 @@ Con la misma huella: `"omitido": true` y `fragmentos` en 0 (los ya guardados
 siguen). Hace falta `OPENROUTER_API_KEY` y Postgres con pgvector. Sin base, 503.
 
 La carga de los .md que ya están en Drive es `npm run rag:backfill` en `puente/`
-(antes `npm run build`). Consultar es otra cosa: `POST /rag/buscar` y
+(antes `npm run build`); volver a correrla reclasifica lo ya indexado. Hasta
+entonces lo anterior cuenta como `costos`. Consultar es otra cosa: `POST /rag/buscar` y
 `POST /rag/preguntar` piden sesión, el token de admin, o un emisor
 `rag-consulta`. Sin empresa en el cuerpo, el SQL excluye Itech. Para verla hay
 que mandar `"empresa": "itech-dev"` (o `"incluirItech": true`) y tener permiso.

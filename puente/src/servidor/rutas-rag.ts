@@ -51,6 +51,7 @@ import {
   type ClausulaEmpresa,
   type PedidoRag
 } from '../rag/alcance.js';
+import { clasificarSensibilidad } from '../rag/clasificar.js';
 import { juntarMarkdown, type RaizDrive } from '../rag/drive-markdown.js';
 import { asegurarEsquemaRag } from '../rag/esquema.js';
 import { EMPRESA_ITECH, empresaIdDe } from '../rag/empresas-rag.js';
@@ -168,6 +169,12 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
       throw new ErrorPuente(describir(error), 400);
     }
     const modelo = deps.cfg().ragEmbeddingsModelo;
+    // Lista blanca: solo Juntas, 02_Proyecto y 03_Entregables sin precios son
+    // generales. Lo demas, y todo lo que no se pueda comprobar, queda como costos.
+    const sensibilidad = clasificarSensibilidad({
+      ruta: cuerpo.ruta,
+      markdown: cuerpo.markdown
+    });
     const salto = await saltarSiNoCambio(sql, {
       id: doc.id,
       driveFileId: cuerpo.driveFileId,
@@ -178,7 +185,9 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
         cuerpo.driveUrl ??
         `https://drive.google.com/file/d/${cuerpo.driveFileId}/view`,
       modificadoEn: cuerpo.modificadoEn,
-      empresa: doc.empresa
+      empresa: doc.empresa,
+      proyecto: doc.proyecto,
+      sensibilidad
     });
     if (salto) {
       return { recibido: true, ...salto };
@@ -202,6 +211,7 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
       empresa: doc.empresa,
       cliente: doc.cliente,
       proyecto: doc.proyecto,
+      sensibilidad,
       tipo: doc.tipo,
       participantes: doc.participantes,
       frontmatter: doc.frontmatter,
@@ -469,8 +479,10 @@ async function reconciliarDrive(
   }
   const token = await tokenDeCuentaServicio(rag.cuenta);
   const raices = raicesDe(deps, rag);
-  const recorrido = await juntarMarkdown(raices, (id) =>
-    listarHijosDrive(token, id)
+  const recorrido = await juntarMarkdown(
+    raices,
+    (id) => listarHijosDrive(token, id),
+    { excluir: rag.excluir }
   );
   const plan = planearReconciliacion(
     recorrido.archivos.map((a) => ({

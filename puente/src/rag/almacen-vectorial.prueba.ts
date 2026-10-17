@@ -12,14 +12,42 @@ import {
 import { resolverEmpresas, type ActorRag } from './alcance.js';
 
 class SqlFalsa implements Sql {
-  consultas: { texto: string; parametros: unknown[] }[] = [];
+  consultas: {
+    texto: string;
+    parametros: unknown[];
+    enTransaccion: boolean;
+  }[] = [];
   doc?: Fila;
+  fragmentosGuardados: { sensibilidad: unknown; proyecto: unknown }[] = [];
   busqueda: Fila[] = [];
+  /** Simula a otra ingesta que reemplaza el documento antes de que se tome el candado. */
+  alTomarElCandado?: () => void;
+  private dentro = false;
 
   async ejecutar(texto: string, parametros: unknown[] = []): Promise<Fila[]> {
-    this.consultas.push({ texto, parametros });
+    this.consultas.push({ texto, parametros, enTransaccion: this.dentro });
+    if (texto.includes('FOR UPDATE')) {
+      this.alTomarElCandado?.();
+      const vigente =
+        this.doc?.['id'] === parametros[0] &&
+        this.doc?.['huella'] === parametros[1] &&
+        this.doc?.['modelo_emb'] === parametros[2];
+      return vigente ? [{ id: parametros[0] }] : [];
+    }
     if (texto.includes('FROM rag_documentos') && texto.includes('huella')) {
-      return this.doc ? [this.doc] : [];
+      if (!this.doc) {
+        return [];
+      }
+      const sensibilidad = parametros[2];
+      const proyecto = parametros[3];
+      return [
+        {
+          ...this.doc,
+          fragmentos_desalineados: this.fragmentosGuardados.some(
+            (f) => f.sensibilidad !== sensibilidad || f.proyecto !== proyecto
+          )
+        }
+      ];
     }
     if (texto.includes('INSERT INTO rag_documentos')) {
       this.doc = {
@@ -27,16 +55,38 @@ class SqlFalsa implements Sql {
         drive_file_id: parametros[1],
         drive_url: parametros[2],
         ruta: parametros[3],
+        proyecto: parametros[8],
         huella: parametros[12],
         modelo_emb: parametros[13],
-        drive_modificado_en: parametros[14]
+        drive_modificado_en: parametros[14],
+        sensibilidad: parametros[15]
       };
       return [];
     }
+    if (texto.includes('INSERT INTO rag_fragmentos')) {
+      const cuantos = (parametros[4] as unknown[]).length;
+      this.fragmentosGuardados = Array.from({ length: cuantos }, () => ({
+        sensibilidad: parametros[9],
+        proyecto: parametros[10]
+      }));
+      return [];
+    }
     if (texto.includes('UPDATE rag_documentos') && this.doc) {
-      this.doc['ruta'] = parametros[1];
-      this.doc['drive_url'] = parametros[2];
-      this.doc['drive_modificado_en'] = parametros[3];
+      if (texto.includes('SET ruta')) {
+        this.doc['ruta'] = parametros[1];
+        this.doc['drive_url'] = parametros[2];
+        this.doc['drive_modificado_en'] = parametros[3];
+      } else {
+        this.doc['sensibilidad'] = parametros[1];
+        this.doc['proyecto'] = parametros[2];
+      }
+      return [];
+    }
+    if (texto.includes('UPDATE rag_fragmentos')) {
+      this.fragmentosGuardados = this.fragmentosGuardados.map(() => ({
+        sensibilidad: parametros[1],
+        proyecto: parametros[2]
+      }));
       return [];
     }
     if (texto.includes('FROM rag_fragmentos')) {
@@ -50,8 +100,15 @@ class SqlFalsa implements Sql {
     return [];
   }
 
-  transaccion<T>(f: (ejecutar: Sql['ejecutar']) => Promise<T>): Promise<T> {
-    return f((texto, parametros) => this.ejecutar(texto, parametros));
+  async transaccion<T>(
+    f: (ejecutar: Sql['ejecutar']) => Promise<T>
+  ): Promise<T> {
+    this.dentro = true;
+    try {
+      return await f((texto, parametros) => this.ejecutar(texto, parametros));
+    } finally {
+      this.dentro = false;
+    }
   }
 }
 
@@ -67,6 +124,7 @@ function documento(empresa = 'itech-dev'): DocumentoAGuardar {
     empresa,
     cliente: 'TPI Composites',
     proyecto: 'Facturacion',
+    sensibilidad: 'general',
     tipo: 'junta',
     participantes: ['Ana'],
     frontmatter: { empresa: 'Itech Dev' },
@@ -160,6 +218,123 @@ describe('almacen vectorial', () => {
       assert.doesNotMatch(consulta.texto, /<> 'itech-dev'/);
       assert.ok((consulta.parametros[0] as string[]).includes('itech-dev'));
     }
+  });
+
+  it('guarda la sensibilidad en el documento y el proyecto y la sensibilidad en cada fragmento', async () => {
+    const sql = new SqlFalsa();
+    await guardarDocumento(sql, {
+      ...documento(),
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
+    });
+    assert.equal(sql.doc?.['sensibilidad'], 'costos');
+    const insertFragmentos = sql.consultas.find((c) =>
+      c.texto.includes('INSERT INTO rag_fragmentos')
+    );
+    assert.match(insertFragmentos?.texto ?? '', /sensibilidad, proyecto/);
+    assert.equal(insertFragmentos?.parametros[9], 'costos');
+    assert.equal(insertFragmentos?.parametros[10], 'Portal');
+    assert.deepEqual(sql.fragmentosGuardados, [
+      { sensibilidad: 'costos', proyecto: 'Portal' }
+    ]);
+  });
+
+  it('con la misma huella y la misma clasificacion no escribe nada', async () => {
+    const sql = new SqlFalsa();
+    const doc = documento();
+    await guardarDocumento(sql, doc);
+    sql.consultas.length = 0;
+    const salto = await saltarSiNoCambio(sql, doc);
+    assert.equal(salto?.omitido, true);
+    assert.equal(sql.consultas.length, 1);
+    assert.match(sql.consultas[0]?.texto ?? '', /^\s*SELECT/);
+  });
+
+  it('con la misma huella pero otra sensibilidad reclasifica documento y fragmentos sin reinsertar', async () => {
+    const sql = new SqlFalsa();
+    const doc = documento();
+    await guardarDocumento(sql, doc);
+    sql.consultas.length = 0;
+    const movido: typeof doc = {
+      ...doc,
+      ruta: 'Empresas/Itech Dev/Cliente/04_Costos/a.md',
+      sensibilidad: 'costos'
+    };
+    const salto = await saltarSiNoCambio(sql, movido);
+    assert.equal(salto?.omitido, true);
+    assert.equal(sql.doc?.['sensibilidad'], 'costos');
+    assert.equal(sql.doc?.['ruta'], movido.ruta);
+    assert.deepEqual(sql.fragmentosGuardados, [
+      { sensibilidad: 'costos', proyecto: 'Facturacion' }
+    ]);
+    const escrituras = sql.consultas.filter((c) => !/^\s*SELECT/.test(c.texto));
+    assert.equal(escrituras.length, 3);
+    assert.ok(escrituras.every((c) => c.enTransaccion));
+    const textos = escrituras.map((c) => c.texto).join('\n');
+    assert.doesNotMatch(textos, /INSERT|DELETE|embedding/);
+    assert.match(textos, /UPDATE rag_fragmentos/);
+  });
+
+  it('reclasifica cuando el proyecto cambia o un fragmento no coincide con su documento', async () => {
+    const sql = new SqlFalsa();
+    const doc = documento();
+    await guardarDocumento(sql, doc);
+    sql.consultas.length = 0;
+    await saltarSiNoCambio(sql, { ...doc, proyecto: 'Portal' });
+    assert.equal(sql.doc?.['proyecto'], 'Portal');
+    assert.deepEqual(sql.fragmentosGuardados, [
+      { sensibilidad: 'general', proyecto: 'Portal' }
+    ]);
+    // El documento ya esta bien pero el fragmento quedo con el valor por omision.
+    sql.fragmentosGuardados = [{ sensibilidad: 'costos', proyecto: null }];
+    sql.consultas.length = 0;
+    await saltarSiNoCambio(sql, { ...doc, proyecto: 'Portal' });
+    assert.deepEqual(sql.fragmentosGuardados, [
+      { sensibilidad: 'general', proyecto: 'Portal' }
+    ]);
+  });
+
+  it('si otra ingesta reemplazo el documento antes del candado no escribe nada', async () => {
+    const sql = new SqlFalsa();
+    const doc = documento();
+    await guardarDocumento(sql, doc);
+    sql.consultas.length = 0;
+    sql.alTomarElCandado = () => {
+      if (sql.doc) {
+        sql.doc['huella'] = 'otra-huella';
+        sql.doc['sensibilidad'] = 'general';
+      }
+      sql.fragmentosGuardados = [{ sensibilidad: 'general', proyecto: null }];
+    };
+    const salto = await saltarSiNoCambio(sql, {
+      ...doc,
+      ruta: 'Empresas/Itech Dev/Cliente/04_Costos/a.md',
+      sensibilidad: 'costos'
+    });
+    assert.equal(salto, undefined);
+    const escrituras = sql.consultas.filter((c) => !/^\s*SELECT/.test(c.texto));
+    assert.deepEqual(escrituras, []);
+    assert.equal(sql.doc?.['sensibilidad'], 'general');
+    assert.deepEqual(sql.fragmentosGuardados, [
+      { sensibilidad: 'general', proyecto: null }
+    ]);
+    const candado = sql.consultas.find((c) => c.texto.includes('FOR UPDATE'));
+    assert.equal(candado?.enTransaccion, true);
+    assert.match(candado?.texto ?? '', /huella = \$2 AND modelo_emb = \$3/);
+  });
+
+  it('el UPDATE de fragmentos solo reescribe los que difieren', async () => {
+    const sql = new SqlFalsa();
+    const doc = documento();
+    await guardarDocumento(sql, doc);
+    sql.consultas.length = 0;
+    await saltarSiNoCambio(sql, { ...doc, sensibilidad: 'costos' });
+    const update = sql.consultas.find((c) =>
+      c.texto.includes('UPDATE rag_fragmentos')
+    );
+    assert.match(update?.texto ?? '', /WHERE documento_id = \$1/);
+    assert.match(update?.texto ?? '', /sensibilidad IS DISTINCT FROM \$2/);
+    assert.match(update?.texto ?? '', /proyecto IS DISTINCT FROM \$3/);
   });
 
   it('borrar por drive solo toca rag_documentos', async () => {
