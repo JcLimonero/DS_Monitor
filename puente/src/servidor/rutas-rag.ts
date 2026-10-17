@@ -171,7 +171,7 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
     if (doc.empresaDelFrontmatterIgnorada) {
       // Solo el id de Drive y la empresa resuelta: nada del contenido.
       console.warn(
-        `[puente] RAG ${cuerpo.driveFileId}: el frontmatter nombra otra empresa; se usa la de la ruta de Drive (${doc.empresa}).`
+        `[puente] RAG ${JSON.stringify(cuerpo.driveFileId)}: el frontmatter nombra otra empresa; se usa la de la ruta de Drive (${doc.empresa}).`
       );
     }
     const modelo = deps.cfg().ragEmbeddingsModelo;

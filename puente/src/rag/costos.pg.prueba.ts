@@ -971,7 +971,7 @@ describe(
         assert.equal(r.empresa, 'dealer-solutions');
         const textos = avisos.mock.calls.map((c) => c.arguments.join(' '));
         assert.equal(textos.length, 1);
-        assert.match(textos[0] ?? '', /drive-conflicto/);
+        assert.match(textos[0] ?? '', /"drive-conflicto"/);
         assert.match(textos[0] ?? '', /frontmatter nombra otra empresa/);
         assert.doesNotMatch(textos[0] ?? '', /turquesa|Operativ AI|Conflicto/);
       } finally {
