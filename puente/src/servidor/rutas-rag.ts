@@ -266,7 +266,7 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
       };
     }
     const correo = deps.correoDeSesion(contexto);
-    if (!correo && (deps.esAdmin(contexto) || !deps.cfg().acceso)) {
+    if (!correo && deps.esAdmin(contexto)) {
       return { director: true, puedeItech: true };
     }
     if (!correo) {
@@ -293,8 +293,14 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
         403
       );
     }
-    if (director || !usuario.alcance?.empresas) {
+    if (director || !usuario.alcance) {
       return { director, puedeItech: true };
+    }
+    if (!usuario.alcance.empresas?.length) {
+      throw new ErrorPuente(
+        'Tu alcance no incluye empresas, así que no puedes consultar el RAG.',
+        403
+      );
     }
     const tope = usuario.alcance.empresas.flatMap((e) => {
       const id = empresaIdDe(e, catalogo());
