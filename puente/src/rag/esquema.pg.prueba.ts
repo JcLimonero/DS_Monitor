@@ -12,7 +12,12 @@ import {
 import { abrirDatos, cargarDatos, construirRutas } from '../servidor/rutas.js';
 import { establecerGanchosRag } from '../servidor/rutas-rag.js';
 import { resolverEmpresas, type ActorRag } from './alcance.js';
-import { buscarHibrido } from './almacen-vectorial.js';
+import {
+  buscarHibrido,
+  guardarDocumento,
+  saltarSiNoCambio,
+  type DocumentoAGuardar
+} from './almacen-vectorial.js';
 import { asegurarEsquemaRag } from './esquema.js';
 import {
   abrirEsquemaAleatorio,
@@ -91,6 +96,24 @@ async function archivosFisicos(
   return Object.fromEntries(
     filas.map((f) => [String(f['relname']), String(f['archivo'])])
   );
+}
+
+/** Espera a que una escritura sobre el documento quede detenida por un candado de fila. */
+async function esperarBloqueo(esquema: EsquemaPrueba): Promise<void> {
+  for (let intento = 0; intento < 100; intento++) {
+    const filas = await esquema.filas(
+      `SELECT count(*)::int AS n
+         FROM pg_stat_activity
+        WHERE wait_event_type = 'Lock'
+          AND (query ILIKE '%FOR UPDATE%' OR query ILIKE 'UPDATE rag_%')
+          AND pid <> pg_backend_pid()`
+    );
+    if (Number(filas[0]?.['n']) > 0) {
+      return;
+    }
+    await new Promise((resolver) => setTimeout(resolver, 50));
+  }
+  throw new Error('La consulta nunca quedo esperando el candado.');
 }
 
 function literal(vector: readonly number[]): string {
@@ -316,6 +339,92 @@ describe('esquema del RAG contra Postgres real', { skip: OMITIR }, () => {
       );
       assert.equal(conColumnas[0]?.['n'], 1);
     }));
+
+  it('si otra ingesta reemplaza el documento mientras se reclasifica, no queda huella nueva con la clase vieja', () =>
+    conEsquema(async (e) => {
+      await asegurarEsquemaRag(e.sql);
+      const documento = (
+        huella: string,
+        sensibilidad: DocumentoAGuardar['sensibilidad'],
+        proyecto: string
+      ): DocumentoAGuardar => ({
+        id: 'carrera-1',
+        driveFileId: 'drive-carrera-1',
+        ruta: 'Empresas/Dealer Solutions/Grupo Norte/Taller Norte/Portal/02_Proyecto/a.md',
+        titulo: 'Carrera',
+        empresa: 'dealer-solutions',
+        cliente: 'Grupo Norte',
+        proyecto,
+        sensibilidad,
+        participantes: [],
+        frontmatter: {},
+        huella,
+        modeloEmb: 'modelo',
+        fragmentos: [0, 1, 2].map((orden) => ({
+          orden,
+          seccion: 'resumen',
+          texto: `texto ${huella} ${orden}`,
+          tokens: 3,
+          embedding: vectorDeterminista(`${huella} ${orden}`)
+        }))
+      });
+      await guardarDocumento(e.sql, documento('H1', 'general', 'Portal'));
+
+      // La otra ingesta: reemplaza el documento por contenido nuevo (H2, general)
+      // y deja su transaccion abierta, con la fila vieja bloqueada.
+      const otro = await e.pool.connect();
+      try {
+        await otro.query('BEGIN');
+        const sqlDelOtro: Sql = {
+          ejecutar: async (texto, parametros = []) =>
+            (await otro.query(texto, parametros)).rows as Fila[],
+          transaccion: async (f) =>
+            f(
+              async (texto, parametros = []) =>
+                (await otro.query(texto, parametros)).rows as Fila[]
+            )
+        };
+        await guardarDocumento(sqlDelOtro, documento('H2', 'general', 'Nuevo'));
+
+        // Esta ingesta leyo H1 y quiere pasarlo a costos (se movio a 04_Costos).
+        let terminada = false;
+        const reclasificacion = saltarSiNoCambio(
+          e.sql,
+          documento('H1', 'costos', 'Portal')
+        ).finally(() => {
+          terminada = true;
+        });
+        await esperarBloqueo(e);
+        assert.equal(
+          terminada,
+          false,
+          'no debio avanzar sobre la fila bloqueada'
+        );
+        await otro.query('COMMIT');
+        const resultado = await reclasificacion;
+
+        const doc = await e.filas(
+          'SELECT huella, sensibilidad, proyecto FROM rag_documentos'
+        );
+        const frags = await e.filas(
+          'SELECT sensibilidad, proyecto, texto FROM rag_fragmentos ORDER BY orden'
+        );
+        assert.equal(doc.length, 1);
+        assert.equal(doc[0]?.['huella'], 'H2');
+        assert.equal(doc[0]?.['sensibilidad'], 'general');
+        assert.equal(doc[0]?.['proyecto'], 'Nuevo');
+        assert.equal(frags.length, 3);
+        for (const f of frags) {
+          assert.match(String(f['texto']), /texto H2/);
+          assert.equal(f['sensibilidad'], 'general');
+          assert.equal(f['proyecto'], 'Nuevo');
+        }
+        assert.equal(resultado, undefined, 'debio pedir la ingesta completa');
+      } finally {
+        await otro.query('ROLLBACK').catch(() => undefined);
+        otro.release();
+      }
+    }));
 });
 
 // ---------------------------------------------------------------------------
@@ -429,7 +538,10 @@ describe('ingesta del RAG contra Postgres real', { skip: OMITIR }, () => {
   const CASOS: {
     nombre: string;
     ruta?: string;
+    /** Lineas del frontmatter, a partir del primer byte. */
     frontmatter?: string;
+    /** Texto antes del frontmatter (para que no empiece en el byte 0). */
+    antes?: string;
     sensibilidad: string;
     proyecto: string | null;
   }[] = [
@@ -483,6 +595,67 @@ describe('ingesta del RAG contra Postgres real', { skip: OMITIR }, () => {
       frontmatter: 'cliente: TPI Composites\nproyecto: Facturacion',
       sensibilidad: 'general',
       proyecto: 'Facturacion'
+    },
+    {
+      nombre:
+        'CLIENTE.md fuera de las carpetas generales es costos y sin proyecto',
+      ruta: 'Empresas/Dealer Solutions/Grupo Norte/Taller Norte/CLIENTE.md',
+      sensibilidad: 'costos',
+      proyecto: null
+    },
+    {
+      nombre:
+        'PROYECTO_*.md fuera de las carpetas generales es costos, con su proyecto',
+      ruta: `${RUTA_PROYECTO}/PROYECTO_Portal.md`,
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
+    },
+    {
+      nombre: 'una ficha PROYECTO_*.md con sensibilidad: general es general',
+      ruta: `${RUTA_PROYECTO}/PROYECTO_Portal.md`,
+      frontmatter: 'sensibilidad: general',
+      sensibilidad: 'general',
+      proyecto: 'Portal'
+    },
+    {
+      nombre: 'COTIZACION_x.md dentro de 02_Proyecto es costos',
+      ruta: `${RUTA_PROYECTO}/02_Proyecto/COTIZACION_x.md`,
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
+    },
+    {
+      nombre: 'Propuesta_economica.md dentro de 03_Entregables es costos',
+      ruta: `${RUTA_PROYECTO}/03_Entregables/Propuesta_economica.md`,
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
+    },
+    {
+      nombre: 'COTIZACION_x.md con sensibilidad: general explicito es general',
+      ruta: `${RUTA_PROYECTO}/02_Proyecto/COTIZACION_y.md`,
+      frontmatter: 'sensibilidad: general',
+      sensibilidad: 'general',
+      proyecto: 'Portal'
+    },
+    {
+      nombre: 'una carpeta Cotizaciones sin numero es costos',
+      ruta: `${RUTA_PROYECTO}/Cotizaciones/resumen.md`,
+      sensibilidad: 'costos',
+      proyecto: null
+    },
+    {
+      nombre: 'la llave repetida (costos y despues general) es costos',
+      ruta: `${RUTA_PROYECTO}/02_Proyecto/duplicada.md`,
+      frontmatter: 'sensibilidad: costos\nsensibilidad: general',
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
+    },
+    {
+      nombre: 'un frontmatter que no empieza en el primer byte se lee igual',
+      ruta: `${RUTA_PROYECTO}/02_Proyecto/desplazada.md`,
+      antes: '\n\n',
+      frontmatter: 'sensibilidad: costos',
+      sensibilidad: 'costos',
+      proyecto: 'Portal'
     }
   ];
 
@@ -491,7 +664,8 @@ describe('ingesta del RAG contra Postgres real', { skip: OMITIR }, () => {
       const driveFileId = `drive-caso-${i}`;
       const respuesta = await ingerir({
         driveFileId,
-        markdown: markdownDe(`Caso ${i}`, caso.frontmatter),
+        markdown:
+          (caso.antes ?? '') + markdownDe(`Caso ${i}`, caso.frontmatter),
         ...(caso.ruta ? { ruta: caso.ruta } : {})
       });
       assert.equal(respuesta.omitido, false);

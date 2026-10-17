@@ -82,11 +82,15 @@ interface FilaDocumento {
  * Actualiza ruta y liga cuando el archivo se movio en Drive. No toca el CRM.
  *
  * Aunque el contenido no cambie, la sensibilidad y el proyecto se vuelven a
- * calcular de la ruta y el frontmatter: si difieren de lo guardado (o algun
+ * calcular de la ruta y el texto: si difieren de lo guardado (o algun
  * fragmento no coincide con su documento), se corrigen en el documento y en
  * TODOS sus fragmentos, en una sola transaccion y sin pedir embeddings. Asi
  * un documento movido de carpeta, o uno indexado antes de que existieran
  * esas columnas, se reclasifica volviendo a correr `npm run rag:backfill`.
+ *
+ * Devuelve `undefined` cuando hay que ingerir completo: el documento no
+ * existe, cambio su huella o su modelo, o otra ingesta lo reemplazo mientras
+ * se decidia (en ese caso no se escribe nada).
  */
 export async function saltarSiNoCambio(
   sql: Sql,
@@ -140,7 +144,23 @@ export async function saltarSiNoCambio(
       previo.fragmentos_desalineados === true;
     const id = String(previo.id);
     if (rutaCambia || urlCambia || tiempoCambia || reclasifica) {
-      await sql.transaccion(async (ejecutar) => {
+      // La lectura de arriba corrio fuera de la transaccion: otra ingesta
+      // pudo reemplazar el documento desde entonces. Se vuelve a tomar la
+      // fila con su candado y con la misma huella y modelo; si ya no es esa,
+      // no se toca nada (ni el documento ni los fragmentos del nuevo) y se
+      // sigue con la ingesta completa, para que contenido y clase salgan del
+      // mismo envio. Con la fila bloqueada, un reemplazo concurrente espera.
+      const vigente = await sql.transaccion(async (ejecutar) => {
+        const filas = await ejecutar(
+          `SELECT id
+             FROM rag_documentos
+            WHERE id = $1 AND huella = $2 AND modelo_emb = $3
+              FOR UPDATE`,
+          [id, doc.huella, doc.modeloEmb]
+        );
+        if (filas.length === 0) {
+          return false;
+        }
         if (rutaCambia || urlCambia || tiempoCambia) {
           await ejecutar(
             `UPDATE rag_documentos
@@ -178,7 +198,11 @@ export async function saltarSiNoCambio(
             [id, doc.sensibilidad, doc.proyecto ?? null]
           );
         }
+        return true;
       });
+      if (!vigente) {
+        return undefined;
+      }
     }
     return {
       id,

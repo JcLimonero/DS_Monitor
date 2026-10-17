@@ -27,9 +27,23 @@ describe('RAG_DRIVE_EXCLUIR', () => {
     assert.deepEqual(sin?.excluir, ['_OBSOLETAS', 'Interno/Arquitectura']);
   });
 
-  it('en blanco se usa la lista de omision, no una vacia', () => {
-    for (const valor of ['', '   ']) {
-      assert.deepEqual(listaExcluir(valor), [...EXCLUIR_POR_OMISION], valor);
+  it('en blanco, con solo espacios o con solo comas se usa la lista de omision, no una vacia', () => {
+    for (const valor of ['', '   ', ',', ' , ', ',,,', ', ,\t,']) {
+      assert.deepEqual(
+        listaExcluir(valor),
+        [...EXCLUIR_POR_OMISION],
+        JSON.stringify(valor)
+      );
+      assert.deepEqual(
+        configuracionRag(
+          leerDe({
+            GOOGLE_DRIVE_CUENTA_SERVICIO: CUENTA,
+            RAG_DRIVE_EXCLUIR: valor
+          })
+        )?.excluir,
+        [...EXCLUIR_POR_OMISION],
+        JSON.stringify(valor)
+      );
     }
     assert.deepEqual(listaExcluir(undefined), [...EXCLUIR_POR_OMISION]);
   });
@@ -42,6 +56,17 @@ describe('RAG_DRIVE_EXCLUIR', () => {
       })
     );
     assert.deepEqual(cfg?.excluir, ['_Archivo', 'Interno/Notas', '05_Privado']);
+  });
+
+  it('fijarla reemplaza la de omision y un guion no excluye nada', () => {
+    assert.deepEqual(listaExcluir('Interno/Notas'), ['Interno/Notas']);
+    assert.equal(listaExcluir('Interno/Notas').includes('_OBSOLETAS'), false);
+    assert.deepEqual(listaExcluir('-'), ['-']);
+    assert.deepEqual(listaExcluir('_OBSOLETAS,Interno/Arquitectura,Otra'), [
+      '_OBSOLETAS',
+      'Interno/Arquitectura',
+      'Otra'
+    ]);
   });
 
   it('la lista de omision no se comparte entre llamadas', () => {

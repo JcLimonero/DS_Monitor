@@ -169,10 +169,11 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
       throw new ErrorPuente(describir(error), 400);
     }
     const modelo = deps.cfg().ragEmbeddingsModelo;
-    // Falla cerrado: sin ruta (o con una ruta de costos) queda como costos.
+    // Lista blanca: solo Juntas, 02_Proyecto y 03_Entregables son generales.
+    // Lo demas, y todo lo que no se pueda comprobar, queda como costos.
     const sensibilidad = clasificarSensibilidad({
       ruta: cuerpo.ruta,
-      frontmatter: doc.frontmatter
+      markdown: cuerpo.markdown
     });
     const salto = await saltarSiNoCambio(sql, {
       id: doc.id,

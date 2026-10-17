@@ -1403,15 +1403,27 @@ del catálogo (`dealer-solutions`, `nexusqtech`, `operativai`, `itech-dev`) o
 `limonlabs`. Si no se reconoce, responde 400.
 
 **Sensibilidad y proyecto.** El documento y cada uno de sus fragmentos llevan
-una `sensibilidad`, `general` o `costos`, que sale de `ruta` y del frontmatter
-y siempre falla cerrado:
+una `sensibilidad`, `general` o `costos`, que sale de `ruta` y del texto del
+markdown. Es una lista blanca: `general` hay que ganárselo y todo lo demás es
+`costos`.
 
-- Es `costos` si algún segmento de `ruta` es `04_Costos` o `01_Cotizaciones`
-  (sin distinguir mayúsculas; `04 costos` y `04-costos` valen igual), si el
-  frontmatter trae `sensibilidad` con un valor que no sea `general`, o si la
-  ingesta no trae `ruta`. Por eso conviene mandar siempre la ruta.
-- `sensibilidad: general` en el frontmatter no baja un documento que la ruta
-  marca como costos.
+- Es `general` si alguna carpeta de `ruta` (no el nombre del archivo) es
+  `Juntas`, `02_Proyecto` o `03_Entregables`, o si el archivo declara
+  `sensibilidad: general` una sola vez.
+- Todo lo demás es `costos`: fichas `CLIENTE.md` y `PROYECTO_*.md` fuera de esas
+  carpetas, brand kits, carpetas sin número, y toda ingesta sin `ruta` (por eso
+  conviene mandarla siempre).
+- Un segmento `04_Costos` o `01_Cotizaciones` en la ruta fuerza `costos`, y nada
+  lo baja, tampoco `sensibilidad: general`.
+- Si cualquier segmento de la ruta (carpeta o archivo, sin acentos ni
+  mayúsculas) contiene `cotiza`, `costo`, `precio`, `presupuest` o
+  `propuesta econom`, también es `costos`, aunque cuelgue de una carpeta
+  general (`02_Proyecto/COTIZACION_x.md`). Solo un `sensibilidad: general`
+  explícito lo anula.
+- La llave `sensibilidad:` se busca en el texto crudo, en las primeras 60 líneas,
+  sin importar si el frontmatter está bien armado. Si aparece más de una vez, o
+  con un valor distinto de `general` (`costos`, vacío, una lista, cualquier
+  otro), es `costos`.
 - El `proyecto` sale del frontmatter o de la ruta: el segmento anterior a la
   primera carpeta `Juntas`, `01_Cotizaciones`, `02_Proyecto`, `03_Entregables`
   o `04_Costos`, si hay al menos tres segmentos desde la empresa (Empresa,
@@ -1421,7 +1433,9 @@ y siempre falla cerrado:
 
 Con la misma huella el puente vuelve a calcular las dos cosas y, si cambiaron
 (el archivo se movió de carpeta o cambió la regla), las corrige en el
-documento y en todos sus fragmentos sin volver a embeber.
+documento y en todos sus fragmentos sin volver a embeber. Si otra ingesta
+reemplazó el documento mientras tanto, no escribe nada y sigue con la ingesta
+completa.
 
 **Respuesta:**
 

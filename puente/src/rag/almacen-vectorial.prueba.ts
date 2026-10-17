@@ -20,10 +20,20 @@ class SqlFalsa implements Sql {
   doc?: Fila;
   fragmentosGuardados: { sensibilidad: unknown; proyecto: unknown }[] = [];
   busqueda: Fila[] = [];
+  /** Simula a otra ingesta que reemplaza el documento antes de que se tome el candado. */
+  alTomarElCandado?: () => void;
   private dentro = false;
 
   async ejecutar(texto: string, parametros: unknown[] = []): Promise<Fila[]> {
     this.consultas.push({ texto, parametros, enTransaccion: this.dentro });
+    if (texto.includes('FOR UPDATE')) {
+      this.alTomarElCandado?.();
+      const vigente =
+        this.doc?.['id'] === parametros[0] &&
+        this.doc?.['huella'] === parametros[1] &&
+        this.doc?.['modelo_emb'] === parametros[2];
+      return vigente ? [{ id: parametros[0] }] : [];
+    }
     if (texto.includes('FROM rag_documentos') && texto.includes('huella')) {
       if (!this.doc) {
         return [];
@@ -282,6 +292,35 @@ describe('almacen vectorial', () => {
     assert.deepEqual(sql.fragmentosGuardados, [
       { sensibilidad: 'general', proyecto: 'Portal' }
     ]);
+  });
+
+  it('si otra ingesta reemplazo el documento antes del candado no escribe nada', async () => {
+    const sql = new SqlFalsa();
+    const doc = documento();
+    await guardarDocumento(sql, doc);
+    sql.consultas.length = 0;
+    sql.alTomarElCandado = () => {
+      if (sql.doc) {
+        sql.doc['huella'] = 'otra-huella';
+        sql.doc['sensibilidad'] = 'general';
+      }
+      sql.fragmentosGuardados = [{ sensibilidad: 'general', proyecto: null }];
+    };
+    const salto = await saltarSiNoCambio(sql, {
+      ...doc,
+      ruta: 'Empresas/Itech Dev/Cliente/04_Costos/a.md',
+      sensibilidad: 'costos'
+    });
+    assert.equal(salto, undefined);
+    const escrituras = sql.consultas.filter((c) => !/^\s*SELECT/.test(c.texto));
+    assert.deepEqual(escrituras, []);
+    assert.equal(sql.doc?.['sensibilidad'], 'general');
+    assert.deepEqual(sql.fragmentosGuardados, [
+      { sensibilidad: 'general', proyecto: null }
+    ]);
+    const candado = sql.consultas.find((c) => c.texto.includes('FOR UPDATE'));
+    assert.equal(candado?.enTransaccion, true);
+    assert.match(candado?.texto ?? '', /huella = \$2 AND modelo_emb = \$3/);
   });
 
   it('el UPDATE de fragmentos solo reescribe los que difieren', async () => {

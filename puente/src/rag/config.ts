@@ -30,19 +30,19 @@ export const EXCLUIR_POR_OMISION: readonly string[] = [
 ];
 
 /**
- * RAG_DRIVE_EXCLUIR: lista separada por comas que REEMPLAZA a la de omision.
- * En blanco o sin definir se usa la de omision (un .env.example copiado tal
- * cual no debe apagar las exclusiones). Para no excluir nada basta una
- * entrada que no nombre ninguna carpeta, por ejemplo `-`.
+ * RAG_DRIVE_EXCLUIR: lista separada por comas que REEMPLAZA a la de omision
+ * (quien quiera conservar `Interno/Arquitectura` tiene que repetirla).
+ * Sin definir, en blanco, solo espacios o solo comas se usa la de omision:
+ * un .env.example copiado tal cual no debe apagar las exclusiones. Para no
+ * excluir nada hay que escribir una entrada que no nombre ninguna carpeta,
+ * por ejemplo `-`.
  */
 export function listaExcluir(valor: string | undefined): string[] {
-  if (!valor?.trim()) {
-    return [...EXCLUIR_POR_OMISION];
-  }
-  return valor
+  const entradas = (valor ?? '')
     .split(',')
     .map((e) => e.trim())
     .filter(Boolean);
+  return entradas.length > 0 ? entradas : [...EXCLUIR_POR_OMISION];
 }
 
 const CARPETAS: { variable: string; empresaId: string }[] = [

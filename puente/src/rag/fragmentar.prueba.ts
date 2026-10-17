@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { clasificarSensibilidad } from './clasificar.js';
 import { fragmentarMarkdown, huellaDocumento } from './fragmentar.js';
 
 const RUTA =
@@ -265,55 +264,5 @@ describe('cliente y proyecto deducidos de la ruta de Drive', () => {
     });
     assert.equal(doc.proyecto, undefined);
     assert.equal(doc.cliente, undefined);
-  });
-});
-
-describe('sensibilidad en el frontmatter', () => {
-  const RUTA_GENERAL = `${PROYECTO_RUTA}/02_Proyecto/ficha.md`;
-
-  it('conserva la llave aunque venga con comillas, espacio o en blanco', () => {
-    for (const [linea, esperado] of [
-      ['sensibilidad: costos', 'costos'],
-      ['Sensibilidad : Costos', 'costos'],
-      ['"sensibilidad": costos', 'costos'],
-      ['sensibilidad:', 'costos'],
-      ['sensibilidad: [general]', 'costos'],
-      ['sensibilidad: general', 'general']
-    ] as const) {
-      const doc = deRuta(RUTA_GENERAL, `---\n${linea}\n---\n${FICHA}`);
-      assert.equal(
-        clasificarSensibilidad({
-          ruta: RUTA_GENERAL,
-          frontmatter: doc.frontmatter
-        }),
-        esperado,
-        linea
-      );
-    }
-  });
-
-  it('una lista en varias lineas se lee como "no es general"', () => {
-    const doc = deRuta(
-      RUTA_GENERAL,
-      `---\nsensibilidad:\n  - general\n---\n${FICHA}`
-    );
-    assert.equal(
-      clasificarSensibilidad({
-        ruta: RUTA_GENERAL,
-        frontmatter: doc.frontmatter
-      }),
-      'costos'
-    );
-  });
-
-  it('sin la llave el documento se queda general por su ruta', () => {
-    const doc = deRuta(RUTA_GENERAL);
-    assert.equal(
-      clasificarSensibilidad({
-        ruta: RUTA_GENERAL,
-        frontmatter: doc.frontmatter
-      }),
-      'general'
-    );
   });
 });

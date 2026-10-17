@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { normalizarTexto } from '../proveedores/fireflies.js';
-import { CARPETAS_COSTOS } from './clasificar.js';
+import { CARPETAS_COSTOS, CARPETAS_GENERALES } from './clasificar.js';
 import {
   empresaDeRuta,
   empresaIdDe,
@@ -33,12 +33,7 @@ const SECCIONES_ENTERAS = new Set(['resumen', 'acuerdos', 'pendientes']);
  * Carpetas de etapa de un proyecto en Drive, normalizadas. Lo que cuelga
  * antes de la primera de ellas es el contexto (empresa, cliente, proyecto).
  */
-const CARPETAS_DE_ETAPA = new Set([
-  'juntas',
-  '02 proyecto',
-  '03 entregables',
-  ...CARPETAS_COSTOS
-]);
+const CARPETAS_DE_ETAPA = new Set([...CARPETAS_GENERALES, ...CARPETAS_COSTOS]);
 
 export interface OpcionesFragmento {
   maxTokens?: number;
@@ -191,7 +186,7 @@ function separarFrente(markdown: string): {
   const cuerpo = normal.slice(fin + 4).replace(/^\n/, '');
   const frente: Record<string, string> = {};
   for (const linea of bloque.split('\n')) {
-    const m = /^["']?([A-Za-z0-9_-]+)["']?\s*:\s*(.*)$/.exec(linea.trim());
+    const m = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(linea.trim());
     if (!m) {
       continue;
     }
@@ -199,10 +194,6 @@ function separarFrente(markdown: string): {
     const valor = (m[2] ?? '').trim().replace(/^["']|["']$/g, '');
     if (clave && valor) {
       frente[clave] = valor;
-    } else if (clave.toLowerCase() === 'sensibilidad') {
-      // Una sensibilidad en blanco (o una lista en varias lineas) se conserva
-      // vacia: el clasificador la lee como "no es general" y falla cerrado.
-      frente[clave] = '';
     }
   }
   return { frente, cuerpo };
