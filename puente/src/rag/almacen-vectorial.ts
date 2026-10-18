@@ -193,7 +193,8 @@ function diferencias(
  *
  * Aunque el contenido no cambie, la sensibilidad, el proyecto, la empresa y el
  * cliente se vuelven a calcular de la ruta y el texto (con la misma
- * precedencia de la ingesta: frontmatter primero, luego ruta): si difieren de
+ * precedencia de la ingesta: manda la ruta y el frontmatter solo llena lo que
+ * la ruta no da): si difieren de
  * lo guardado (o algun fragmento no coincide con su documento), se corrigen en
  * el documento y en TODOS sus fragmentos, en una sola transaccion y sin pedir
  * embeddings. Asi un documento movido de carpeta o de empresa, o uno indexado

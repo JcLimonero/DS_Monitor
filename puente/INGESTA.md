@@ -1395,17 +1395,23 @@ Content-Type: application/json
 | `driveFileId` | sí | Id del archivo en Drive. Único. |
 | `markdown` | sí | El .md completo, con frontmatter. |
 | `driveUrl` | no | Liga que se cita en las respuestas. Sin ella se arma con el id. |
-| `ruta` | no | Ruta dentro de Empresas/. Da la empresa (manda sobre el `empresa:` del frontmatter), el proyecto y la sensibilidad. Sin ella el documento queda como `costos`. |
+| `ruta` | no | Ruta dentro de Empresas/. Da la empresa, el cliente y el proyecto (mandan sobre el frontmatter) y la sensibilidad. Sin ella el documento queda como `costos`. |
 | `modificadoEn` | no | `modifiedTime` de Drive, para la reconciliación diaria. |
 
 La empresa sale de la ruta de Drive, de su primera carpeta tras `Empresas/` (una
 carpeta de cliente o de proyecto con nombre de empresa no cuenta); el `empresa:`
 del frontmatter solo vale si no hay `ruta` o si esa carpeta no es una empresa. Si el frontmatter
 nombra otra empresa distinta de la de la ruta, se ignora y el puente lo avisa en
-el log (con el id de Drive, sin contenido). Cliente y proyecto siguen al revés:
-frontmatter primero, luego ruta. Tiene que ser una del catálogo
-(`dealer-solutions`, `nexusqtech`, `operativai`, `itech-dev`) o `limonlabs`. Si
-no se reconoce, responde 400.
+el log (con el id de Drive, sin contenido). La empresa tiene que ser una del
+catálogo (`dealer-solutions`, `nexusqtech`, `operativai`, `itech-dev`) o
+`limonlabs`. Si no se reconoce, responde 400.
+
+Cliente y proyecto siguen la misma regla: lo que da la ruta manda, y el
+`cliente:` y el `proyecto:` del frontmatter solo llenan lo que la ruta no da. Si
+la ruta da un valor y el frontmatter trae otro, se usa el de la ruta y el
+puente lo avisa en el log (con el id de Drive y el nombre del campo, sin
+valores ni contenido). La ruta solo da cliente y proyecto si su primera carpeta
+es una empresa conocida.
 
 **Sensibilidad y proyecto.** El documento y cada uno de sus fragmentos llevan
 una `sensibilidad`, `general` o `costos`, que sale de `ruta` y del texto del
@@ -1445,12 +1451,22 @@ markdown. Es una lista blanca: `general` hay que ganárselo y todo lo demás es
   caracteres invisibles) con un valor distinto de `general`, o la llave
   repetida en cualquier parte, fuerza `costos`, aunque el frontmatter diga
   `general`.
-- El `proyecto` sale del frontmatter o de la ruta: el segmento anterior a la
-  primera carpeta `Juntas`, `01_Cotizaciones`, `02_Proyecto`, `03_Entregables`
-  o `04_Costos`, si hay al menos tres segmentos desde la empresa (Empresa,
-  Cliente de facturación, Cliente final, Proyecto). En una ficha
-  `PROYECTO_*.md` fuera de esas carpetas es la carpeta que la contiene;
-  `CLIENTE.md` no lleva proyecto.
+- El `cliente` y el `proyecto` salen de la ruta, y del frontmatter solo lo que
+  la ruta no da. Con una carpeta `Juntas`, `01_Cotizaciones`, `02_Proyecto`,
+  `03_Entregables` o `04_Costos`, el contexto son las carpetas anteriores a la
+  primera de ellas, contadas desde la empresa (Empresa, Cliente de
+  facturación, Cliente final, Proyecto): el cliente es el segundo segmento (el
+  cliente de facturación) y el proyecto, si hay al menos tres segmentos, el
+  último.
+- Sin esas carpetas solo tienen contexto dos fichas que cuelgan de la carpeta
+  de un cliente. `CLIENTE.md` toma el cliente de la misma convención (segundo
+  segmento tras la empresa, aunque esté en la carpeta de un cliente final) y no
+  lleva proyecto. `PROYECTO_*.md` toma además el proyecto de la carpeta que la
+  contiene, si hay al menos tres segmentos. El segundo segmento no puede ser una
+  carpeta que no es un cliente: las que empiezan con `_` o `.`, las numeradas
+  como `00_Brand_Kit`, `Integraciones`, `Interno`, `Facturacion` y los brand
+  kits. Cualquier otro archivo sin esas carpetas queda sin cliente ni proyecto
+  de ruta.
 
 Con la misma huella el puente vuelve a calcular las dos cosas y, si cambiaron
 (el archivo se movió de carpeta o cambió la regla), las corrige en el

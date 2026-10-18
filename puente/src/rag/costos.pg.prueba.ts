@@ -249,6 +249,22 @@ function documentos(hallados: readonly Hallado[]): string[] {
   return [...new Set(hallados.map((h) => h.driveFileId))].sort();
 }
 
+/** Lo guardado de un archivo de Drive: su documento y cada uno de sus fragmentos. */
+async function guardadoDe(e: Entorno, driveFileId: string) {
+  const doc = await e.esquema.filas(
+    `SELECT id, empresa, cliente, proyecto, sensibilidad, ruta
+       FROM rag_documentos WHERE drive_file_id = $1`,
+    [driveFileId]
+  );
+  const frags = await e.esquema.filas(
+    `SELECT f.id::text AS id, f.empresa, f.cliente, f.proyecto, f.sensibilidad
+       FROM rag_fragmentos f JOIN rag_documentos d ON d.id = f.documento_id
+      WHERE d.drive_file_id = $1 ORDER BY f.orden`,
+    [driveFileId]
+  );
+  return { doc: doc[0], frags };
+}
+
 describe('filtro de costos contra Postgres real', { skip: OMITIR }, () => {
   let e: Entorno;
 
@@ -638,20 +654,7 @@ describe(
       await e?.cerrar();
     });
 
-    async function guardado(driveFileId: string) {
-      const doc = await e.esquema.filas(
-        `SELECT id, empresa, cliente, proyecto, sensibilidad, ruta
-           FROM rag_documentos WHERE drive_file_id = $1`,
-        [driveFileId]
-      );
-      const frags = await e.esquema.filas(
-        `SELECT f.id::text AS id, f.empresa, f.cliente, f.proyecto, f.sensibilidad
-           FROM rag_fragmentos f JOIN rag_documentos d ON d.id = f.documento_id
-          WHERE d.drive_file_id = $1 ORDER BY f.orden`,
-        [driveFileId]
-      );
-      return { doc: doc[0], frags };
-    }
+    const guardado = (driveFileId: string) => guardadoDe(e, driveFileId);
 
     it('un archivo movido a otra empresa se realinea sin embeber y deja de aparecer en la vieja', async () => {
       const markdown = markdownDe('Mudanza', 'granate');
@@ -1186,7 +1189,8 @@ describe(
     //
     // Decision de Carlos (2026-10-17): para la EMPRESA manda la ruta de Drive.
     // Sin ruta, o con una ruta que no resuelve a una empresa, vale el
-    // frontmatter. Cliente y proyecto siguen con el frontmatter primero.
+    // frontmatter. Cliente y proyecto siguen la misma regla (decision de
+    // Carlos, 2026-10-18); sus pruebas contra Postgres estan en el ultimo bloque.
     const RUTA_ITECH = 'Empresas/Itech Dev/Cliente I/Proyecto I/02_Proyecto';
 
     it('con frontmatter empresa distinta de la ruta, manda la ruta y se avisa sin volcar contenido', async () => {
@@ -1390,20 +1394,414 @@ describe(
       assert.equal(ruta.empresa, 'nexusqtech');
     });
 
-    it('cliente y proyecto siguen con el frontmatter primero', async () => {
-      await e.ingerir({
-        driveFileId: 'drive-cliente-frente',
-        ruta: `${CLIENTE_B}/02_Proyecto/cf.md`,
-        markdown: markdownDe(
-          'Cliente del frente',
-          'ocre',
-          'cliente: Cliente Frente\nproyecto: Proyecto Frente'
-        )
-      });
+    it('cliente y proyecto del frontmatter que discrepan de la ruta se ignoran', async () => {
+      const avisos = mock.method(console, 'warn', () => undefined);
+      try {
+        await e.ingerir({
+          driveFileId: 'drive-cliente-frente',
+          ruta: `${CLIENTE_B}/02_Proyecto/cf.md`,
+          markdown: markdownDe(
+            'Cliente del frente',
+            'ocre',
+            'cliente: Cliente Frente\nproyecto: Proyecto Frente'
+          )
+        });
+      } finally {
+        avisos.mock.restore();
+      }
       const { doc } = await guardado('drive-cliente-frente');
-      assert.equal(doc?.['cliente'], 'Cliente Frente');
-      assert.equal(doc?.['proyecto'], 'Proyecto Frente');
+      assert.equal(doc?.['cliente'], 'Cliente B');
+      assert.equal(doc?.['proyecto'], 'Taller');
       assert.equal(doc?.['empresa'], 'dealer-solutions');
+    });
+  }
+);
+
+describe(
+  'cliente y proyecto de la ruta de Drive, contra Postgres real',
+  { skip: OMITIR },
+  () => {
+    let e: Entorno;
+
+    before(async () => {
+      e = await abrirEntorno();
+    });
+
+    after(async () => {
+      await e?.cerrar();
+    });
+
+    const guardado = (driveFileId: string) => guardadoDe(e, driveFileId);
+
+    /** El texto indexado de todos los fragmentos de un archivo. */
+    async function textosDe(driveFileId: string): Promise<string> {
+      const filas = await e.esquema.filas(
+        `SELECT f.texto FROM rag_fragmentos f
+           JOIN rag_documentos d ON d.id = f.documento_id
+          WHERE d.drive_file_id = $1`,
+        [driveFileId]
+      );
+      return filas.map((f) => String(f['texto'])).join('\n');
+    }
+
+    /** Silencia los avisos del puente y devuelve lo que dijo. */
+    async function conAvisos(hacer: () => Promise<unknown>): Promise<string[]> {
+      const avisos = mock.method(console, 'warn', () => undefined);
+      try {
+        await hacer();
+        return avisos.mock.calls.map((c) => c.arguments.join(' '));
+      } finally {
+        avisos.mock.restore();
+      }
+    }
+
+    it('una ficha CLIENTE.md en la carpeta del cliente se indexa con su cliente y la encuentra su alcance', async () => {
+      // Operativ AI: Felipe (finanzas) ve costos, y las fichas son costos.
+      const r = await e.ingerir({
+        driveFileId: 'drive-ficha-a',
+        ruta: 'Empresas/Operativ AI/Cliente A/CLIENTE.md',
+        markdown: markdownDe('Ficha de Cliente A', 'cobalto')
+      });
+      assert.equal(r.omitido, false);
+      const { doc, frags } = await guardado('drive-ficha-a');
+      assert.equal(doc?.['empresa'], 'operativai');
+      assert.equal(doc?.['cliente'], 'Cliente A');
+      assert.equal(doc?.['proyecto'], null);
+      assert.equal(doc?.['sensibilidad'], 'costos');
+      assert.ok(frags.length > 0);
+      assert.ok(frags.every((f) => f['cliente'] === 'Cliente A'));
+      assert.ok(frags.every((f) => f['proyecto'] === null));
+      assert.match(
+        await textosDe('drive-ficha-a'),
+        /^\[OperativAI \/ Cliente A\] /
+      );
+      // Con su cliente se encuentra; con otro, no. Sigue siendo costos.
+      assert.deepEqual(
+        documentos(await e.buscar('tok-felipe', { cliente: 'cliente a' })),
+        ['drive-ficha-a']
+      );
+      assert.deepEqual(
+        await e.buscar('tok-felipe', { cliente: 'Cliente C' }),
+        []
+      );
+      assert.deepEqual(
+        await e.buscar('tok-ventas', { cliente: 'Cliente A' }),
+        []
+      );
+    });
+
+    it('la ficha de un cliente final y la PROYECTO_*.md de la raiz toman el cliente de facturacion', async () => {
+      await e.ingerir({
+        driveFileId: 'drive-ficha-final',
+        ruta: 'Empresas/Dealer Solutions/Cliente B/Final B/CLIENTE.md',
+        markdown: markdownDe('Ficha de Final B', 'berilo')
+      });
+      await e.ingerir({
+        driveFileId: 'drive-ficha-proyecto-raiz',
+        ruta: 'Empresas/Dealer Solutions/Cliente B/PROYECTO_Taller.md',
+        markdown: markdownDe('Proyecto Taller', 'citrino')
+      });
+      await e.ingerir({
+        driveFileId: 'drive-ficha-proyecto',
+        ruta: `${CLIENTE_B}/PROYECTO_Taller.md`,
+        markdown: markdownDe('Proyecto Taller', 'diopsido')
+      });
+      for (const [id, proyecto] of [
+        ['drive-ficha-final', null],
+        ['drive-ficha-proyecto-raiz', null],
+        ['drive-ficha-proyecto', 'Taller']
+      ] as const) {
+        const { doc, frags } = await guardado(id);
+        assert.equal(doc?.['cliente'], 'Cliente B', id);
+        assert.equal(doc?.['proyecto'], proyecto, id);
+        assert.ok(
+          frags.every((f) => f['cliente'] === 'Cliente B'),
+          id
+        );
+      }
+      assert.deepEqual(
+        documentos(await e.buscar('tok-ana', { cliente: 'Cliente B' })),
+        [
+          'drive-ficha-final',
+          'drive-ficha-proyecto',
+          'drive-ficha-proyecto-raiz'
+        ]
+      );
+    });
+
+    it('los archivos que no son una ficha de cliente siguen sin cliente', async () => {
+      const casos: [string, string, string?][] = [
+        ['drive-sin-1', 'Empresas/Dealer Solutions/CLIENTE.md'],
+        ['drive-sin-2', 'Empresas/Dealer Solutions/Cliente B/notas.md'],
+        [
+          'drive-sin-3',
+          'Empresas/Dealer Solutions/Cliente B/CLIENTE_backup.md'
+        ],
+        [
+          'drive-sin-4',
+          'Empresas/Dealer Solutions/Integraciones/Proveedor/CLIENTE.md'
+        ],
+        ['drive-sin-5', 'Empresas/Dealer Solutions/00_Brand_Kit/CLIENTE.md'],
+        [
+          'drive-sin-6',
+          'Empresas/Dealer Solutions/00_Brand_Kits_Clientes/Cliente B/00_Brand_Kit/README.md'
+        ],
+        ['drive-sin-7', 'Empresas/Dealer Solutions/Interno/CLIENTE.md'],
+        // La primera carpeta no es una empresa: la empresa sale del frontmatter.
+        [
+          'drive-sin-8',
+          'Empresas/_Historico/Costumer Solutions/Cliente B/CLIENTE.md',
+          'empresa: Dealer Solutions'
+        ],
+        [
+          'drive-sin-9',
+          'Empresas/_POR_CLASIFICAR/Cliente B/CLIENTE.md',
+          'empresa: Dealer Solutions'
+        ]
+      ];
+      for (const [driveFileId, ruta, frente] of casos) {
+        await e.ingerir({
+          driveFileId,
+          ruta,
+          markdown: markdownDe(
+            `Sin cliente ${driveFileId}`,
+            'esfalerita',
+            frente
+          )
+        });
+        const { doc, frags } = await guardado(driveFileId);
+        assert.equal(doc?.['empresa'], 'dealer-solutions', ruta);
+        assert.equal(doc?.['cliente'], null, ruta);
+        assert.equal(doc?.['proyecto'], null, ruta);
+        assert.ok(frags.length > 0, ruta);
+        assert.ok(
+          frags.every((f) => f['cliente'] === null),
+          ruta
+        );
+      }
+      // Ninguna de ellas aparece al pedir un cliente.
+      const ids = casos.map(([id]) => id);
+      const conCliente = documentos(
+        await e.buscar('tok-ana', { cliente: 'Cliente B' })
+      );
+      assert.ok(
+        conCliente.every((id) => !ids.includes(id)),
+        conCliente.join()
+      );
+    });
+
+    it('un archivo con cliente y proyecto de frontmatter distintos de su carpeta toma los de la ruta', async () => {
+      const markdown = markdownDe(
+        'Con frontmatter ajeno',
+        'fluorita',
+        'cliente: Cliente A\nproyecto: Portal'
+      );
+      const textos = await conAvisos(() =>
+        e.ingerir({
+          driveFileId: 'drive-frente-ajeno',
+          ruta: `${CLIENTE_B}/02_Proyecto/a.md`,
+          markdown
+        })
+      );
+      // Un aviso, con el id de Drive y los campos; sin valores ni contenido.
+      assert.equal(textos.length, 1);
+      assert.match(textos[0] ?? '', /"drive-frente-ajeno"/);
+      assert.match(
+        textos[0] ?? '',
+        /frontmatter discrepa de la ruta de Drive en cliente y proyecto/
+      );
+      assert.doesNotMatch(
+        textos[0] ?? '',
+        /Cliente A|Cliente B|Portal|Taller|fluorita/
+      );
+      const { doc, frags } = await guardado('drive-frente-ajeno');
+      assert.equal(doc?.['cliente'], 'Cliente B');
+      assert.equal(doc?.['proyecto'], 'Taller');
+      assert.ok(frags.every((f) => f['cliente'] === 'Cliente B'));
+      assert.ok(frags.every((f) => f['proyecto'] === 'Taller'));
+      assert.doesNotMatch(
+        await textosDe('drive-frente-ajeno'),
+        /Cliente A|Portal/
+      );
+      // Lo encuentra el cliente de la carpeta y no el que nombraba el frontmatter.
+      assert.deepEqual(
+        documentos(await e.buscar('tok-libre', { cliente: 'Cliente B' })),
+        ['drive-frente-ajeno']
+      );
+      assert.deepEqual(
+        await e.buscar('tok-libre', { cliente: 'Cliente A' }),
+        []
+      );
+    });
+
+    it('una ficha CLIENTE.md no toma el cliente de su frontmatter', async () => {
+      const textos = await conAvisos(() =>
+        e.ingerir({
+          driveFileId: 'drive-ficha-ajena',
+          ruta: 'Empresas/Operativ AI/Cliente A/CLIENTE.md',
+          markdown: markdownDe('Ficha ajena', 'galena', 'cliente: Cliente C')
+        })
+      );
+      assert.equal(textos.length, 1);
+      assert.doesNotMatch(textos[0] ?? '', /Cliente C|Cliente A/);
+      assert.equal(
+        (await guardado('drive-ficha-ajena')).doc?.['cliente'],
+        'Cliente A'
+      );
+      assert.deepEqual(
+        await e.buscar('tok-felipe', { cliente: 'Cliente C' }),
+        []
+      );
+    });
+
+    it('el frontmatter solo llena lo que la ruta no da, sin avisar', async () => {
+      const textos = await conAvisos(async () => {
+        await e.ingerir({
+          driveFileId: 'drive-llena',
+          // La ruta da el cliente pero no el proyecto (solo dos carpetas antes de la etapa).
+          ruta: 'Empresas/Dealer Solutions/Cliente B/02_Proyecto/llena.md',
+          markdown: markdownDe(
+            'Llena',
+            'granate2',
+            'cliente: cliente b\nproyecto: Piloto'
+          )
+        });
+        await e.ingerir({
+          driveFileId: 'drive-llena-suelto',
+          ruta: 'Empresas/Dealer Solutions/Cliente B/suelto.md',
+          markdown: markdownDe(
+            'Llena suelto',
+            'hematita',
+            'cliente: Cliente Frente\nproyecto: Proyecto Frente'
+          )
+        });
+      });
+      assert.deepEqual(textos, []);
+      const llena = (await guardado('drive-llena')).doc;
+      assert.equal(llena?.['cliente'], 'Cliente B');
+      assert.equal(llena?.['proyecto'], 'Piloto');
+      const suelto = (await guardado('drive-llena-suelto')).doc;
+      assert.equal(suelto?.['cliente'], 'Cliente Frente');
+      assert.equal(suelto?.['proyecto'], 'Proyecto Frente');
+    });
+
+    it('un archivo movido a la carpeta de otro cliente se realinea sin embeber y deja de aparecer en el anterior', async () => {
+      const markdown = markdownDe('Ficha que se muda', 'ilmenita');
+      await e.ingerir({
+        driveFileId: 'drive-ficha-mudanza',
+        ruta: 'Empresas/Dealer Solutions/Cliente B/CLIENTE.md',
+        markdown
+      });
+      const previo = await guardado('drive-ficha-mudanza');
+      assert.equal(previo.doc?.['cliente'], 'Cliente B');
+      const pedidosAntes = e.embeddings();
+      const r = await e.ingerir({
+        driveFileId: 'drive-ficha-mudanza',
+        ruta: 'Empresas/Dealer Solutions/Cliente D/CLIENTE.md',
+        markdown
+      });
+      assert.equal(r.omitido, true);
+      assert.equal(e.embeddings(), pedidosAntes, 'volvio a pedir embeddings');
+      const { doc, frags } = await guardado('drive-ficha-mudanza');
+      assert.equal(doc?.['cliente'], 'Cliente D');
+      assert.deepEqual(
+        frags.map((f) => f['id']),
+        previo.frags.map((f) => f['id']),
+        'los fragmentos se borraron y se volvieron a insertar'
+      );
+      assert.ok(frags.every((f) => f['cliente'] === 'Cliente D'));
+      assert.match(
+        await textosDe('drive-ficha-mudanza'),
+        /^\[Dealer Solutions \/ Cliente D\] /
+      );
+      assert.doesNotMatch(await textosDe('drive-ficha-mudanza'), /Cliente B/);
+      assert.ok(
+        !documentos(
+          await e.buscar('tok-ana', { cliente: 'Cliente B' })
+        ).includes('drive-ficha-mudanza')
+      );
+      assert.ok(
+        documentos(
+          await e.buscar('tok-ana', { cliente: 'Cliente D' })
+        ).includes('drive-ficha-mudanza')
+      );
+    });
+
+    it('un archivo con frontmatter de cliente sigue a su carpeta al moverse', async () => {
+      // Antes el frontmatter ganaba y mover el archivo no cambiaba su cliente.
+      const markdown = markdownDe(
+        'Se mueve con cliente',
+        'jadeita',
+        'cliente: Cliente B\nproyecto: Taller'
+      );
+      await e.ingerir({
+        driveFileId: 'drive-mueve-cliente',
+        ruta: `${CLIENTE_B}/02_Proyecto/m.md`,
+        markdown
+      });
+      assert.equal(
+        (await guardado('drive-mueve-cliente')).doc?.['cliente'],
+        'Cliente B'
+      );
+      const textos = await conAvisos(async () => {
+        const r = await e.ingerir({
+          driveFileId: 'drive-mueve-cliente',
+          ruta: 'Empresas/Dealer Solutions/Cliente D/Otro/02_Proyecto/m.md',
+          markdown
+        });
+        assert.equal(r.omitido, true);
+      });
+      assert.equal(textos.length, 1);
+      const { doc, frags } = await guardado('drive-mueve-cliente');
+      assert.equal(doc?.['cliente'], 'Cliente D');
+      assert.equal(doc?.['proyecto'], 'Otro');
+      assert.ok(frags.every((f) => f['cliente'] === 'Cliente D'));
+      assert.ok(frags.every((f) => f['proyecto'] === 'Otro'));
+    });
+
+    it('un archivo movido a una carpeta que no es de cliente pierde el cliente', async () => {
+      const markdown = markdownDe('Ficha que sale', 'kyanita');
+      await e.ingerir({
+        driveFileId: 'drive-ficha-sale',
+        ruta: 'Empresas/Dealer Solutions/Cliente B/CLIENTE.md',
+        markdown
+      });
+      const r = await e.ingerir({
+        driveFileId: 'drive-ficha-sale',
+        ruta: 'Empresas/Dealer Solutions/Integraciones/Proveedor/CLIENTE.md',
+        markdown
+      });
+      assert.equal(r.omitido, true);
+      const { doc, frags } = await guardado('drive-ficha-sale');
+      assert.equal(doc?.['cliente'], null);
+      assert.ok(frags.every((f) => f['cliente'] === null));
+      assert.ok(
+        !documentos(
+          await e.buscar('tok-ana', { cliente: 'Cliente B' })
+        ).includes('drive-ficha-sale')
+      );
+    });
+
+    it('volver a mandar un archivo que no cambia no reescribe nada', async () => {
+      const envio = {
+        driveFileId: 'drive-estable',
+        ruta: `${CLIENTE_B}/02_Proyecto/estable.md`,
+        markdown: markdownDe('Estable', 'labradorita')
+      };
+      await e.ingerir(envio);
+      const antes = await e.esquema.filas(
+        `SELECT actualizado_en::text AS t, cliente, proyecto FROM rag_documentos WHERE drive_file_id = 'drive-estable'`
+      );
+      const pedidosAntes = e.embeddings();
+      const r = await e.ingerir(envio);
+      assert.equal(r.omitido, true);
+      assert.equal(e.embeddings(), pedidosAntes);
+      const despues = await e.esquema.filas(
+        `SELECT actualizado_en::text AS t, cliente, proyecto FROM rag_documentos WHERE drive_file_id = 'drive-estable'`
+      );
+      assert.deepEqual(despues, antes);
+      assert.equal(antes[0]?.['cliente'], 'Cliente B');
+      assert.equal(antes[0]?.['proyecto'], 'Taller');
     });
   }
 );

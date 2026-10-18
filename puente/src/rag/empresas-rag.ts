@@ -74,11 +74,21 @@ export function empresaDeRuta(
   ruta: string | undefined,
   catalogo: readonly EmpresaCatalogo[] = []
 ): string | undefined {
+  const primera = segmentosBajoEmpresas(ruta)[0];
+  return primera ? empresaIdDe(primera, catalogo) : undefined;
+}
+
+/**
+ * Los segmentos de la ruta que van despues de `Empresas/` (todos, si no la
+ * trae), con `\` o `/` como separador. El primero es la carpeta de la empresa
+ * emisora y el ultimo es el archivo. La empresa y el contexto de cliente y
+ * proyecto se leen de este mismo recorte para que no se desfasen.
+ */
+export function segmentosBajoEmpresas(ruta: string | undefined): string[] {
   if (!ruta?.trim()) {
-    return undefined;
+    return [];
   }
   const partes = ruta.split(/[/\\]+/).filter(Boolean);
   const indice = partes.findIndex((p) => normalizarTexto(p) === 'empresas');
-  const primera = partes[indice >= 0 ? indice + 1 : 0];
-  return primera ? empresaIdDe(primera, catalogo) : undefined;
+  return indice >= 0 ? partes.slice(indice + 1) : partes;
 }

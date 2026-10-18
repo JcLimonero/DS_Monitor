@@ -174,6 +174,16 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
         `[puente] RAG ${JSON.stringify(cuerpo.driveFileId)}: el frontmatter nombra otra empresa; se usa la de la ruta de Drive (${doc.empresa}).`
       );
     }
+    const contextoIgnorado = [
+      doc.clienteDelFrontmatterIgnorado ? 'cliente' : undefined,
+      doc.proyectoDelFrontmatterIgnorado ? 'proyecto' : undefined
+    ].filter((campo) => campo !== undefined);
+    if (contextoIgnorado.length > 0) {
+      // Solo el id de Drive y los nombres de los campos: ni los valores ni el contenido.
+      console.warn(
+        `[puente] RAG ${JSON.stringify(cuerpo.driveFileId)}: el frontmatter discrepa de la ruta de Drive en ${contextoIgnorado.join(' y ')}; se usa la ruta.`
+      );
+    }
     const modelo = deps.cfg().ragEmbeddingsModelo;
     // Lista blanca: solo Juntas, 02_Proyecto y 03_Entregables sin precios son
     // generales. Lo demas, y todo lo que no se pueda comprobar, queda como costos.
