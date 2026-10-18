@@ -1,4 +1,5 @@
 import { enviarPorEmailJs, type Sesion } from '../acceso/acceso.js';
+import { filtrarNuevosSinRepetir } from '../pendientes/homologar.js';
 import { conPrioridadPersonal } from '../pendientes/prioridad.js';
 import type { Configuracion, ConfiguracionIa } from '../config/entorno.js';
 import {
@@ -452,15 +453,17 @@ export function registrarRutasIa(
         tags: ['acuerdo', 'ia'],
         updatedAt: ahora
       }));
-    await d.datos.personales.escribir([
-      ...d.datos.personales.leer(),
-      ...nuevos
-    ]);
+    const actuales = d.datos.personales.leer();
+    const sinRepetir = filtrarNuevosSinRepetir(actuales, nuevos);
+    await d.datos.personales.escribir([...actuales, ...sinRepetir]);
     const avisos: string[] = [];
     for (const [i, a] of acuerdos.entries()) {
       const tarea = nuevos[i];
+      if (!tarea || !sinRepetir.some((t) => t.id === tarea.id)) {
+        continue;
+      }
       const quien = a.persona?.email ?? a.persona?.id;
-      if (tarea && quien) {
+      if (quien) {
         const aviso = await d.asignar(tarea.id, quien, tarea, sesion);
         if (aviso) {
           avisos.push(`${tarea.title}: ${aviso}`);
@@ -468,7 +471,7 @@ export function registrarRutasIa(
       }
     }
     d.olvidarCache();
-    return { agregados: nuevos.length, avisos };
+    return { agregados: sinRepetir.length, avisos };
   });
 
   // --- Dictado: texto libre → pendientes ---
@@ -535,13 +538,18 @@ export function registrarRutasIa(
         tags: ['dictado'],
         updatedAt: ahora
       }));
-    await d.datos.personales.escribir([
-      ...nuevos.map(conPrioridadPersonal),
-      ...d.datos.personales.leer()
-    ]);
+    const actuales = d.datos.personales.leer();
+    const sinRepetir = filtrarNuevosSinRepetir(
+      actuales,
+      nuevos.map(conPrioridadPersonal)
+    );
+    await d.datos.personales.escribir([...sinRepetir, ...actuales]);
     const avisos: string[] = [];
     for (const [i, p] of lista.entries()) {
       const tarea = nuevos[i];
+      if (!tarea || !sinRepetir.some((t) => t.id === tarea.id)) {
+        continue;
+      }
       const quien =
         p.persona?.email ??
         p.persona?.id ??
@@ -565,7 +573,12 @@ export function registrarRutasIa(
     for (const [i, p] of lista.entries()) {
       const tarea = nuevos[i];
       const cuenta = typeof p.agendarEn === 'string' ? p.agendarEn : undefined;
-      if (!tarea || !cuenta || !tarea.dueDate) {
+      if (
+        !tarea ||
+        !sinRepetir.some((t) => t.id === tarea.id) ||
+        !cuenta ||
+        !tarea.dueDate
+      ) {
         continue;
       }
       try {
@@ -587,7 +600,7 @@ export function registrarRutasIa(
       }
     }
     d.olvidarCache();
-    return { agregados: nuevos.length, avisos };
+    return { agregados: sinRepetir.length, avisos };
   });
 
   // --- La ventana de la IA ---
