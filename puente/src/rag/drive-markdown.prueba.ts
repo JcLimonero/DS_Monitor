@@ -94,6 +94,31 @@ describe('recorrido de Drive', () => {
     ]);
   });
 
+  it('un nombre de Drive con barras sigue siendo un solo segmento de la ruta', async () => {
+    const hijos: Record<string, HijoDrive[]> = {
+      raiz: [carpeta('dealer', 'Dealer Solutions')],
+      dealer: [
+        archivo('a', 'Cliente B/CLIENTE.md'),
+        archivo('b', 'Cliente B\\CLIENTE.md'),
+        carpeta('c', 'Cliente A/Cliente B')
+      ],
+      c: [archivo('d', 'nota.md')]
+    };
+    const { archivos } = await juntarMarkdown(
+      RAIZ,
+      async (id) => hijos[id] ?? [],
+      { excluir: [] }
+    );
+    assert.deepEqual(rutas(archivos), [
+      'Empresas/Dealer Solutions/Cliente A-Cliente B/nota.md',
+      'Empresas/Dealer Solutions/Cliente B-CLIENTE.md',
+      'Empresas/Dealer Solutions/Cliente B-CLIENTE.md'
+    ]);
+    for (const a of archivos) {
+      assert.equal(a.ruta.split('/').length <= 4, true, a.ruta);
+    }
+  });
+
   it('por omision no entra a _OBSOLETAS (en cualquier nivel) ni a Interno/Arquitectura', async () => {
     const { listar, visitadas } = arbol();
     const { archivos, completo } = await juntarMarkdown(RAIZ, listar);

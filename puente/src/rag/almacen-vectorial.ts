@@ -198,8 +198,9 @@ function diferencias(
  * lo guardado (o algun fragmento no coincide con su documento), se corrigen en
  * el documento y en TODOS sus fragmentos, en una sola transaccion y sin pedir
  * embeddings. Asi un documento movido de carpeta o de empresa, o uno indexado
- * antes de que existieran esas columnas, se realinea al volver a correr
- * `npm run rag:backfill` o la reconciliacion diaria.
+ * antes de que existieran esas columnas o con una regla anterior, se realinea
+ * al volver a correr `npm run rag:backfill`; la reconciliacion diaria solo
+ * vuelve a mandar los archivos movidos o editados.
  *
  * Si la ingesta trae el texto nuevo de los fragmentos (`fragmentos`), tambien se
  * refresca su cabecera (`[Empresa / Cliente / Proyecto] ...`), que repite esos

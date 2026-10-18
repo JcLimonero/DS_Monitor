@@ -19,6 +19,22 @@ describe('empresa de una ruta de Drive', () => {
     }
   });
 
+  it('si la ruta ya empieza en una empresa, una carpeta interna Empresas no cambia la raiz', () => {
+    for (const ruta of [
+      'Itech Dev/Cliente I/EMPRESAS/Operativ AI/Cliente C/a.md',
+      'itech-dev/Cliente I/_Empresas_/Operativ AI/Cliente C/a.md',
+      'Empresas/Itech Dev/Cliente I/Empresas/Operativ AI/Cliente C/a.md'
+    ]) {
+      assert.equal(empresaDeRuta(ruta), 'itech-dev', ruta);
+    }
+    assert.equal(
+      empresaDeRuta('grupo-nuevo/Cliente/Empresas/Operativ AI/a.md', [
+        { id: 'grupo-nuevo', nombre: 'Grupo Nuevo' }
+      ]),
+      'grupo-nuevo'
+    );
+  });
+
   it('usa el catalogo de empresas', () => {
     assert.equal(
       empresaDeRuta('Empresas/Mi Empresa Nueva/Cliente/a.md', [

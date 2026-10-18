@@ -84,7 +84,10 @@ export async function juntarMarkdown(
       if (!hijo.id || !nombre) {
         continue;
       }
-      const ruta = prefijo ? `${prefijo}/${nombre}` : nombre;
+      // Drive admite `/` y `\` en un nombre: sin esto un solo nombre se leeria
+      // como varias carpetas de la ruta.
+      const segmento = nombre.replace(/[/\\]+/g, '-');
+      const ruta = prefijo ? `${prefijo}/${segmento}` : segmento;
       if (hijo.mimeType === MIME_CARPETA) {
         if (!estaExcluida(ruta, excluidas)) {
           await bajar(hijo.id, ruta, profundidad + 1);

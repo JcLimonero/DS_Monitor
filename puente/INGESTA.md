@@ -1463,10 +1463,11 @@ markdown. Es una lista blanca: `general` hay que ganárselo y todo lo demás es
   segmento tras la empresa, aunque esté en la carpeta de un cliente final) y no
   lleva proyecto. `PROYECTO_*.md` toma además el proyecto de la carpeta que la
   contiene, si hay al menos tres segmentos. El segundo segmento no puede ser una
-  carpeta que no es un cliente: las que empiezan con `_` o `.`, las numeradas
-  como `00_Brand_Kit`, `Integraciones`, `Interno`, `Facturacion` y los brand
-  kits. Cualquier otro archivo sin esas carpetas queda sin cliente ni proyecto
-  de ruta.
+  carpeta que no es un cliente: las que no empiezan con una letra o un dígito
+  (`_POR_CLASIFICAR`, `.oculta`), las numeradas como `00_Brand_Kit`,
+  `Integraciones`, `Interno`, `Facturacion`, `Historico`, `Prospectos` y los
+  brand kits. Cualquier otro archivo sin esas carpetas queda sin cliente ni
+  proyecto de ruta.
 
 Con la misma huella el puente vuelve a calcular las dos cosas y, si cambiaron
 (el archivo se movió de carpeta o cambió la regla), las corrige en el

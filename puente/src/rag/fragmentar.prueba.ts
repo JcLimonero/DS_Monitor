@@ -477,6 +477,48 @@ describe('cliente de las fichas CLIENTE.md y PROYECTO_*.md en la carpeta del cli
     }
   });
 
+  it('no da cliente a carpetas del sistema aunque no lleven guion bajo ni numero', () => {
+    for (const ruta of [
+      'Empresas/Nexus Q Tech/Historico/CLIENTE.md',
+      'Empresas/Nexus Q Tech/Por Clasificar/Total Dealer/CLIENTE.md',
+      'Empresas/Nexus Q Tech/Prospectos/CLIENTE.md',
+      'Empresas/Nexus Q Tech/_OBSOLETAS/CLIENTE.md',
+      'Empresas/Nexus Q Tech/DUPLICADOS/CLIENTE.md',
+      // Un caracter invisible o de ancho completo no disfraza una carpeta del sistema.
+      'Empresas/Nexus Q Tech/\u200B_Historico/CLIENTE.md',
+      'Empresas/Nexus Q Tech/\uFF3FHistorico/CLIENTE.md',
+      'Empresas/Nexus Q Tech/00\u200B_Brand_Kit/CLIENTE.md',
+      'Empresas/Nexus Q Tech/00\uFF3FBrand_Kit/CLIENTE.md',
+      'Empresas/Nexus Q Tech/\uFEFF.oculta/CLIENTE.md'
+    ]) {
+      assert.equal(clienteDe(ruta), undefined, ruta);
+    }
+    // Un cliente con digitos o simbolos en el nombre, pero que empieza con letra o digito, si cuenta.
+    for (const [ruta, cliente] of [
+      ['Empresas/Nexus Q Tech/3M Mexico/CLIENTE.md', '3M Mexico'],
+      ['Empresas/Nexus Q Tech/24 Horas/CLIENTE.md', '24 Horas'],
+      ['Empresas/Nexus Q Tech/Grupo AS (Naosa)/CLIENTE.md', 'Grupo AS (Naosa)']
+    ] as const) {
+      assert.equal(clienteDe(ruta), cliente, ruta);
+    }
+  });
+
+  it('una carpeta interna Empresas no saca la ficha de su empresa ni le cambia el cliente', () => {
+    const frente = `---\nempresa: Itech Dev\n---\n${FICHA}`;
+    const doc = deRuta(
+      'Itech Dev/Cliente I/EMPRESAS/Operativ AI/Cliente C/CLIENTE.md',
+      frente
+    );
+    assert.equal(doc.empresa, 'itech-dev');
+    assert.equal(doc.cliente, 'Cliente I');
+    const conEtapa = deRuta(
+      'itech-dev/Cliente I/Proyecto I/EMPRESAS/Operativ AI/Cliente C/02_Proyecto/a.md',
+      frente
+    );
+    assert.equal(conEtapa.empresa, 'itech-dev');
+    assert.equal(conEtapa.cliente, 'Cliente I');
+  });
+
   it('no da cliente si la primera carpeta no es una empresa conocida', () => {
     const frente = `---\nempresa: Dealer Solutions\n---\n${FICHA}`;
     for (const ruta of [

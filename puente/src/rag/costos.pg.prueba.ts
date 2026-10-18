@@ -1775,6 +1775,10 @@ describe(
       const { doc, frags } = await guardado('drive-ficha-sale');
       assert.equal(doc?.['cliente'], null);
       assert.ok(frags.every((f) => f['cliente'] === null));
+      // La cabecera del texto ya no lleva el cliente anterior.
+      const texto = await textosDe('drive-ficha-sale');
+      assert.match(texto, /^\[Dealer Solutions\] /);
+      assert.doesNotMatch(texto, /Cliente B/);
       assert.ok(
         !documentos(
           await e.buscar('tok-ana', { cliente: 'Cliente B' })

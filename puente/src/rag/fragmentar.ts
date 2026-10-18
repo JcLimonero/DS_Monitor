@@ -38,15 +38,21 @@ const CARPETAS_DE_ETAPA = new Set([...CARPETAS_GENERALES, ...CARPETAS_COSTOS]);
 
 /**
  * Carpetas de primer nivel bajo una empresa que no son un cliente (normalizadas
- * con normalizarTexto). Una ficha CLIENTE.md o PROYECTO_*.md que cuelga de una
- * de ellas no recibe cliente. Las que empiezan con `_` o `.`, y las numeradas
- * como `00_Brand_Kit`, tampoco (ver esCarpetaDeCliente).
+ * con normalizarTexto, que ignora el guion bajo: `_Historico` es `historico`).
+ * Una ficha CLIENTE.md o PROYECTO_*.md que cuelga de una de ellas no recibe
+ * cliente. Las que no empiezan con una letra o un digito y las numeradas como
+ * `00_Brand_Kit` tampoco (ver esCarpetaDeCliente).
  */
 const CARPETAS_QUE_NO_SON_CLIENTE = new Set([
   'empresas',
   'integraciones',
   'interno',
   'facturacion',
+  'historico',
+  'por clasificar',
+  'prospectos',
+  'obsoletas',
+  'duplicados',
   'brand kit',
   'brand kits',
   'brand kits clientes',
@@ -318,7 +324,7 @@ function contextoDeRuta(
   ruta: string | undefined,
   catalogo: readonly EmpresaCatalogo[]
 ): ContextoDeRuta {
-  const desde = segmentosBajoEmpresas(ruta);
+  const desde = segmentosBajoEmpresas(ruta, catalogo);
   const carpetas = desde.slice(0, -1);
   const empresa = carpetas[0];
   if (!empresa || !empresaIdDe(empresa, catalogo)) {
@@ -352,16 +358,20 @@ function contextoDe(antes: string[]): ContextoDeRuta {
 }
 
 /**
- * El segmento puede ser un cliente: no esta vacio, no empieza con `_` ni `.`
- * (`_POR_CLASIFICAR`, `_Historico`, `_Interno_LimonLabs`), no es una carpeta
- * numerada de Drive (`00_Brand_Kit`, `00_Brand_Kits_Clientes`) ni una de las
- * carpetas que no son un cliente (CARPETAS_QUE_NO_SON_CLIENTE). Una carpeta que
- * no se reconoce como cliente deja el cliente vacio: peor es asignarle el de
- * otro.
+ * El segmento puede ser un cliente: no esta vacio, empieza con una letra o un
+ * digito (no `_POR_CLASIFICAR`, `_Interno_LimonLabs` ni `.oculta`), no es una
+ * carpeta numerada de Drive (`00_Brand_Kit`, `00_Brand_Kits_Clientes`) ni una de
+ * las carpetas que no son un cliente (CARPETAS_QUE_NO_SON_CLIENTE). Los
+ * caracteres de formato invisibles se quitan antes de mirar. Una carpeta que no
+ * se reconoce como cliente deja el cliente vacio: peor es asignarle el de otro.
  */
 function esCarpetaDeCliente(nombre: string | undefined): boolean {
-  const limpio = nombre?.trim();
-  if (!limpio || /^[_.]|^\d{2}_/.test(limpio)) {
+  const limpio = nombre?.replace(/\p{Cf}/gu, '').trim();
+  if (
+    !limpio ||
+    !/^[\p{L}\p{N}]/u.test(limpio) ||
+    /^\d{2}\p{Pc}/u.test(limpio)
+  ) {
     return false;
   }
   return !CARPETAS_QUE_NO_SON_CLIENTE.has(normalizarTexto(limpio));
