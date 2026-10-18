@@ -59,24 +59,46 @@ export function empresaIdDe(
 }
 
 /**
- * La empresa de una ruta de Drive. Solo acepta un segmento que sea alias o
- * empresa del catalogo: el nombre del cliente no se promueve a empresa.
+ * La empresa de una ruta de Drive: SOLO el primer segmento despues de
+ * `Empresas/` (o el primero de la ruta, si no trae `Empresas/`), que es la
+ * carpeta de la empresa emisora. Tiene que ser alias o empresa del catalogo.
+ *
+ * No se busca mas abajo: una carpeta de cliente o de proyecto con nombre de
+ * empresa (`Empresas/_POR_CLASIFICAR/Operativ/...`, `Empresas/Grupo Nuevo/Dealer/...`)
+ * no la promueve a empresa. Como la ruta manda sobre el frontmatter, un
+ * recorrido profundo dejaria que un nombre de carpeta saque un documento de su
+ * empresa (Itech incluida). Si la primera carpeta no es una empresa, no hay
+ * empresa de ruta y vale el frontmatter.
  */
 export function empresaDeRuta(
   ruta: string | undefined,
   catalogo: readonly EmpresaCatalogo[] = []
 ): string | undefined {
+  const primera = segmentosBajoEmpresas(ruta, catalogo)[0];
+  return primera ? empresaIdDe(primera, catalogo) : undefined;
+}
+
+/**
+ * Los segmentos de la ruta que van despues de `Empresas/` (todos, si no la
+ * trae), con `\` o `/` como separador. El primero es la carpeta de la empresa
+ * emisora y el ultimo es el archivo. La empresa y el contexto de cliente y
+ * proyecto se leen de este mismo recorte para que no se desfasen.
+ *
+ * Si la ruta ya empieza en una empresa conocida (las raices por empresa no
+ * llevan `Empresas/`), no se busca `Empresas`: una carpeta interna con ese
+ * nombre no cambia la raiz de la ruta.
+ */
+export function segmentosBajoEmpresas(
+  ruta: string | undefined,
+  catalogo: readonly EmpresaCatalogo[] = []
+): string[] {
   if (!ruta?.trim()) {
-    return undefined;
+    return [];
   }
   const partes = ruta.split(/[/\\]+/).filter(Boolean);
-  const indice = partes.findIndex((p) => normalizarTexto(p) === 'empresas');
-  const desde = indice >= 0 ? partes.slice(indice + 1) : partes;
-  for (const parte of desde) {
-    const id = empresaIdDe(parte, catalogo);
-    if (id) {
-      return id;
-    }
+  if (partes[0] && empresaIdDe(partes[0], catalogo)) {
+    return partes;
   }
-  return undefined;
+  const indice = partes.findIndex((p) => normalizarTexto(p) === 'empresas');
+  return indice >= 0 ? partes.slice(indice + 1) : partes;
 }

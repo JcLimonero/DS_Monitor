@@ -12,6 +12,10 @@ import {
  * en la mezcla si no la pide. Un token de consulta solo ve las empresas de su
  * lista; si la lista es unicamente Itech, esa es la consulta. Itech en el SQL
  * solo aparece cuando `excluyeItech` es false.
+ *
+ * Los documentos marcados como costos (precios, cotizaciones) solo los ve quien
+ * tiene `puedeCostos`. Lo decide quien arma el actor (rutas-rag.ts), nunca la
+ * peticion: PedidoRag no tiene ningun campo para pedirlos.
  */
 export interface ActorRag {
   director: boolean;
@@ -19,6 +23,8 @@ export interface ActorRag {
   tope?: string[];
   /** Puede pedir Itech de forma explicita. */
   puedeItech: boolean;
+  /** Puede recuperar documentos con sensibilidad 'costos'. Sin esto, solo 'general'. */
+  puedeCostos: boolean;
 }
 
 export interface PedidoRag {
@@ -40,6 +46,12 @@ export interface ClausulaEmpresa {
   empresas?: string[];
   /** Siempre true salvo peticion explicita y autorizada. */
   excluyeItech: boolean;
+  /**
+   * Solo true si el actor tiene permiso de costos. Se copia tal cual de
+   * `actor.puedeCostos`: ningun campo de la peticion lo toca. Cualquier otro
+   * valor (false, undefined) deja la busqueda en la lista blanca 'general'.
+   */
+  incluyeCostos: boolean;
 }
 
 export function resolverEmpresas(
@@ -51,6 +63,8 @@ export function resolverEmpresas(
   const tope = actor.tope?.map((e) => empresaIdDe(e, catalogo) ?? e);
   const soloItech =
     !!tope && tope.length > 0 && tope.every((e) => e === EMPRESA_ITECH);
+  // Solo el actor decide los costos; `=== true` deja cerrado cualquier otro valor.
+  const incluyeCostos = actor.puedeCostos === true;
   const pidio =
     soloItech ||
     pedido.incluirItech === true ||
@@ -95,20 +109,22 @@ export function resolverEmpresas(
       return {
         sql: `AND $COL = ANY($EMP::text[]) AND ${exclusion}`,
         empresas: lista.filter((e) => e !== EMPRESA_ITECH),
-        excluyeItech: true
+        excluyeItech: true,
+        incluyeCostos
       };
     }
-    return { sql: `AND ${exclusion}`, excluyeItech: true };
+    return { sql: `AND ${exclusion}`, excluyeItech: true, incluyeCostos };
   }
 
   if (lista) {
     return {
       sql: 'AND $COL = ANY($EMP::text[])',
       empresas: lista,
-      excluyeItech: false
+      excluyeItech: false,
+      incluyeCostos
     };
   }
-  return { sql: '', excluyeItech: false };
+  return { sql: '', excluyeItech: false, incluyeCostos };
 }
 
 function empresasPedidas(
@@ -152,6 +168,29 @@ export function sqlEmpresas(
     sql: conColumna.replaceAll('$EMP', `$${indice}`),
     parametros: [clausula.empresas]
   };
+}
+
+/**
+ * Condicion de sensibilidad para las dos ramas de la busqueda (vectorial y de
+ * texto). Va en el WHERE, con las columnas del fragmento y de su documento.
+ *
+ * Es una lista blanca ('general'), no `<> 'costos'`: un valor que no sea
+ * exactamente 'general' (una clase nueva, un NULL si algun dia se relaja la
+ * columna, un typo) queda fuera en lugar de colarse. Se exige en el fragmento
+ * Y en el documento para que un desalineo entre los dos nunca abra costos.
+ * Sin parametros: el literal no depende de nada que mande quien pregunta.
+ *
+ * Solo `incluyeCostos === true` la omite.
+ */
+export function sqlSensibilidad(
+  clausula: Pick<ClausulaEmpresa, 'incluyeCostos'>,
+  fragmento = 'f',
+  documento = 'd'
+): string {
+  if (clausula.incluyeCostos === true) {
+    return '';
+  }
+  return `AND ${fragmento}.sensibilidad = 'general' AND ${documento}.sensibilidad = 'general'`;
 }
 
 export function kDe(pedido: PedidoRag): number {

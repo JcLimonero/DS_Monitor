@@ -4,6 +4,7 @@ import { CARPETAS_COSTOS, CARPETAS_GENERALES } from './clasificar.js';
 import {
   empresaDeRuta,
   empresaIdDe,
+  segmentosBajoEmpresas,
   type EmpresaCatalogo
 } from './empresas-rag.js';
 
@@ -35,6 +36,29 @@ const SECCIONES_ENTERAS = new Set(['resumen', 'acuerdos', 'pendientes']);
  */
 const CARPETAS_DE_ETAPA = new Set([...CARPETAS_GENERALES, ...CARPETAS_COSTOS]);
 
+/**
+ * Carpetas de primer nivel bajo una empresa que no son un cliente (normalizadas
+ * con normalizarTexto, que ignora el guion bajo: `_Historico` es `historico`).
+ * Una ficha CLIENTE.md o PROYECTO_*.md que cuelga de una de ellas no recibe
+ * cliente. Las que no empiezan con una letra o un digito y las numeradas como
+ * `00_Brand_Kit` tampoco (ver esCarpetaDeCliente).
+ */
+const CARPETAS_QUE_NO_SON_CLIENTE = new Set([
+  'empresas',
+  'integraciones',
+  'interno',
+  'facturacion',
+  'historico',
+  'por clasificar',
+  'prospectos',
+  'obsoletas',
+  'duplicados',
+  'brand kit',
+  'brand kits',
+  'brand kits clientes',
+  'marca'
+]);
+
 export interface OpcionesFragmento {
   maxTokens?: number;
   traslape?: number;
@@ -47,8 +71,20 @@ export interface DocumentoFragmentado {
   fecha?: string;
   empresa: string;
   empresaNombre: string;
+  /**
+   * true si el frontmatter traia un `empresa:` distinto de la empresa de la
+   * ruta de Drive (o que no se reconoce) y se ignoro: manda la ruta.
+   */
+  empresaDelFrontmatterIgnorada: boolean;
   cliente?: string;
+  /**
+   * true si el frontmatter traia un `cliente:` distinto del que da la ruta de
+   * Drive y se ignoro: manda la ruta.
+   */
+  clienteDelFrontmatterIgnorado: boolean;
   proyecto?: string;
+  /** Igual que `clienteDelFrontmatterIgnorado`, para `proyecto:`. */
+  proyectoDelFrontmatterIgnorado: boolean;
   tipo: string;
   participantes: string[];
   frontmatter: Record<string, string>;
@@ -98,9 +134,15 @@ export function fragmentarMarkdown(
   const texto = markdown.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
   const { frente, cuerpo } = separarFrente(texto);
   const catalogo = ctx.catalogo ?? [];
-  const empresa =
-    empresaIdDe(frente['empresa'], catalogo) ??
-    empresaDeRuta(ctx.ruta, catalogo);
+  // La empresa la manda la ruta de Drive (decision de Carlos, 2026-10-17): si de
+  // la ruta sale una empresa conocida, el `empresa:` del frontmatter se ignora.
+  // Sin ruta, o con una ruta que no resuelve a ninguna empresa, vale el
+  // frontmatter. Cliente y proyecto siguen la misma regla (decision de Carlos,
+  // 2026-10-18): lo que da la ruta manda y el frontmatter solo llena lo que la
+  // ruta no da.
+  const empresaDeCarpeta = empresaDeRuta(ctx.ruta, catalogo);
+  const empresaDeFrente = empresaIdDe(frente['empresa'], catalogo);
+  const empresa = empresaDeCarpeta ?? empresaDeFrente;
   if (!empresa) {
     throw new Error(
       'No reconocí la empresa de la junta (frontmatter o ruta de Drive).'
@@ -111,13 +153,27 @@ export function fragmentarMarkdown(
     frente['titulo'] ||
     nombreDeArchivo(ctx.ruta) ||
     'Junta';
-  const cliente = textoONada(frente['cliente']) ?? clienteDeRuta(ctx.ruta);
-  const proyecto = textoONada(frente['proyecto']) ?? proyectoDeRuta(ctx.ruta);
+  const deRuta = contextoDeRuta(ctx.ruta, catalogo);
+  const cliente = deRuta.cliente ?? textoONada(frente['cliente']);
+  const proyecto = deRuta.proyecto ?? textoONada(frente['proyecto']);
+  const clienteDelFrontmatterIgnorado = discrepa(
+    deRuta.cliente,
+    frente['cliente']
+  );
+  const proyectoDelFrontmatterIgnorado = discrepa(
+    deRuta.proyecto,
+    frente['proyecto']
+  );
   const participantes = participantesDe(frente['participantes']);
   const fecha = fechaDe(frente['fecha']) ?? fechaDeNombre(ctx.ruta);
   const id = textoONada(frente['id']) ?? ctx.driveFileId;
+  const empresaDelFrontmatterIgnorada =
+    !!empresaDeCarpeta &&
+    !!textoONada(frente['empresa']) &&
+    empresaDeFrente !== empresaDeCarpeta;
+  // El nombre de la cabecera sale del frontmatter solo si ese es el que vale.
   const empresaNombre =
-    textoONada(frente['empresa']) ??
+    (empresaDeFrente === empresa ? textoONada(frente['empresa']) : undefined) ??
     catalogo.find((e) => e.id === empresa)?.nombre ??
     empresa;
   const cabecera = armarCabecera({
@@ -155,8 +211,11 @@ export function fragmentarMarkdown(
     fecha,
     empresa,
     empresaNombre,
+    empresaDelFrontmatterIgnorada,
     cliente,
+    clienteDelFrontmatterIgnorado,
     proyecto,
+    proyectoDelFrontmatterIgnorado,
     tipo: tipoDe(frente['tipo'], ctx.ruta),
     participantes,
     frontmatter: frente,
@@ -236,44 +295,97 @@ function participantesDe(valor: string | undefined): string[] {
     .filter(Boolean);
 }
 
-function proyectoDeRuta(ruta: string | undefined): string | undefined {
-  const antes = segmentosDeContexto(ruta);
-  const ultimo = antes?.[antes.length - 1];
-  if (!antes || antes.length < 3 || !ultimo) {
-    return undefined;
-  }
-  return ultimo.trim();
+/** Cliente y proyecto que da la ruta de Drive. Lo que no da, queda vacio. */
+interface ContextoDeRuta {
+  cliente?: string;
+  proyecto?: string;
 }
 
 /**
- * Los segmentos de la ruta que van antes de la primera carpeta de etapa
- * (Juntas, 01_Cotizaciones, 02_Proyecto, 03_Entregables, 04_Costos), contando
- * desde la empresa: Empresa / Cliente de facturacion / Cliente final /
- * Proyecto. Sin carpeta de etapa no hay contexto, salvo en una ficha
- * PROYECTO_*.md: ahi el contexto son las carpetas que la contienen.
+ * Cliente y proyecto de un archivo segun su ruta:
+ * Empresa / Cliente de facturacion / [Cliente final /] Proyecto / etapa / ...
+ *
+ * Solo hay contexto si la primera carpeta (tras `Empresas/`) es una empresa
+ * conocida: es la misma lectura de empresaDeRuta, porque sin ella las
+ * posiciones no significan cliente ni proyecto (`_Historico`, `_POR_CLASIFICAR`).
+ *
+ * Con carpeta de etapa (Juntas, 01_Cotizaciones, 02_Proyecto, 03_Entregables,
+ * 04_Costos), el contexto son las carpetas anteriores a la primera etapa. El
+ * cliente es el segundo segmento (el cliente de facturacion) y el proyecto, con
+ * al menos tres, el ultimo.
+ *
+ * Sin carpeta de etapa no hay contexto, salvo en dos fichas que cuelgan de la
+ * carpeta del cliente: CLIENTE.md (solo cliente) y PROYECTO_*.md (cliente y,
+ * con al menos tres carpetas, el proyecto de la carpeta que la contiene). Con
+ * una condicion: el segundo segmento tiene que poder ser un cliente (ver
+ * esCarpetaDeCliente). Ningun otro archivo recibe cliente sin etapa.
  */
-function segmentosDeContexto(ruta: string | undefined): string[] | undefined {
-  if (!ruta) {
-    return undefined;
-  }
-  const partes = ruta.split(/[/\\]+/).filter(Boolean);
-  const indice = partes.findIndex((p) => normalizarTexto(p) === 'empresas');
-  const desde = indice >= 0 ? partes.slice(indice + 1) : partes;
-  const archivo = desde[desde.length - 1];
+function contextoDeRuta(
+  ruta: string | undefined,
+  catalogo: readonly EmpresaCatalogo[]
+): ContextoDeRuta {
+  const desde = segmentosBajoEmpresas(ruta, catalogo);
   const carpetas = desde.slice(0, -1);
+  const empresa = carpetas[0];
+  if (!empresa || !empresaIdDe(empresa, catalogo)) {
+    return {};
+  }
   const etapa = carpetas.findIndex((p) =>
     CARPETAS_DE_ETAPA.has(normalizarTexto(p))
   );
   if (etapa >= 0) {
-    return carpetas.slice(0, etapa);
+    return contextoDe(carpetas.slice(0, etapa));
   }
-  return archivo && /^PROYECTO_.+\.md$/i.test(archivo.trim())
-    ? carpetas
-    : undefined;
+  const archivo = (desde[desde.length - 1] ?? '').trim();
+  const esFichaDeCliente = /^CLIENTE\.md$/i.test(archivo);
+  const esFichaDeProyecto = /^PROYECTO_.+\.md$/i.test(archivo);
+  if (
+    !(esFichaDeCliente || esFichaDeProyecto) ||
+    !esCarpetaDeCliente(carpetas[1])
+  ) {
+    return {};
+  }
+  const contexto = contextoDe(carpetas);
+  return esFichaDeProyecto ? contexto : { cliente: contexto.cliente };
 }
 
-function clienteDeRuta(ruta: string | undefined): string | undefined {
-  return segmentosDeContexto(ruta)?.[1]?.trim() || undefined;
+function contextoDe(antes: string[]): ContextoDeRuta {
+  const ultimo = antes[antes.length - 1]?.trim();
+  return {
+    cliente: antes[1]?.trim() || undefined,
+    proyecto: antes.length >= 3 && ultimo ? ultimo : undefined
+  };
+}
+
+/**
+ * El segmento puede ser un cliente: no esta vacio, empieza con una letra o un
+ * digito (no `_POR_CLASIFICAR`, `_Interno_LimonLabs` ni `.oculta`), no es una
+ * carpeta numerada de Drive (`00_Brand_Kit`, `00_Brand_Kits_Clientes`) ni una de
+ * las carpetas que no son un cliente (CARPETAS_QUE_NO_SON_CLIENTE). Los
+ * caracteres de formato invisibles se quitan antes de mirar. Una carpeta que no
+ * se reconoce como cliente deja el cliente vacio: peor es asignarle el de otro.
+ */
+function esCarpetaDeCliente(nombre: string | undefined): boolean {
+  const limpio = nombre?.replace(/\p{Cf}/gu, '').trim();
+  if (
+    !limpio ||
+    !/^[\p{L}\p{N}]/u.test(limpio) ||
+    /^\d{2}\p{Pc}/u.test(limpio)
+  ) {
+    return false;
+  }
+  return !CARPETAS_QUE_NO_SON_CLIENTE.has(normalizarTexto(limpio));
+}
+
+/** La ruta da un valor y el frontmatter trae otro distinto (comparados sin mayusculas ni acentos). */
+function discrepa(
+  deRuta: string | undefined,
+  deFrente: string | undefined
+): boolean {
+  const frente = textoONada(deFrente);
+  return (
+    !!deRuta && !!frente && normalizarTexto(frente) !== normalizarTexto(deRuta)
+  );
 }
 
 function fechaDe(valor: string | undefined): string | undefined {

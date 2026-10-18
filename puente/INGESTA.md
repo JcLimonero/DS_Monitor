@@ -1395,12 +1395,23 @@ Content-Type: application/json
 | `driveFileId` | sí | Id del archivo en Drive. Único. |
 | `markdown` | sí | El .md completo, con frontmatter. |
 | `driveUrl` | no | Liga que se cita en las respuestas. Sin ella se arma con el id. |
-| `ruta` | no | Ruta dentro de Empresas/. Da la empresa (si el frontmatter no la trae), el proyecto y la sensibilidad. Sin ella el documento queda como `costos`. |
+| `ruta` | no | Ruta dentro de Empresas/. Da la empresa, el cliente y el proyecto (mandan sobre el frontmatter) y la sensibilidad. Sin ella el documento queda como `costos`. |
 | `modificadoEn` | no | `modifiedTime` de Drive, para la reconciliación diaria. |
 
-La empresa sale del frontmatter (`empresa`) o de la ruta. Tiene que ser una
-del catálogo (`dealer-solutions`, `nexusqtech`, `operativai`, `itech-dev`) o
+La empresa sale de la ruta de Drive, de su primera carpeta tras `Empresas/` (una
+carpeta de cliente o de proyecto con nombre de empresa no cuenta); el `empresa:`
+del frontmatter solo vale si no hay `ruta` o si esa carpeta no es una empresa. Si el frontmatter
+nombra otra empresa distinta de la de la ruta, se ignora y el puente lo avisa en
+el log (con el id de Drive, sin contenido). La empresa tiene que ser una del
+catálogo (`dealer-solutions`, `nexusqtech`, `operativai`, `itech-dev`) o
 `limonlabs`. Si no se reconoce, responde 400.
+
+Cliente y proyecto siguen la misma regla: lo que da la ruta manda, y el
+`cliente:` y el `proyecto:` del frontmatter solo llenan lo que la ruta no da. Si
+la ruta da un valor y el frontmatter trae otro, se usa el de la ruta y el
+puente lo avisa en el log (con el id de Drive y el nombre del campo, sin
+valores ni contenido). La ruta solo da cliente y proyecto si su primera carpeta
+es una empresa conocida.
 
 **Sensibilidad y proyecto.** El documento y cada uno de sus fragmentos llevan
 una `sensibilidad`, `general` o `costos`, que sale de `ruta` y del texto del
@@ -1442,12 +1453,23 @@ markdown. Es una lista blanca: `general` hay que ganárselo y todo lo demás es
   caracteres invisibles) con un valor distinto de `general`, o la llave
   repetida en cualquier parte, fuerza `costos`, aunque el frontmatter diga
   `general`.
-- El `proyecto` sale del frontmatter o de la ruta: el segmento anterior a la
-  primera carpeta `Juntas`, `01_Cotizaciones`, `02_Proyecto`, `03_Entregables`
-  o `04_Costos`, si hay al menos tres segmentos desde la empresa (Empresa,
-  Cliente de facturación, Cliente final, Proyecto). En una ficha
-  `PROYECTO_*.md` fuera de esas carpetas es la carpeta que la contiene;
-  `CLIENTE.md` no lleva proyecto.
+- El `cliente` y el `proyecto` salen de la ruta, y del frontmatter solo lo que
+  la ruta no da. Con una carpeta `Juntas`, `01_Cotizaciones`, `02_Proyecto`,
+  `03_Entregables` o `04_Costos`, el contexto son las carpetas anteriores a la
+  primera de ellas, contadas desde la empresa (Empresa, Cliente de
+  facturación, Cliente final, Proyecto): el cliente es el segundo segmento (el
+  cliente de facturación) y el proyecto, si hay al menos tres segmentos, el
+  último.
+- Sin esas carpetas solo tienen contexto dos fichas que cuelgan de la carpeta
+  de un cliente. `CLIENTE.md` toma el cliente de la misma convención (segundo
+  segmento tras la empresa, aunque esté en la carpeta de un cliente final) y no
+  lleva proyecto. `PROYECTO_*.md` toma además el proyecto de la carpeta que la
+  contiene, si hay al menos tres segmentos. El segundo segmento no puede ser una
+  carpeta que no es un cliente: las que no empiezan con una letra o un dígito
+  (`_POR_CLASIFICAR`, `.oculta`), las numeradas como `00_Brand_Kit`,
+  `Integraciones`, `Interno`, `Facturacion`, `Historico`, `Prospectos` y los
+  brand kits. Cualquier otro archivo sin esas carpetas queda sin cliente ni
+  proyecto de ruta.
 
 Con la misma huella el puente vuelve a calcular las dos cosas y, si cambiaron
 (el archivo se movió de carpeta o cambió la regla), las corrige en el
@@ -1471,3 +1493,19 @@ entonces lo anterior cuenta como `costos`. Consultar es otra cosa: `POST /rag/bu
 `rag-consulta`. Sin empresa en el cuerpo, el SQL excluye Itech. Para verla hay
 que mandar `"empresa": "itech-dev"` (o `"incluirItech": true`) y tener permiso.
 Un token cuya sexta columna es solo `itech-dev` no ve el resto.
+
+Los documentos `costos` solo los recupera quien tiene permiso de costos; el
+resto ve únicamente los `general`. El filtro va en el `WHERE` de las dos ramas de
+la búsqueda (vectorial y de texto) y la petición no puede ampliarlo: ningún campo
+del cuerpo concede costos. Tienen costos el token de admin, el director y quien
+tenga el área `costos` en lectura (rol Finanzas; el área `cotizaciones` no lo
+concede). Los emisores `rag-consulta` no tienen costos. Un fragmento sin
+clasificar cuenta como `costos`. Si `rag:backfill` o la
+reconciliación diaria encuentra un archivo con la misma huella pero otra ruta,
+realinea `empresa`, `cliente`, `proyecto` y sensibilidad de su documento y de
+todos sus fragmentos sin volver a embeber (la empresa sale de la ruta,
+como en la primera ingesta). También se reescribe la primera línea del texto de
+cada fragmento (`[Empresa / Cliente / Proyecto] Junta ...`), de modo que el nombre
+anterior ni se lee ni se encuentra por texto; solo en los fragmentos cuyo cuerpo
+es idéntico, y sin tocar el embedding, que conserva la cabecera anterior. Al arrancar, el puente avisa en el log si hay
+fragmentos indexados y ninguno es `general`: falta correr `rag:backfill`.
