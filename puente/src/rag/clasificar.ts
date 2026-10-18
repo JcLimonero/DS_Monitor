@@ -63,7 +63,13 @@ export const RAICES_DE_COSTOS: readonly string[] = [
   'monto',
   'pago',
   'propuesta econom',
-  'propuesta comercial'
+  'propuesta comercial',
+  // Raices amplias (decision de Carlos, 2026-10-17): atrapan Propuesta_firmada.md,
+  // Oferta.md e Inversion.md. Costo conocido: las propuestas tecnicas y otros
+  // documentos con esas palabras quedan en `costos` hasta marcarlos `general`.
+  'propuesta',
+  'oferta',
+  'inversion'
 ];
 
 /**

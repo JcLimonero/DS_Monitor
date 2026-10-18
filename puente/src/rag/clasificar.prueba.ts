@@ -129,7 +129,10 @@ describe('clasificar sensibilidad: nombres de precios en la ruta', () => {
       'pricing',
       'price',
       'quote',
-      'budget'
+      'budget',
+      'propuesta',
+      'oferta',
+      'inversion'
     ]) {
       assert.ok(RAICES_DE_COSTOS.includes(raiz), raiz);
     }
@@ -187,6 +190,12 @@ describe('clasificar sensibilidad: nombres de precios en la ruta', () => {
       'Price_list.md',
       'Quote_x.md',
       'Budget.md',
+      'Propuesta_firmada.md',
+      'propuesta_tecnica.md',
+      'Oferta.md',
+      'Oferta_final_v2.md',
+      'Inversion.md',
+      'Inversión inicial.md',
       '2026-10-06_revision_de_precios.md'
     ]) {
       costos(`${BASE}/02_Proyecto/${nombre}`);
@@ -196,7 +205,7 @@ describe('clasificar sensibilidad: nombres de precios en la ruta', () => {
   });
 
   it('un nombre sin esas raices sigue siendo general en la lista blanca', () => {
-    general(`${BASE}/02_Proyecto/propuesta_tecnica.md`);
+    general(`${BASE}/02_Proyecto/arquitectura_del_portal.md`);
     general(`${BASE}/03_Entregables/manual_de_usuario.md`);
     general(`${BASE}/Juntas/2026-10-06_kickoff.md`);
   });
