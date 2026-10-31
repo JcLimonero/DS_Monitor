@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { CrmOpportunity, Person, TaskItem, TaskStatus } from '../models';
-import { daysWithoutMovement, teamWorkload } from './portal.selectors';
+import {
+  daysWithoutMovement,
+  sinPendientesRepetidos,
+  teamWorkload
+} from './portal.selectors';
 
 const AHORA = new Date('2026-09-21T18:00:00Z');
 
@@ -85,6 +89,64 @@ describe('teamWorkload', () => {
       teamWorkload([tarea('solo', { status: 'pendiente' })], AHORA),
       []
     );
+  });
+});
+
+describe('sinPendientesRepetidos', () => {
+  it('el mismo id dos veces queda una', () => {
+    const a = tarea('ops-1', {
+      title: 'Confirmar monto',
+      origin: 'ops',
+      description: 'Hay dos montos'
+    });
+    assert.deepEqual(
+      sinPendientesRepetidos([a, { ...a }]).map((t) => t.id),
+      ['ops-1']
+    );
+  });
+
+  it('el mismo titulo y detalle con otro id queda el abierto más reciente', () => {
+    const lista = sinPendientesRepetidos([
+      tarea('bot-1', {
+        title: 'Confirmar monto',
+        description: 'Hay dos montos',
+        company: 'NexusQTech',
+        dueDate: '2026-10-13',
+        origin: 'ops',
+        updatedAt: '2026-10-13T10:00:00.000Z'
+      }),
+      tarea('bot-2', {
+        title: 'Confirmar monto',
+        description: 'Hay dos montos',
+        company: 'NexusQTech',
+        dueDate: '2026-10-13',
+        origin: 'ops',
+        updatedAt: '2026-10-13T12:00:00.000Z'
+      })
+    ]);
+    assert.deepEqual(
+      lista.map((t) => t.id),
+      ['bot-2']
+    );
+  });
+
+  it('un propio y uno de Ops con el mismo detalle se juntan', () => {
+    const lista = sinPendientesRepetidos([
+      tarea('local-1', {
+        title: 'Confirmar monto',
+        description: 'Hay dos montos',
+        company: 'NexusQTech',
+        origin: 'local'
+      }),
+      tarea('ops-1', {
+        title: 'Confirmar monto',
+        description: 'Hay dos montos',
+        company: 'NexusQTech',
+        origin: 'ops',
+        accountId: 'ops'
+      })
+    ]);
+    assert.equal(lista.length, 1);
   });
 });
 

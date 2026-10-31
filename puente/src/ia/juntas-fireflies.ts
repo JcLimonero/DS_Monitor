@@ -1,5 +1,6 @@
 import type { ConfiguracionIa } from '../config/entorno.js';
 import type { Person, TaskItem, TaskSubtarea } from '../nucleo/contrato.js';
+import { claveDePendiente } from '../pendientes/homologar.js';
 import { notasDe, type Transcripcion } from '../proveedores/fireflies.js';
 import { acuerdosDeJunta, personaDe } from './acuerdos.js';
 import { huella } from '../proveedores/ia.js';
@@ -256,6 +257,16 @@ export function decidirPendienteFireflies(
   const prefijoLegado = `${padre.id}-`;
   if (existentes.some((t) => t.id.startsWith(prefijoLegado))) {
     return { accion: 'omitir', motivo: 'legado' };
+  }
+  // Mismo titulo y detalle con otro id (el bot y el puente a la vez).
+  if (
+    existentes.some(
+      (t) =>
+        typeof (t as TaskItem).title === 'string' &&
+        claveDePendiente(t as TaskItem) === claveDePendiente(padre)
+    )
+  ) {
+    return { accion: 'omitir', motivo: 'ya_existe' };
   }
   return { accion: 'agregar', padre };
 }

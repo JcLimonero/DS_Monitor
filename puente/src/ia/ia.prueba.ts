@@ -702,6 +702,12 @@ Realizar pruebas integradas (12:05)
       padre
     );
     assert.equal(otra.accion, 'agregar');
+    // Mismo titulo y detalle con otro id: no crear otra vez.
+    const mismoTitulo = decidirPendienteFireflies(
+      [{ ...padre, id: 'otro-id' }],
+      padre
+    );
+    assert.deepEqual(mismoTitulo, { accion: 'omitir', motivo: 'ya_existe' });
   });
 });
 

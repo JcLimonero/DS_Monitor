@@ -42,6 +42,7 @@ import {
   TASK_SOURCES
 } from '../sources/source.contracts';
 import { addDays, startOfDay } from '../util/date.util';
+import { sinPendientesRepetidos } from './portal.selectors';
 
 /** Cuanto abarca la agenda que se pide a los calendarios. */
 const CALENDAR_DAYS_BACK = 7;
@@ -309,8 +310,9 @@ export class PortalStore {
     // tablero, al carrusel ni a los resúmenes.
     this.collect(this.taskSources, (source) => source.fetchTasks()).subscribe(
       (tasks) => {
-        this.tasksTodasSignal.set(tasks);
-        this.tasksSignal.set(tasks.filter((task) => !task.personal));
+        const unicas = sinPendientesRepetidos(tasks);
+        this.tasksTodasSignal.set(unicas);
+        this.tasksSignal.set(unicas.filter((task) => !task.personal));
         this.tareasListasSignal.set(true);
       }
     );
