@@ -18,16 +18,38 @@ import {
   construirRutas,
   type Datos
 } from './rutas.js';
-import { establecerGanchosRag } from './rutas-rag.js';
+import { RespuestaBinaria } from './router.js';
+import {
+  establecerGanchosRag,
+  establecerGanchosDescarga
+} from './rutas-rag.js';
 
 class SqlFalsa implements Sql {
   consultas: { texto: string; parametros: unknown[] }[] = [];
   doc?: Fila;
+  documentosDescarga: Record<
+    string,
+    { empresa: string; sensibilidad: string }
+  > = {
+    'drive-9': { empresa: 'dealer-solutions', sensibilidad: 'general' },
+    'drive-itech': { empresa: 'itech-dev', sensibilidad: 'general' }
+  };
 
   async ejecutar(texto: string, parametros: unknown[] = []): Promise<Fila[]> {
     this.consultas.push({ texto, parametros });
     if (texto.includes('FROM rag_documentos') && texto.includes('huella')) {
       return this.doc ? [this.doc] : [];
+    }
+    if (
+      texto.includes('SELECT empresa') &&
+      texto.includes('sensibilidad') &&
+      texto.includes('drive_file_id')
+    ) {
+      const driveFileId = parametros[0] as string;
+      const info = this.documentosDescarga[driveFileId];
+      return info
+        ? [{ empresa: info.empresa, sensibilidad: info.sensibilidad }]
+        : [];
     }
     if (texto.includes('INSERT INTO rag_documentos')) {
       this.doc = {
@@ -99,6 +121,7 @@ class PersistenciaConSql extends PersistenciaArchivos {
 const dirs: string[] = [];
 after(async () => {
   establecerGanchosRag({});
+  establecerGanchosDescarga({});
   for (const d of dirs) {
     await rm(d, { recursive: true, force: true });
   }
@@ -198,15 +221,16 @@ async function sembrarSesion(
 async function sembrarUsuario(
   datos: Datos,
   correo: string,
-  alcance?: UsuarioCrm['alcance']
+  opciones?: { alcance?: UsuarioCrm['alcance']; roles?: string[] }
 ): Promise<void> {
+  const { alcance, roles = ['comercial'] } = opciones ?? {};
   await datos.usuariosCrm.escribir([
     ...datos.usuariosCrm.leer(),
     {
       id: correo,
       correo,
       nombre: 'Prueba',
-      roles: ['comercial'],
+      roles,
       ...(alcance ? { alcance } : {}),
       activo: true,
       actualizadoEn: '2026-10-01T00:00:00.000Z'
@@ -355,7 +379,7 @@ describe('rutas del RAG vectorial', () => {
   for (const [campo, alcance] of sinEmpresas) {
     it(`un alcance solo de ${campo} no abre el RAG: 403 y ninguna consulta de fragmentos`, async () => {
       const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
-      await sembrarUsuario(datos, 'alcance@ejemplo.test', alcance);
+      await sembrarUsuario(datos, 'alcance@ejemplo.test', { alcance });
       await sembrarSesion(datos, 'tok-sin-empresas', 'alcance@ejemplo.test');
       redFalsa();
       sql.consultas.length = 0;
@@ -386,7 +410,7 @@ describe('rutas del RAG vectorial', () => {
   it('un alcance de empresas consulta solo esas, sin Itech', async () => {
     const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
     await sembrarUsuario(datos, 'dealer@ejemplo.test', {
-      empresas: ['dealer-solutions']
+      alcance: { empresas: ['dealer-solutions'] }
     });
     await sembrarSesion(datos, 'tok-empresa-dealer', 'dealer@ejemplo.test');
     redFalsa();
@@ -687,5 +711,285 @@ describe('GET /rag/alcance', () => {
       () => router.resolver('/rag/alcance', new URLSearchParams(), 'GET'),
       (error: unknown) => error instanceof ErrorPuente && error.estado === 401
     );
+  });
+});
+
+describe('descarga de archivos RAG', () => {
+  function descargaFalsa(): void {
+    establecerGanchosDescarga({
+      tokenDeCuentaServicio: async () => 'token-servicio-falso',
+      descargarArchivo: async (_token, driveFileId) => ({
+        contenido: Buffer.from(`contenido de ${driveFileId}`),
+        mimeType: 'text/markdown',
+        nombre: `${driveFileId}.md`
+      })
+    });
+  }
+
+  it('sin sesion ni token, la descarga pide autenticacion', async () => {
+    const { router } = await montar();
+    descargaFalsa();
+    await assert.rejects(
+      () =>
+        router.resolver(
+          '/rag/archivo/drive-9',
+          new URLSearchParams(),
+          'GET',
+          undefined,
+          {}
+        ),
+      (error: unknown) => error instanceof ErrorPuente && error.estado === 401
+    );
+  });
+
+  it('documento no encontrado devuelve 404', async () => {
+    const { router } = await montar();
+    descargaFalsa();
+    await assert.rejects(
+      () =>
+        router.resolver(
+          '/rag/archivo/drive-no-existe',
+          new URLSearchParams(),
+          'GET',
+          undefined,
+          { authorization: 'Bearer admin-prueba' }
+        ),
+      (error: unknown) =>
+        error instanceof ErrorPuente &&
+        error.estado === 404 &&
+        /no encontrado/i.test(error.message)
+    );
+  });
+
+  it('un emisor de dealer no puede descargar documentos de itech (retorna 404 uniforme)', async () => {
+    const { router, sql } = await montar();
+    descargaFalsa();
+    sql.documentosDescarga['drive-itech'] = {
+      empresa: 'itech-dev',
+      sensibilidad: 'general'
+    };
+    await assert.rejects(
+      () =>
+        router.resolver(
+          '/rag/archivo/drive-itech',
+          new URLSearchParams(),
+          'GET',
+          undefined,
+          { authorization: 'Bearer tok-dealer' }
+        ),
+      (error: unknown) =>
+        error instanceof ErrorPuente &&
+        error.estado === 404 &&
+        /no encontrado/i.test(error.message)
+    );
+  });
+
+  it('un emisor de dealer puede descargar documentos de dealer', async () => {
+    const { router } = await montar();
+    descargaFalsa();
+    const respuesta = await router.resolver(
+      '/rag/archivo/drive-9',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer tok-dealer' }
+    );
+    assert.ok(respuesta instanceof RespuestaBinaria);
+    assert.equal(respuesta.mimeType, 'text/markdown');
+    assert.equal(respuesta.nombreArchivo, 'drive-9.md');
+    assert.equal(respuesta.contenido.toString(), 'contenido de drive-9');
+  });
+
+  it('el admin puede descargar cualquier documento', async () => {
+    const { router, sql } = await montar();
+    descargaFalsa();
+    sql.documentosDescarga['drive-itech'] = {
+      empresa: 'itech-dev',
+      sensibilidad: 'general'
+    };
+    const respuesta = await router.resolver(
+      '/rag/archivo/drive-itech',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer admin-prueba' }
+    );
+    assert.ok(respuesta instanceof RespuestaBinaria);
+    assert.equal(respuesta.contenido.toString(), 'contenido de drive-itech');
+  });
+
+  it('un usuario con sesion y alcance de empresas solo descarga de sus empresas', async () => {
+    const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
+    await sembrarUsuario(datos, 'dealer@ejemplo.test', {
+      alcance: { empresas: ['dealer-solutions'] }
+    });
+    await sembrarSesion(datos, 'tok-empresa-dealer', 'dealer@ejemplo.test');
+    descargaFalsa();
+    sql.documentosDescarga['drive-itech'] = {
+      empresa: 'itech-dev',
+      sensibilidad: 'general'
+    };
+
+    const ok = await router.resolver(
+      '/rag/archivo/drive-9',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer tok-empresa-dealer' }
+    );
+    assert.ok(ok instanceof RespuestaBinaria);
+
+    await assert.rejects(
+      () =>
+        router.resolver(
+          '/rag/archivo/drive-itech',
+          new URLSearchParams(),
+          'GET',
+          undefined,
+          { authorization: 'Bearer tok-empresa-dealer' }
+        ),
+      (error: unknown) =>
+        error instanceof ErrorPuente &&
+        error.estado === 404 &&
+        /no encontrado/i.test(error.message)
+    );
+  });
+
+  it('el director por sesion puede descargar de cualquier empresa', async () => {
+    const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
+    await sembrarSesion(datos, 'tok-director', 'ana@ejemplo.test');
+    descargaFalsa();
+    sql.documentosDescarga['drive-itech'] = {
+      empresa: 'itech-dev',
+      sensibilidad: 'general'
+    };
+
+    const respuesta = await router.resolver(
+      '/rag/archivo/drive-itech',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer tok-director' }
+    );
+    assert.ok(respuesta instanceof RespuestaBinaria);
+    assert.equal(respuesta.contenido.toString(), 'contenido de drive-itech');
+  });
+
+  it('la respuesta de descarga nunca contiene URLs de Drive en metadatos', async () => {
+    const { router } = await montar();
+    establecerGanchosDescarga({
+      tokenDeCuentaServicio: async () => 'token-servicio-falso',
+      descargarArchivo: async () => ({
+        contenido: Buffer.from('contenido seguro'),
+        mimeType: 'application/pdf',
+        nombre: 'documento.pdf'
+      })
+    });
+    const respuesta = await router.resolver(
+      '/rag/archivo/drive-9',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer admin-prueba' }
+    );
+    assert.ok(respuesta instanceof RespuestaBinaria);
+    const texto = JSON.stringify({
+      mimeType: respuesta.mimeType,
+      nombre: respuesta.nombreArchivo,
+      contenido: respuesta.contenido.toString()
+    });
+    assert.doesNotMatch(texto, /drive\.google\.com/);
+    assert.doesNotMatch(texto, /driveFileId/);
+    assert.doesNotMatch(texto, /drive-9/);
+  });
+
+  it('documentos con sensibilidad costos retornan 404 para usuarios sin permiso', async () => {
+    const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
+    await sembrarUsuario(datos, 'comercial@ejemplo.test', {
+      roles: ['comercial']
+    });
+    await sembrarSesion(datos, 'tok-comercial', 'comercial@ejemplo.test');
+    descargaFalsa();
+    sql.documentosDescarga['drive-costos'] = {
+      empresa: 'dealer-solutions',
+      sensibilidad: 'costos'
+    };
+
+    await assert.rejects(
+      () =>
+        router.resolver(
+          '/rag/archivo/drive-costos',
+          new URLSearchParams(),
+          'GET',
+          undefined,
+          { authorization: 'Bearer tok-comercial' }
+        ),
+      (error: unknown) =>
+        error instanceof ErrorPuente &&
+        error.estado === 404 &&
+        /no encontrado/i.test(error.message)
+    );
+  });
+
+  it('documentos con sensibilidad costos son accesibles para usuarios con permiso', async () => {
+    const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
+    await sembrarUsuario(datos, 'finanzas@ejemplo.test', {
+      roles: ['finanzas']
+    });
+    await sembrarSesion(datos, 'tok-finanzas', 'finanzas@ejemplo.test');
+    descargaFalsa();
+    sql.documentosDescarga['drive-costos'] = {
+      empresa: 'dealer-solutions',
+      sensibilidad: 'costos'
+    };
+
+    const respuesta = await router.resolver(
+      '/rag/archivo/drive-costos',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer tok-finanzas' }
+    );
+    assert.ok(respuesta instanceof RespuestaBinaria);
+  });
+
+  it('documentos con sensibilidad general son accesibles para todos', async () => {
+    const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
+    await sembrarUsuario(datos, 'comercial@ejemplo.test', {
+      roles: ['comercial']
+    });
+    await sembrarSesion(datos, 'tok-comercial', 'comercial@ejemplo.test');
+    descargaFalsa();
+    sql.documentosDescarga['drive-general'] = {
+      empresa: 'dealer-solutions',
+      sensibilidad: 'general'
+    };
+
+    const respuesta = await router.resolver(
+      '/rag/archivo/drive-general',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer tok-comercial' }
+    );
+    assert.ok(respuesta instanceof RespuestaBinaria);
+  });
+
+  it('el admin puede descargar documentos con costos', async () => {
+    const { router, sql } = await montar();
+    descargaFalsa();
+    sql.documentosDescarga['drive-costos'] = {
+      empresa: 'dealer-solutions',
+      sensibilidad: 'costos'
+    };
+
+    const respuesta = await router.resolver(
+      '/rag/archivo/drive-costos',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer admin-prueba' }
+    );
+    assert.ok(respuesta instanceof RespuestaBinaria);
   });
 });

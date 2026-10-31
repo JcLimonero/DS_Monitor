@@ -31,6 +31,18 @@ export class Aceptado {
   constructor(readonly datos: unknown) {}
 }
 
+/**
+ * Lo que devuelve un manejador cuando la respuesta es un archivo binario
+ * para descargar (content-disposition: attachment).
+ */
+export class RespuestaBinaria {
+  constructor(
+    readonly contenido: Buffer,
+    readonly mimeType: string,
+    readonly nombreArchivo: string
+  ) {}
+}
+
 export type Metodo = 'GET' | 'POST';
 
 export interface Contexto {
@@ -252,6 +264,16 @@ export function manejar(
         }
         if (datos instanceof Aceptado) {
           responder(respuesta, 202, datos.datos);
+          return;
+        }
+        if (datos instanceof RespuestaBinaria) {
+          respuesta.writeHead(200, {
+            'content-type': datos.mimeType,
+            'content-disposition': `attachment; filename="${datos.nombreArchivo.replace(/"/g, '\\"')}"`,
+            'content-length': datos.contenido.length,
+            'cache-control': 'private, max-age=60'
+          });
+          respuesta.end(datos.contenido);
           return;
         }
         responder(respuesta, 200, datos);
