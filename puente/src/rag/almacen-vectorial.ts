@@ -63,6 +63,8 @@ export interface FragmentoHallado {
   titulo: string;
   driveFileId: string;
   driveUrl: string | null;
+  /** 'general' o 'costos'. Fail-closed: si falta, tratar como 'costos'. */
+  sensibilidad: Sensibilidad;
   puntuacion: number;
 }
 
@@ -341,7 +343,8 @@ export async function buscarHibrido(
     f.fecha,
     d.titulo,
     d.drive_file_id,
-    d.drive_url`;
+    d.drive_url,
+    f.sensibilidad`;
   const desde = `
     FROM rag_fragmentos f
     JOIN rag_documentos d ON d.id = f.documento_id`;
@@ -454,6 +457,9 @@ function filaHallada(
 ): FragmentoHallado {
   const driveFileId = String(fila['drive_file_id'] ?? '');
   const driveUrl = texto(fila['drive_url']);
+  const sensRaw = fila['sensibilidad'];
+  const sensibilidad: Sensibilidad =
+    sensRaw === 'general' ? 'general' : 'costos';
   return {
     id: String(fila['id'] ?? ''),
     documentoId: String(fila['documento_id'] ?? ''),
@@ -471,6 +477,7 @@ function filaHallada(
       (driveFileId
         ? `https://drive.google.com/file/d/${driveFileId}/view`
         : null),
+    sensibilidad,
     puntuacion
   };
 }

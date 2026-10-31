@@ -17,6 +17,7 @@ function fragmento(): FragmentoHallado {
     titulo: 'Revision del portal',
     driveFileId: 'drive-9',
     driveUrl: 'https://drive.google.com/file/d/drive-9/view',
+    sensibilidad: 'general',
     puntuacion: 0.03
   };
 }
