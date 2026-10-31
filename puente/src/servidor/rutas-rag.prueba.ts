@@ -27,7 +27,10 @@ import {
 class SqlFalsa implements Sql {
   consultas: { texto: string; parametros: unknown[] }[] = [];
   doc?: Fila;
-  documentosDescarga: Record<string, { empresa: string; sensibilidad: string }> = {
+  documentosDescarga: Record<
+    string,
+    { empresa: string; sensibilidad: string }
+  > = {
     'drive-9': { empresa: 'dealer-solutions', sensibilidad: 'general' },
     'drive-itech': { empresa: 'itech-dev', sensibilidad: 'general' }
   };
@@ -44,7 +47,9 @@ class SqlFalsa implements Sql {
     ) {
       const driveFileId = parametros[0] as string;
       const info = this.documentosDescarga[driveFileId];
-      return info ? [{ empresa: info.empresa, sensibilidad: info.sensibilidad }] : [];
+      return info
+        ? [{ empresa: info.empresa, sensibilidad: info.sensibilidad }]
+        : [];
     }
     if (texto.includes('INSERT INTO rag_documentos')) {
       this.doc = {
@@ -79,12 +84,18 @@ class SqlFalsa implements Sql {
         }
       ];
     }
-    if (texto.includes('DISTINCT empresa, proyecto') && texto.includes('FROM rag_documentos')) {
-      const empresas = parametros[0] as string[] ?? [];
+    if (
+      texto.includes('DISTINCT empresa, proyecto') &&
+      texto.includes('FROM rag_documentos')
+    ) {
+      const empresas = (parametros[0] as string[]) ?? [];
       const proyectos: Fila[] = [];
       if (empresas.includes('dealer-solutions')) {
         proyectos.push({ empresa: 'dealer-solutions', proyecto: 'Portal' });
-        proyectos.push({ empresa: 'dealer-solutions', proyecto: 'Facturacion' });
+        proyectos.push({
+          empresa: 'dealer-solutions',
+          proyecto: 'Facturacion'
+        });
       }
       if (empresas.includes('itech-dev')) {
         proyectos.push({ empresa: 'itech-dev', proyecto: 'Interno' });
@@ -653,7 +664,10 @@ describe('GET /rag/alcance', () => {
       'GET',
       undefined,
       { authorization: 'Bearer admin-prueba' }
-    )) as { empresas: { id: string; nombre: string; proyectos: string[] }[]; puedeItech: boolean };
+    )) as {
+      empresas: { id: string; nombre: string; proyectos: string[] }[];
+      puedeItech: boolean;
+    };
     assert.ok(alcance.empresas.length > 0);
     assert.equal(alcance.puedeItech, true);
     for (const emp of alcance.empresas) {
@@ -694,8 +708,7 @@ describe('GET /rag/alcance', () => {
   it('sin autenticacion devuelve 401', async () => {
     const { router } = await montar();
     await assert.rejects(
-      () =>
-        router.resolver('/rag/alcance', new URLSearchParams(), 'GET'),
+      () => router.resolver('/rag/alcance', new URLSearchParams(), 'GET'),
       (error: unknown) => error instanceof ErrorPuente && error.estado === 401
     );
   });
@@ -751,7 +764,10 @@ describe('descarga de archivos RAG', () => {
   it('un emisor de dealer no puede descargar documentos de itech (retorna 404 uniforme)', async () => {
     const { router, sql } = await montar();
     descargaFalsa();
-    sql.documentosDescarga['drive-itech'] = { empresa: 'itech-dev', sensibilidad: 'general' };
+    sql.documentosDescarga['drive-itech'] = {
+      empresa: 'itech-dev',
+      sensibilidad: 'general'
+    };
     await assert.rejects(
       () =>
         router.resolver(
@@ -787,7 +803,10 @@ describe('descarga de archivos RAG', () => {
   it('el admin puede descargar cualquier documento', async () => {
     const { router, sql } = await montar();
     descargaFalsa();
-    sql.documentosDescarga['drive-itech'] = { empresa: 'itech-dev', sensibilidad: 'general' };
+    sql.documentosDescarga['drive-itech'] = {
+      empresa: 'itech-dev',
+      sensibilidad: 'general'
+    };
     const respuesta = await router.resolver(
       '/rag/archivo/drive-itech',
       new URLSearchParams(),
@@ -806,7 +825,10 @@ describe('descarga de archivos RAG', () => {
     });
     await sembrarSesion(datos, 'tok-empresa-dealer', 'dealer@ejemplo.test');
     descargaFalsa();
-    sql.documentosDescarga['drive-itech'] = { empresa: 'itech-dev', sensibilidad: 'general' };
+    sql.documentosDescarga['drive-itech'] = {
+      empresa: 'itech-dev',
+      sensibilidad: 'general'
+    };
 
     const ok = await router.resolver(
       '/rag/archivo/drive-9',
@@ -837,7 +859,10 @@ describe('descarga de archivos RAG', () => {
     const { router, sql, datos } = await montar(ACCESO_PRENDIDO);
     await sembrarSesion(datos, 'tok-director', 'ana@ejemplo.test');
     descargaFalsa();
-    sql.documentosDescarga['drive-itech'] = { empresa: 'itech-dev', sensibilidad: 'general' };
+    sql.documentosDescarga['drive-itech'] = {
+      empresa: 'itech-dev',
+      sensibilidad: 'general'
+    };
 
     const respuesta = await router.resolver(
       '/rag/archivo/drive-itech',
@@ -885,7 +910,10 @@ describe('descarga de archivos RAG', () => {
     });
     await sembrarSesion(datos, 'tok-comercial', 'comercial@ejemplo.test');
     descargaFalsa();
-    sql.documentosDescarga['drive-costos'] = { empresa: 'dealer-solutions', sensibilidad: 'costos' };
+    sql.documentosDescarga['drive-costos'] = {
+      empresa: 'dealer-solutions',
+      sensibilidad: 'costos'
+    };
 
     await assert.rejects(
       () =>
@@ -910,7 +938,10 @@ describe('descarga de archivos RAG', () => {
     });
     await sembrarSesion(datos, 'tok-finanzas', 'finanzas@ejemplo.test');
     descargaFalsa();
-    sql.documentosDescarga['drive-costos'] = { empresa: 'dealer-solutions', sensibilidad: 'costos' };
+    sql.documentosDescarga['drive-costos'] = {
+      empresa: 'dealer-solutions',
+      sensibilidad: 'costos'
+    };
 
     const respuesta = await router.resolver(
       '/rag/archivo/drive-costos',
@@ -929,7 +960,10 @@ describe('descarga de archivos RAG', () => {
     });
     await sembrarSesion(datos, 'tok-comercial', 'comercial@ejemplo.test');
     descargaFalsa();
-    sql.documentosDescarga['drive-general'] = { empresa: 'dealer-solutions', sensibilidad: 'general' };
+    sql.documentosDescarga['drive-general'] = {
+      empresa: 'dealer-solutions',
+      sensibilidad: 'general'
+    };
 
     const respuesta = await router.resolver(
       '/rag/archivo/drive-general',
@@ -944,7 +978,10 @@ describe('descarga de archivos RAG', () => {
   it('el admin puede descargar documentos con costos', async () => {
     const { router, sql } = await montar();
     descargaFalsa();
-    sql.documentosDescarga['drive-costos'] = { empresa: 'dealer-solutions', sensibilidad: 'costos' };
+    sql.documentosDescarga['drive-costos'] = {
+      empresa: 'dealer-solutions',
+      sensibilidad: 'costos'
+    };
 
     const respuesta = await router.resolver(
       '/rag/archivo/drive-costos',
