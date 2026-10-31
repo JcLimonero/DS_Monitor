@@ -62,6 +62,18 @@ class SqlFalsa implements Sql {
         }
       ];
     }
+    if (texto.includes('DISTINCT empresa, proyecto') && texto.includes('FROM rag_documentos')) {
+      const empresas = parametros[0] as string[] ?? [];
+      const proyectos: Fila[] = [];
+      if (empresas.includes('dealer-solutions')) {
+        proyectos.push({ empresa: 'dealer-solutions', proyecto: 'Portal' });
+        proyectos.push({ empresa: 'dealer-solutions', proyecto: 'Facturacion' });
+      }
+      if (empresas.includes('itech-dev')) {
+        proyectos.push({ empresa: 'itech-dev', proyecto: 'Interno' });
+      }
+      return proyectos;
+    }
     return [];
   }
 
@@ -586,5 +598,86 @@ describe('rutas del RAG vectorial', () => {
       assert.match(consulta.texto, /f\.empresa <> 'itech-dev'/);
       assert.doesNotMatch(JSON.stringify(consulta.parametros), /itech-dev/);
     }
+  });
+
+  it('buscar con filtro de proyecto incluye el proyecto en la consulta', async () => {
+    const { router, sql } = await montar();
+    redFalsa();
+    sql.consultas.length = 0;
+    await router.resolver(
+      '/rag/buscar',
+      new URLSearchParams(),
+      'POST',
+      { pregunta: 'que se dijo del portal', proyecto: 'Portal' },
+      { authorization: 'Bearer admin-prueba' }
+    );
+    const selects = sql.consultas.filter((c) =>
+      c.texto.includes('FROM rag_fragmentos')
+    );
+    assert.ok(selects.length >= 1);
+    for (const consulta of selects) {
+      assert.match(consulta.texto, /d\.proyecto/i);
+      assert.ok(
+        consulta.parametros.includes('Portal'),
+        'el proyecto debe estar en los parametros'
+      );
+    }
+  });
+});
+
+describe('GET /rag/alcance', () => {
+  it('devuelve las empresas permitidas para el admin', async () => {
+    const { router } = await montar();
+    const alcance = (await router.resolver(
+      '/rag/alcance',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer admin-prueba' }
+    )) as { empresas: { id: string; nombre: string; proyectos: string[] }[]; puedeItech: boolean };
+    assert.ok(alcance.empresas.length > 0);
+    assert.equal(alcance.puedeItech, true);
+    for (const emp of alcance.empresas) {
+      assert.ok(emp.id);
+      assert.ok(emp.nombre);
+      assert.ok(Array.isArray(emp.proyectos));
+    }
+  });
+
+  it('un emisor de dealer solo ve dealer-solutions', async () => {
+    const { router } = await montar();
+    const alcance = (await router.resolver(
+      '/rag/alcance',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer tok-dealer' }
+    )) as { empresas: { id: string }[]; puedeItech: boolean };
+    assert.equal(alcance.empresas.length, 1);
+    assert.equal(alcance.empresas[0]?.id, 'dealer-solutions');
+    assert.equal(alcance.puedeItech, false);
+  });
+
+  it('un emisor de itech solo ve itech-dev y puedeItech es true', async () => {
+    const { router } = await montar();
+    const alcance = (await router.resolver(
+      '/rag/alcance',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer tok-itech' }
+    )) as { empresas: { id: string }[]; puedeItech: boolean };
+    assert.equal(alcance.empresas.length, 1);
+    assert.equal(alcance.empresas[0]?.id, 'itech-dev');
+    assert.equal(alcance.puedeItech, true);
+  });
+
+  it('sin autenticacion devuelve 401', async () => {
+    const { router } = await montar();
+    await assert.rejects(
+      () =>
+        router.resolver('/rag/alcance', new URLSearchParams(), 'GET'),
+      (error: unknown) => error instanceof ErrorPuente && error.estado === 401
+    );
   });
 });

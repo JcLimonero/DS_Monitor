@@ -27,6 +27,7 @@ export interface PedidoRag {
   /** Atajo explicito, ademas de nombrar a Itech en `empresa`. */
   incluirItech?: boolean;
   cliente?: string;
+  proyecto?: string;
   desde?: string;
   hasta?: string;
   k?: number;
