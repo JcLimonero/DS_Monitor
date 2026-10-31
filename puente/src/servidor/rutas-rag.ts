@@ -12,9 +12,12 @@ import { autenticarEmisor, emisorDelToken } from '../ingesta/rutas-ingesta.js';
 import { preguntar as preguntarModelo } from '../ia/modelo.js';
 import type {
   CrmCliente,
+  CrmProyecto,
+  CrmRiesgo,
   Empresa,
   JuntaRag,
   RolCrm,
+  TaskItem,
   UsuarioCrm
 } from '../nucleo/contrato.js';
 import {
@@ -81,6 +84,12 @@ export interface DependenciasRag {
   correosDelDueno: () => string[];
   esAdmin: (contexto: Contexto) => boolean;
   programables: Programable[];
+  /** Riesgos y bloqueos de proyectos (opcional, para /rag/atencion). */
+  riesgos?: () => CrmRiesgo[];
+  /** Proyectos del CRM (opcional, para /rag/atencion). */
+  proyectos?: () => CrmProyecto[];
+  /** Pendientes abiertos (opcional, para /rag/atencion con acuerdos de juntas). */
+  pendientes?: () => TaskItem[];
 }
 
 interface GanchosRag {
@@ -566,6 +575,183 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
     );
   });
 
+  /**
+   * GET /rag/atencion — Puntos de atención consolidados:
+   * riesgos/bloqueos abiertos de proyectos, pendientes de juntas y acuerdos
+   * que el actor puede ver. Respeta los mismos permisos de empresa que el
+   * resto del RAG.
+   *
+   * Query params:
+   * - empresa: filtrar por empresa (id o nombre)
+   * - proyecto: filtrar por proyecto (id)
+   */
+  router.get('/rag/atencion', async (contexto) => {
+    const actor = actorDe(contexto);
+    const cat = catalogo();
+
+    const filtroEmpresa = contexto.parametros.get('empresa') ?? undefined;
+    const filtroProyecto = contexto.parametros.get('proyecto') ?? undefined;
+
+    let empresasPermitidas: string[];
+    if (actor.director) {
+      empresasPermitidas = cat.map((e) => e.id);
+    } else if (actor.tope) {
+      empresasPermitidas = actor.tope;
+    } else {
+      empresasPermitidas = cat.map((e) => e.id);
+    }
+
+    if (filtroEmpresa) {
+      const empresaId = empresaIdDe(filtroEmpresa, cat) ?? filtroEmpresa;
+      if (!empresasPermitidas.includes(empresaId)) {
+        throw new ErrorPuente('No tienes acceso a esa empresa.', 403);
+      }
+      empresasPermitidas = [empresaId];
+    }
+
+    const correo = deps.correoDeSesion(contexto);
+    const esAdminODueno =
+      deps.esAdmin(contexto) ||
+      (correo && deps.correosDelDueno().includes(correo));
+    let puedeCostos = esAdminODueno;
+    if (!puedeCostos && correo) {
+      const usuario = buscarUsuarioPorCorreo(correo, deps.usuarios());
+      if (usuario) {
+        const permisos = permisosEfectivos(usuario, roles());
+        puedeCostos = tienePermiso(permisos, 'costos', 'lectura');
+      }
+    }
+
+    interface PuntoAtencion {
+      id: string;
+      tipo: 'riesgo' | 'bloqueo' | 'pendiente' | 'acuerdo';
+      proyectoId?: string;
+      proyectoNombre: string | null;
+      descripcion: string;
+      impacto?: string | null;
+      mitigacion?: string | null;
+      fecha: string;
+      responsableId?: string | null;
+      fuente?: string;
+    }
+
+    const puntos: PuntoAtencion[] = [];
+
+    const proyectos = deps.proyectos?.() ?? [];
+    const proyectosPorId = new Map(proyectos.map((p) => [p.id, p]));
+    const proyectosPorNombre = new Map(
+      proyectos.map((p) => [p.nombre.toLowerCase(), p])
+    );
+
+    const todosRiesgos = deps.riesgos?.() ?? [];
+    for (const r of todosRiesgos) {
+      if (!r.abierto) continue;
+      const proyecto = proyectosPorId.get(r.proyectoId);
+      if (!proyecto) continue;
+      const empresaProyecto = proyecto.empresaAtiendeId;
+      if (empresaProyecto && !empresasPermitidas.includes(empresaProyecto)) {
+        continue;
+      }
+      if (!empresaProyecto && actor.tope) {
+        continue;
+      }
+      if (filtroProyecto && proyecto.id !== filtroProyecto) continue;
+      let descripcion = r.descripcion;
+      let impacto = r.impacto ?? null;
+      let mitigacion = r.mitigacion ?? null;
+      if (!puedeCostos) {
+        descripcion = redactarCostos(descripcion);
+        impacto = impacto ? redactarCostos(impacto) : null;
+        mitigacion = mitigacion ? redactarCostos(mitigacion) : null;
+      }
+      puntos.push({
+        id: r.id,
+        tipo: r.tipo,
+        proyectoId: r.proyectoId,
+        proyectoNombre: proyecto.nombre,
+        descripcion,
+        impacto,
+        mitigacion,
+        fecha: r.fechaReporte,
+        responsableId: r.responsableId ?? null,
+        fuente: 'crm'
+      });
+    }
+
+    const pendientes = deps.pendientes?.() ?? [];
+    for (const t of pendientes) {
+      if (t.status !== 'pendiente' && t.status !== 'en_progreso') continue;
+      const esDeJunta =
+        t.id.startsWith('fireflies-') || t.tags?.includes('fireflies');
+      if (!esDeJunta) continue;
+      const empresaId = t.company
+        ? empresaIdDe(t.company, cat) ?? t.company
+        : undefined;
+      if (empresaId && !empresasPermitidas.includes(empresaId)) continue;
+      if (!empresaId && actor.tope) {
+        continue;
+      }
+      let proyectoDelPendiente: CrmProyecto | undefined;
+      if (t.project) {
+        proyectoDelPendiente = proyectosPorNombre.get(t.project.toLowerCase());
+      }
+      if (filtroProyecto && proyectoDelPendiente?.id !== filtroProyecto) {
+        continue;
+      }
+      let descripcion = t.description ?? t.title;
+      if (!puedeCostos) {
+        descripcion = redactarCostos(descripcion);
+      }
+      puntos.push({
+        id: t.id,
+        tipo: 'pendiente',
+        proyectoId: proyectoDelPendiente?.id,
+        proyectoNombre: proyectoDelPendiente?.nombre ?? t.project ?? null,
+        descripcion,
+        fecha: t.updatedAt,
+        responsableId: t.assignee?.id ?? null,
+        fuente: 'junta'
+      });
+
+      for (const sub of t.subtareas ?? []) {
+        if (sub.convertida) continue;
+        let subDescripcion = sub.titulo;
+        if (!puedeCostos) {
+          subDescripcion = redactarCostos(subDescripcion);
+        }
+        puntos.push({
+          id: sub.id,
+          tipo: 'acuerdo',
+          proyectoId: proyectoDelPendiente?.id,
+          proyectoNombre: proyectoDelPendiente?.nombre ?? t.project ?? null,
+          descripcion: subDescripcion,
+          fecha: t.updatedAt,
+          responsableId: sub.responsables?.[0]?.id ?? null,
+          fuente: 'junta'
+        });
+      }
+    }
+
+    puntos.sort((a, b) => {
+      const orden: Record<PuntoAtencion['tipo'], number> = {
+        bloqueo: 0,
+        riesgo: 1,
+        pendiente: 2,
+        acuerdo: 3
+      };
+      if (orden[a.tipo] !== orden[b.tipo]) {
+        return orden[a.tipo] - orden[b.tipo];
+      }
+      return b.fecha.localeCompare(a.fecha);
+    });
+
+    return {
+      puntos: puntos.slice(0, 50),
+      puedeItech: actor.puedeItech,
+      puedeCostos
+    };
+  });
+
   deps.programables.push({
     nombre: 'rag vectorial',
     cadaMinutos: REVISION_MINUTOS.diario,
@@ -703,4 +889,18 @@ function tokenDe(contexto: Contexto): string {
   return encabezado.toLowerCase().startsWith('bearer ')
     ? encabezado.slice(7).trim()
     : '';
+}
+
+/**
+ * Redacta cantidades de dinero, porcentajes y referencias bancarias de un
+ * texto para actores sin permiso de costos. Reemplaza $1,234.56, 1234 MXN,
+ * +IVA, porcentajes, y referencias a cuentas bancarias.
+ */
+function redactarCostos(texto: string): string {
+  return texto
+    .replace(/\$\s*[\d,]+(?:\.\d{1,2})?/g, '[monto redactado]')
+    .replace(/[\d,]+(?:\.\d{1,2})?\s*(?:MXN|USD|pesos|dólares)/gi, '[monto redactado]')
+    .replace(/\+\s*IVA/gi, '[+IVA]')
+    .replace(/\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?\s*%/g, '[porcentaje]')
+    .replace(/(?:cuenta|clabe|tarjeta|CLABE)\s*[:\s]*\d{10,18}/gi, '[cuenta redactada]');
 }

@@ -6200,7 +6200,10 @@ export function construirRutas(
     correoDeSesion: (contexto) => acceso.sesionDe(tokenDe(contexto))?.correo,
     correosDelDueno: () => [...correosDelDueno()],
     esAdmin: (contexto) => esAdmin(tokenDe(contexto), cfg()),
-    programables
+    programables,
+    riesgos: () => datos.crmRiesgos.leer(),
+    proyectos: () => datos.crmProyectos.leer(),
+    pendientes: () => [...pendientesOps(), ...datos.personales.leer()]
   });
 
   registrarRutasCrmSeguimiento({

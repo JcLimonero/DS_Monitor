@@ -956,3 +956,220 @@ describe('descarga de archivos RAG', () => {
     assert.ok(respuesta instanceof RespuestaBinaria);
   });
 });
+
+describe('GET /rag/atencion', () => {
+  it('el admin ve todos los puntos de atencion', async () => {
+    const { router, datos } = await montar();
+    await datos.crmProyectos.escribir([
+      {
+        id: 'proy-1',
+        nombre: 'Portal',
+        clienteId: 'cliente-1',
+        empresaAtiendeId: 'dealer-solutions',
+        actualizadoEn: '2026-10-01T00:00:00.000Z'
+      }
+    ]);
+    await datos.crmRiesgos.escribir([
+      {
+        id: 'riesgo-1',
+        proyectoId: 'proy-1',
+        tipo: 'riesgo',
+        descripcion: 'Costo de $5,000 MXN pendiente',
+        impacto: 'Alto impacto: $10,000 USD',
+        mitigacion: 'Pagar con cuenta 12345678901234',
+        fechaReporte: '2026-10-15',
+        abierto: true,
+        actualizadoEn: '2026-10-15T00:00:00.000Z'
+      }
+    ]);
+    const resultado = (await router.resolver(
+      '/rag/atencion',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer admin-prueba' }
+    )) as { puntos: { id: string; descripcion: string; mitigacion: string | null }[]; puedeCostos: boolean };
+    assert.equal(resultado.puedeCostos, true);
+    assert.ok(resultado.puntos.length >= 1);
+    const riesgo = resultado.puntos.find((p) => p.id === 'riesgo-1');
+    assert.ok(riesgo);
+    assert.match(riesgo.descripcion, /\$5,000/);
+    assert.match(riesgo.mitigacion ?? '', /12345678901234/);
+  });
+
+  it('un usuario sin permiso de costos ve los campos redactados', async () => {
+    const { router, datos } = await montar(ACCESO_PRENDIDO);
+    await sembrarUsuario(datos, 'comercial@ejemplo.test', {
+      roles: ['comercial']
+    });
+    await sembrarSesion(datos, 'tok-comercial', 'comercial@ejemplo.test');
+    await datos.crmProyectos.escribir([
+      {
+        id: 'proy-1',
+        nombre: 'Portal',
+        clienteId: 'cliente-1',
+        empresaAtiendeId: 'dealer-solutions',
+        actualizadoEn: '2026-10-01T00:00:00.000Z'
+      }
+    ]);
+    await datos.crmRiesgos.escribir([
+      {
+        id: 'riesgo-1',
+        proyectoId: 'proy-1',
+        tipo: 'riesgo',
+        descripcion: 'Costo de $5,000 MXN pendiente',
+        impacto: 'Alto impacto: $10,000 USD',
+        mitigacion: 'Pagar con cuenta 12345678901234',
+        fechaReporte: '2026-10-15',
+        abierto: true,
+        actualizadoEn: '2026-10-15T00:00:00.000Z'
+      }
+    ]);
+    const resultado = (await router.resolver(
+      '/rag/atencion',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer tok-comercial' }
+    )) as { puntos: { id: string; descripcion: string; impacto: string | null; mitigacion: string | null }[]; puedeCostos: boolean };
+    assert.equal(resultado.puedeCostos, false);
+    const riesgo = resultado.puntos.find((p) => p.id === 'riesgo-1');
+    assert.ok(riesgo);
+    assert.match(riesgo.descripcion, /\[monto redactado\]/);
+    assert.match(riesgo.impacto ?? '', /\[monto redactado\]/);
+    assert.match(riesgo.mitigacion ?? '', /\[cuenta redactada\]/);
+    assert.doesNotMatch(riesgo.descripcion, /\$5,000/);
+    assert.doesNotMatch(riesgo.mitigacion ?? '', /12345678901234/);
+  });
+
+  it('un usuario con alcance solo ve items de sus empresas permitidas', async () => {
+    const { router, datos } = await montar(ACCESO_PRENDIDO);
+    await sembrarUsuario(datos, 'dealer@ejemplo.test', {
+      alcance: { empresas: ['dealer-solutions'] }
+    });
+    await sembrarSesion(datos, 'tok-dealer', 'dealer@ejemplo.test');
+    await datos.crmProyectos.escribir([
+      {
+        id: 'proy-dealer',
+        nombre: 'Portal Dealer',
+        clienteId: 'cliente-1',
+        empresaAtiendeId: 'dealer-solutions',
+        actualizadoEn: '2026-10-01T00:00:00.000Z'
+      },
+      {
+        id: 'proy-itech',
+        nombre: 'Portal Itech',
+        clienteId: 'cliente-2',
+        empresaAtiendeId: 'itech-dev',
+        actualizadoEn: '2026-10-01T00:00:00.000Z'
+      }
+    ]);
+    await datos.crmRiesgos.escribir([
+      {
+        id: 'riesgo-dealer',
+        proyectoId: 'proy-dealer',
+        tipo: 'riesgo',
+        descripcion: 'Riesgo de Dealer',
+        fechaReporte: '2026-10-15',
+        abierto: true,
+        actualizadoEn: '2026-10-15T00:00:00.000Z'
+      },
+      {
+        id: 'riesgo-itech',
+        proyectoId: 'proy-itech',
+        tipo: 'riesgo',
+        descripcion: 'Riesgo de Itech',
+        fechaReporte: '2026-10-15',
+        abierto: true,
+        actualizadoEn: '2026-10-15T00:00:00.000Z'
+      }
+    ]);
+    const resultado = (await router.resolver(
+      '/rag/atencion',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer tok-dealer' }
+    )) as { puntos: { id: string }[] };
+    const ids = resultado.puntos.map((p) => p.id);
+    assert.ok(ids.includes('riesgo-dealer'));
+    assert.ok(!ids.includes('riesgo-itech'));
+  });
+
+  it('riesgos de proyectos sin empresa se ocultan para usuarios con tope', async () => {
+    const { router, datos } = await montar(ACCESO_PRENDIDO);
+    await sembrarUsuario(datos, 'dealer@ejemplo.test', {
+      alcance: { empresas: ['dealer-solutions'] }
+    });
+    await sembrarSesion(datos, 'tok-dealer', 'dealer@ejemplo.test');
+    await datos.crmProyectos.escribir([
+      {
+        id: 'proy-sin-empresa',
+        nombre: 'Proyecto Sin Empresa',
+        clienteId: 'cliente-1',
+        actualizadoEn: '2026-10-01T00:00:00.000Z'
+      }
+    ]);
+    await datos.crmRiesgos.escribir([
+      {
+        id: 'riesgo-sin-empresa',
+        proyectoId: 'proy-sin-empresa',
+        tipo: 'riesgo',
+        descripcion: 'Riesgo sin empresa asignada',
+        fechaReporte: '2026-10-15',
+        abierto: true,
+        actualizadoEn: '2026-10-15T00:00:00.000Z'
+      }
+    ]);
+    const resultado = (await router.resolver(
+      '/rag/atencion',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer tok-dealer' }
+    )) as { puntos: { id: string }[] };
+    const ids = resultado.puntos.map((p) => p.id);
+    assert.ok(!ids.includes('riesgo-sin-empresa'), 'Items sin empresa deben ocultarse para usuarios con tope');
+  });
+
+  it('el director ve items sin empresa', async () => {
+    const { router, datos } = await montar(ACCESO_PRENDIDO);
+    await sembrarSesion(datos, 'tok-director', 'ana@ejemplo.test');
+    await datos.crmProyectos.escribir([
+      {
+        id: 'proy-sin-empresa',
+        nombre: 'Proyecto Sin Empresa',
+        clienteId: 'cliente-1',
+        actualizadoEn: '2026-10-01T00:00:00.000Z'
+      }
+    ]);
+    await datos.crmRiesgos.escribir([
+      {
+        id: 'riesgo-sin-empresa',
+        proyectoId: 'proy-sin-empresa',
+        tipo: 'riesgo',
+        descripcion: 'Riesgo sin empresa asignada',
+        fechaReporte: '2026-10-15',
+        abierto: true,
+        actualizadoEn: '2026-10-15T00:00:00.000Z'
+      }
+    ]);
+    const resultado = (await router.resolver(
+      '/rag/atencion',
+      new URLSearchParams(),
+      'GET',
+      undefined,
+      { authorization: 'Bearer tok-director' }
+    )) as { puntos: { id: string }[] };
+    const ids = resultado.puntos.map((p) => p.id);
+    assert.ok(ids.includes('riesgo-sin-empresa'), 'El director debe ver items sin empresa');
+  });
+
+  it('sin autenticacion devuelve 401', async () => {
+    const { router } = await montar();
+    await assert.rejects(
+      () => router.resolver('/rag/atencion', new URLSearchParams(), 'GET'),
+      (error: unknown) => error instanceof ErrorPuente && error.estado === 401
+    );
+  });
+});
