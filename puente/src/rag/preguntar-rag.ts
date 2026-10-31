@@ -1,4 +1,5 @@
 import type { FragmentoHallado } from './almacen-vectorial.js';
+import type { Sensibilidad } from './clasificar.js';
 
 export interface FuenteCitada {
   n: number;
@@ -11,6 +12,8 @@ export interface FuenteCitada {
   seccion: string | null;
   driveFileId: string;
   driveUrl: string | null;
+  /** 'general' o 'costos'. Fail-closed: si falta, tratar como 'costos'. */
+  sensibilidad: Sensibilidad;
 }
 
 export interface RespuestaRag {
@@ -97,7 +100,8 @@ export function fuentesDe(
       proyecto: f.proyecto,
       seccion: f.seccion,
       driveFileId: f.driveFileId,
-      driveUrl: f.driveUrl
+      driveUrl: f.driveUrl,
+      sensibilidad: f.sensibilidad
     });
   }
   return fuentes;
