@@ -375,6 +375,7 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
       {
         clausula,
         cliente,
+        proyecto: pedido.proyecto,
         desde: fechaDePedido(pedido.desde, 'desde'),
         hasta: fechaDePedido(pedido.hasta, 'hasta')
       },
@@ -428,6 +429,57 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
         });
     const cerrada = cerrarRespuesta(redaccion, preparado.fuentes);
     return aviso ? { ...cerrada, aviso } : cerrada;
+  });
+
+  router.get('/rag/alcance', async (contexto) => {
+    const actor = actorDe(contexto);
+    const sql = exigirSql();
+    await esquema(sql);
+
+    const todasEmpresas = catalogo();
+    let empresasPermitidas: typeof todasEmpresas;
+
+    if (actor.director) {
+      empresasPermitidas = todasEmpresas;
+    } else if (actor.tope) {
+      empresasPermitidas = todasEmpresas.filter((e) =>
+        actor.tope!.includes(e.id)
+      );
+    } else {
+      empresasPermitidas = todasEmpresas;
+    }
+
+    const empresaIds = empresasPermitidas.map((e) => e.id);
+    const proyectosFila = await sql.ejecutar(
+      `SELECT DISTINCT empresa, proyecto
+         FROM rag_documentos
+        WHERE empresa = ANY($1::text[])
+          AND proyecto IS NOT NULL
+          AND proyecto <> ''
+        ORDER BY empresa, proyecto`,
+      [empresaIds]
+    );
+
+    const proyectosPorEmpresa: Record<string, string[]> = {};
+    for (const fila of proyectosFila) {
+      const emp = String(fila['empresa'] ?? '');
+      const proy = String(fila['proyecto'] ?? '');
+      if (!proyectosPorEmpresa[emp]) {
+        proyectosPorEmpresa[emp] = [];
+      }
+      if (proy && !proyectosPorEmpresa[emp].includes(proy)) {
+        proyectosPorEmpresa[emp].push(proy);
+      }
+    }
+
+    return {
+      empresas: empresasPermitidas.map((e) => ({
+        id: e.id,
+        nombre: e.nombre,
+        proyectos: proyectosPorEmpresa[e.id] ?? []
+      })),
+      puedeItech: actor.puedeItech
+    };
   });
 
   deps.programables.push({
@@ -544,6 +596,7 @@ function pedidoDe(cuerpo: Record<string, unknown>): PedidoRag {
     empresas,
     incluirItech: cuerpo['incluirItech'] === true,
     cliente: texto(cuerpo['cliente']),
+    proyecto: texto(cuerpo['proyecto']),
     desde: texto(cuerpo['desde']),
     hasta: texto(cuerpo['hasta']),
     k: k === undefined || k === null ? undefined : Number(k)

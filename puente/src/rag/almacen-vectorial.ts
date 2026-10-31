@@ -45,6 +45,7 @@ export interface ResultadoGuardado {
 export interface FiltroBusqueda {
   clausula: ClausulaEmpresa;
   cliente?: string;
+  proyecto?: string;
   desde?: string;
   hasta?: string;
 }
@@ -313,16 +314,19 @@ export async function buscarHibrido(
   const paramsBase: unknown[] = [
     ...empresa.parametros,
     filtro.cliente ?? null,
+    filtro.proyecto ?? null,
     filtro.desde ?? null,
     filtro.hasta ?? null
   ];
   const iCliente = empresa.parametros.length + 1;
-  const iDesde = iCliente + 1;
+  const iProyecto = iCliente + 1;
+  const iDesde = iProyecto + 1;
   const iHasta = iDesde + 1;
   const donde = `
     WHERE TRUE
       ${empresa.sql}
       AND ($${iCliente}::text IS NULL OR lower(f.cliente) = lower($${iCliente}))
+      AND ($${iProyecto}::text IS NULL OR lower(d.proyecto) = lower($${iProyecto}))
       AND ($${iDesde}::timestamptz IS NULL OR f.fecha >= $${iDesde})
       AND ($${iHasta}::timestamptz IS NULL OR f.fecha <= $${iHasta})`;
   const columnas = `
