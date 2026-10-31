@@ -28,10 +28,12 @@ import {
   type ConfigEmbeddings
 } from '../proveedores/embeddings.js';
 import {
+  descargarArchivo,
   listarHijosDrive,
   textoDeArchivo,
   tokenDeCuentaServicio
 } from '../proveedores/google.js';
+import { RespuestaBinaria } from './router.js';
 import {
   buscarHibrido,
   borrarPorDrive,
@@ -91,6 +93,21 @@ let ganchos: GanchosRag = {};
 /** Las pruebas sustituyen la red. El puente real no lo llama. */
 export function establecerGanchosRag(siguientes: GanchosRag): void {
   ganchos = siguientes;
+}
+
+interface GanchosDescarga {
+  descargarArchivo?: (
+    token: string,
+    driveFileId: string
+  ) => Promise<{ contenido: Buffer; mimeType: string; nombre: string }>;
+  tokenDeCuentaServicio?: () => Promise<string>;
+}
+
+let ganchosDescarga: GanchosDescarga = {};
+
+/** Las pruebas sustituyen la descarga de archivos. */
+export function establecerGanchosDescarga(siguientes: GanchosDescarga): void {
+  ganchosDescarga = siguientes;
 }
 
 export interface CuerpoIngestaRag {
@@ -480,6 +497,73 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
       })),
       puedeItech: actor.puedeItech
     };
+  });
+
+  /**
+   * GET /rag/archivo/:driveFileId — descarga un archivo de Drive.
+   * Verifica permisos de empresa y sensibilidad (costos).
+   * Retorna 404 uniforme para: no encontrado, empresa no permitida, y costos restringidos.
+   */
+  router.get('/rag/archivo/:driveFileId', async (contexto) => {
+    const driveFileId = contexto.segmentos[2];
+    if (!driveFileId) {
+      throw new ErrorPuente('driveFileId es obligatorio.', 400);
+    }
+    const actor = actorDe(contexto);
+    const sql = exigirSql();
+    await esquema(sql);
+
+    const filas = await sql.ejecutar(
+      `SELECT empresa, sensibilidad FROM rag_documentos WHERE drive_file_id = $1`,
+      [driveFileId]
+    );
+    if (filas.length === 0) {
+      throw new ErrorPuente('Documento no encontrado.', 404);
+    }
+    const empresaDoc = String(filas[0]?.['empresa'] ?? '');
+    const sensibilidad = String(filas[0]?.['sensibilidad'] ?? 'costos');
+
+    if (!actor.director && actor.tope && !actor.tope.includes(empresaDoc)) {
+      throw new ErrorPuente('Documento no encontrado.', 404);
+    }
+
+    if (sensibilidad === 'costos') {
+      const correo = deps.correoDeSesion(contexto);
+      const esAdminODueno =
+        deps.esAdmin(contexto) ||
+        (correo && deps.correosDelDueno().includes(correo));
+      let puedeCostos = esAdminODueno;
+      if (!puedeCostos && correo) {
+        const usuario = buscarUsuarioPorCorreo(correo, deps.usuarios());
+        if (usuario) {
+          const permisos = permisosEfectivos(usuario, roles());
+          puedeCostos = tienePermiso(permisos, 'costos', 'lectura');
+        }
+      }
+      if (!puedeCostos) {
+        throw new ErrorPuente('Documento no encontrado.', 404);
+      }
+    }
+
+    const rag = deps.cfg().ragDrive;
+    if (!rag && !ganchosDescarga.tokenDeCuentaServicio) {
+      throw new ErrorConfiguracion(
+        'Falta GOOGLE_DRIVE_CUENTA_SERVICIO para descargar archivos.'
+      );
+    }
+
+    const token = ganchosDescarga.tokenDeCuentaServicio
+      ? await ganchosDescarga.tokenDeCuentaServicio()
+      : await tokenDeCuentaServicio(rag!.cuenta);
+    const descarga = ganchosDescarga.descargarArchivo
+      ? await ganchosDescarga.descargarArchivo(token, driveFileId)
+      : await descargarArchivo(token, driveFileId);
+
+    return new RespuestaBinaria(
+      descarga.contenido,
+      descarga.mimeType,
+      descarga.nombre
+    );
   });
 
   deps.programables.push({

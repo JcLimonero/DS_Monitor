@@ -831,3 +831,103 @@ export async function textoDeArchivo(
   }
   return respuesta.text();
 }
+
+const MIME_GOOGLE_DOC = 'application/vnd.google-apps.document';
+const MIME_GOOGLE_SHEET = 'application/vnd.google-apps.spreadsheet';
+const MIME_GOOGLE_SLIDES = 'application/vnd.google-apps.presentation';
+const MIME_PDF = 'application/pdf';
+const MIME_XLSX =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+export interface DescargaDrive {
+  contenido: Buffer;
+  mimeType: string;
+  nombre: string;
+}
+
+/**
+ * Descarga los bytes de un archivo de Drive. Si es un Google Doc/Sheet/Slides
+ * lo exporta a PDF (o XLSX para hojas de calculo); si es un archivo normal
+ * descarga el contenido directamente.
+ */
+export async function descargarArchivo(
+  token: string,
+  id: string
+): Promise<DescargaDrive> {
+  const meta = await pedirDrive<{ name?: string; mimeType?: string }>(
+    token,
+    conParametros(`${DRIVE}/files/${encodeURIComponent(id)}`, {
+      fields: 'name,mimeType'
+    })
+  );
+
+  const nombre = meta.name ?? id;
+  const mimeOriginal = meta.mimeType ?? 'application/octet-stream';
+
+  if (
+    mimeOriginal === MIME_GOOGLE_DOC ||
+    mimeOriginal === MIME_GOOGLE_SLIDES
+  ) {
+    const bytes = await exportarArchivo(token, id, MIME_PDF);
+    return {
+      contenido: bytes,
+      mimeType: MIME_PDF,
+      nombre: nombre.endsWith('.pdf') ? nombre : `${nombre}.pdf`
+    };
+  }
+
+  if (mimeOriginal === MIME_GOOGLE_SHEET) {
+    const bytes = await exportarArchivo(token, id, MIME_XLSX);
+    return {
+      contenido: bytes,
+      mimeType: MIME_XLSX,
+      nombre: nombre.endsWith('.xlsx') ? nombre : `${nombre}.xlsx`
+    };
+  }
+
+  const respuesta = await fetch(
+    conParametros(`${DRIVE}/files/${encodeURIComponent(id)}`, {
+      alt: 'media'
+    }),
+    {
+      headers: { authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(TIEMPO_DRIVE_MS)
+    }
+  );
+  if (!respuesta.ok) {
+    throw new ErrorProveedor(
+      'google',
+      `Drive no entregó el archivo (${respuesta.status})`
+    );
+  }
+  const arrayBuffer = await respuesta.arrayBuffer();
+  return {
+    contenido: Buffer.from(arrayBuffer),
+    mimeType: mimeOriginal,
+    nombre
+  };
+}
+
+async function exportarArchivo(
+  token: string,
+  id: string,
+  mimeType: string
+): Promise<Buffer> {
+  const respuesta = await fetch(
+    conParametros(`${DRIVE}/files/${encodeURIComponent(id)}/export`, {
+      mimeType
+    }),
+    {
+      headers: { authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(TIEMPO_DRIVE_MS)
+    }
+  );
+  if (!respuesta.ok) {
+    throw new ErrorProveedor(
+      'google',
+      `Drive no exportó el archivo (${respuesta.status})`
+    );
+  }
+  const arrayBuffer = await respuesta.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
