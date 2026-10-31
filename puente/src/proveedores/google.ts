@@ -864,10 +864,7 @@ export async function descargarArchivo(
   const nombre = meta.name ?? id;
   const mimeOriginal = meta.mimeType ?? 'application/octet-stream';
 
-  if (
-    mimeOriginal === MIME_GOOGLE_DOC ||
-    mimeOriginal === MIME_GOOGLE_SLIDES
-  ) {
+  if (mimeOriginal === MIME_GOOGLE_DOC || mimeOriginal === MIME_GOOGLE_SLIDES) {
     const bytes = await exportarArchivo(token, id, MIME_PDF);
     return {
       contenido: bytes,
