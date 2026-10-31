@@ -62,12 +62,18 @@ class SqlFalsa implements Sql {
         }
       ];
     }
-    if (texto.includes('DISTINCT empresa, proyecto') && texto.includes('FROM rag_documentos')) {
-      const empresas = parametros[0] as string[] ?? [];
+    if (
+      texto.includes('DISTINCT empresa, proyecto') &&
+      texto.includes('FROM rag_documentos')
+    ) {
+      const empresas = (parametros[0] as string[]) ?? [];
       const proyectos: Fila[] = [];
       if (empresas.includes('dealer-solutions')) {
         proyectos.push({ empresa: 'dealer-solutions', proyecto: 'Portal' });
-        proyectos.push({ empresa: 'dealer-solutions', proyecto: 'Facturacion' });
+        proyectos.push({
+          empresa: 'dealer-solutions',
+          proyecto: 'Facturacion'
+        });
       }
       if (empresas.includes('itech-dev')) {
         proyectos.push({ empresa: 'itech-dev', proyecto: 'Interno' });
@@ -634,7 +640,10 @@ describe('GET /rag/alcance', () => {
       'GET',
       undefined,
       { authorization: 'Bearer admin-prueba' }
-    )) as { empresas: { id: string; nombre: string; proyectos: string[] }[]; puedeItech: boolean };
+    )) as {
+      empresas: { id: string; nombre: string; proyectos: string[] }[];
+      puedeItech: boolean;
+    };
     assert.ok(alcance.empresas.length > 0);
     assert.equal(alcance.puedeItech, true);
     for (const emp of alcance.empresas) {
@@ -675,8 +684,7 @@ describe('GET /rag/alcance', () => {
   it('sin autenticacion devuelve 401', async () => {
     const { router } = await montar();
     await assert.rejects(
-      () =>
-        router.resolver('/rag/alcance', new URLSearchParams(), 'GET'),
+      () => router.resolver('/rag/alcance', new URLSearchParams(), 'GET'),
       (error: unknown) => error instanceof ErrorPuente && error.estado === 401
     );
   });
