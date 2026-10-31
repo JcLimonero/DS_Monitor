@@ -1025,7 +1025,10 @@ describe('GET /rag/atencion', () => {
       'GET',
       undefined,
       { authorization: 'Bearer admin-prueba' }
-    )) as { puntos: { id: string; descripcion: string; mitigacion: string | null }[]; puedeCostos: boolean };
+    )) as {
+      puntos: { id: string; descripcion: string; mitigacion: string | null }[];
+      puedeCostos: boolean;
+    };
     assert.equal(resultado.puedeCostos, true);
     assert.ok(resultado.puntos.length >= 1);
     const riesgo = resultado.puntos.find((p) => p.id === 'riesgo-1');
@@ -1068,7 +1071,15 @@ describe('GET /rag/atencion', () => {
       'GET',
       undefined,
       { authorization: 'Bearer tok-comercial' }
-    )) as { puntos: { id: string; descripcion: string; impacto: string | null; mitigacion: string | null }[]; puedeCostos: boolean };
+    )) as {
+      puntos: {
+        id: string;
+        descripcion: string;
+        impacto: string | null;
+        mitigacion: string | null;
+      }[];
+      puedeCostos: boolean;
+    };
     assert.equal(resultado.puedeCostos, false);
     const riesgo = resultado.puntos.find((p) => p.id === 'riesgo-1');
     assert.ok(riesgo);
@@ -1166,7 +1177,10 @@ describe('GET /rag/atencion', () => {
       { authorization: 'Bearer tok-dealer' }
     )) as { puntos: { id: string }[] };
     const ids = resultado.puntos.map((p) => p.id);
-    assert.ok(!ids.includes('riesgo-sin-empresa'), 'Items sin empresa deben ocultarse para usuarios con tope');
+    assert.ok(
+      !ids.includes('riesgo-sin-empresa'),
+      'Items sin empresa deben ocultarse para usuarios con tope'
+    );
   });
 
   it('el director ve items sin empresa', async () => {
@@ -1199,7 +1213,10 @@ describe('GET /rag/atencion', () => {
       { authorization: 'Bearer tok-director' }
     )) as { puntos: { id: string }[] };
     const ids = resultado.puntos.map((p) => p.id);
-    assert.ok(ids.includes('riesgo-sin-empresa'), 'El director debe ver items sin empresa');
+    assert.ok(
+      ids.includes('riesgo-sin-empresa'),
+      'El director debe ver items sin empresa'
+    );
   });
 
   it('sin autenticacion devuelve 401', async () => {

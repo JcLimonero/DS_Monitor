@@ -685,7 +685,7 @@ export function registrarRagVectorial(deps: DependenciasRag): void {
         t.id.startsWith('fireflies-') || t.tags?.includes('fireflies');
       if (!esDeJunta) continue;
       const empresaId = t.company
-        ? empresaIdDe(t.company, cat) ?? t.company
+        ? (empresaIdDe(t.company, cat) ?? t.company)
         : undefined;
       if (empresaId && !empresasPermitidas.includes(empresaId)) continue;
       if (!empresaId && actor.tope) {
@@ -899,8 +899,14 @@ function tokenDe(contexto: Contexto): string {
 function redactarCostos(texto: string): string {
   return texto
     .replace(/\$\s*[\d,]+(?:\.\d{1,2})?/g, '[monto redactado]')
-    .replace(/[\d,]+(?:\.\d{1,2})?\s*(?:MXN|USD|pesos|dólares)/gi, '[monto redactado]')
+    .replace(
+      /[\d,]+(?:\.\d{1,2})?\s*(?:MXN|USD|pesos|dólares)/gi,
+      '[monto redactado]'
+    )
     .replace(/\+\s*IVA/gi, '[+IVA]')
     .replace(/\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?\s*%/g, '[porcentaje]')
-    .replace(/(?:cuenta|clabe|tarjeta|CLABE)\s*[:\s]*\d{10,18}/gi, '[cuenta redactada]');
+    .replace(
+      /(?:cuenta|clabe|tarjeta|CLABE)\s*[:\s]*\d{10,18}/gi,
+      '[cuenta redactada]'
+    );
 }
